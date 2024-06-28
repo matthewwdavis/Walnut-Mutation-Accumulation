@@ -1,0 +1,105 @@
+---
+title: "pca"
+author: "Matthew Davis"
+date: "2024-04-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(data.table)
+library(ggrepel)
+```
+
+## Functions
+```{r}
+pca_naming <- function(data.vec){
+  # Set the header names
+  column_names <- c("FID", "IID", paste0("PC", 1:(ncol(data.vec) - 2)))
+  setnames(data.vec, column_names)
+  
+  # Create usable family names
+  data.vec$FID <- as.character(gsub("\\D", "", gsub("A[12].*", "A", data.vec$FID)))
+  
+  # Removing deepvariant from IID names
+  data.vec$IID <- gsub("_deepvariant", "", data.vec$IID)
+
+  
+  return(data.vec)
+}
+
+pct_var <- function(data.val){
+  
+  data.pct <- data.val %>%
+  mutate(Pct = V1 * 100)
+  
+  return(data.pct)
+}
+```
+
+## Read in data
+```{r}
+stacks.eigenval <- fread("./Data/Eigen_Values/cr2_stacks.eigenval")
+stacks.eigenvec <- fread("./Data/Eigen_Values/cr2_stacks.eigenvec")
+
+stacksq20.eigenval <- fread("./Data/Eigen_Values/cr2_stacks_q20.recode.eigenval")
+stacksq20.eigenvec <- fread("./Data/Eigen_Values/cr2_stacks_q20.recode.eigenvec")
+
+stacksq30.eigenval <- fread("./Data/Eigen_Values/cr2_stacks_q30.recode.eigenval")
+stacksq30.eigenvec <- fread("./Data/Eigen_Values/cr2_stacks_q30.recode.eigenvec")
+```
+
+## Rename headers, create usable family IDs
+```{r}
+stacks.eigenvec <- pca_naming(stacks.eigenvec)
+stacksq20.eigenvec <- pca_naming(stacksq20.eigenvec)
+stacksq30.eigenvec <- pca_naming(stacksq30.eigenvec)
+```
+
+## Creating percent column
+```{r}
+stacks.eigenval <- pct_var(stacks.eigenval)
+stacksq20.eigenval <- pct_var(stacksq20.eigenval)
+stacksq30.eigenval <- pct_var(stacksq30.eigenval)
+```
+
+
+## Simple plot
+```{r}
+stacks.eigenvec %>%
+  ggplot(aes(x = PC1, y= PC2, col = FID)) +
+  geom_point(size = 3) +
+  scale_color_brewer(palette = "Paired") +
+  geom_text_repel(data = unique(stacks.eigenvec, by = "IID"), aes(label = IID), size = 3, point.padding = 1, nudge_x = -0.02, nudge_y = 0.03, max.overlaps = Inf) +
+  labs(x = "PC1 (30.6%)", y = " PC2 (16.7%)") +
+  theme_classic()
+ggsave("./Figures/PCA/cr2_stacks_pca.png", height = 4, width = 6)
+ggsave("./Figures/PCA/cr2_stacks_pca.pdf", height = 4, width = 6)
+
+stacksq20.eigenvec %>%
+  ggplot(aes(x = PC1, y= PC2, col = FID)) +
+  geom_point(size = 3) +
+  scale_color_brewer(palette = "Paired") +
+  geom_text_repel(data = unique(stacksq20.eigenvec, by = "IID"), aes(label = IID), size = 3,
+                  nudge_x = 0.01, max.overlaps = Inf, segment.color = 'transparent') +
+  labs(x = "PC1 (28.15%)", y = " PC2 (12.91%)", color = "Family ID") +
+  theme_classic()
+ggsave("./Figures/PCA/cr2_stacks_q20_pca.png", height = 4, width = 6)
+ggsave("./Figures/PCA/cr2_stacks_q20_pca.pdf", height = 4, width = 6)
+
+stacksq30.eigenvec %>%
+  ggplot(aes(x = PC1, y= PC2, col = FID)) +
+  geom_point(size = 3) +
+  scale_color_brewer(palette = "Paired") +
+  geom_text_repel(data = unique(stacksq30.eigenvec, by = "IID"), aes(label = IID), size = 3,
+                  nudge_x = 0.01, nudge_y = -0.01, max.overlaps = Inf, segment.color = 'transparent') +
+  labs(x = "PC1 (27.11%)", y = " PC2 (12.19%)", color = "Family ID") +
+  theme_classic()
+ggsave("./Figures/PCA/cr2_stacks_q30_pca.png", height = 4, width = 6)
+ggsave("./Figures/PCA/cr2_stacks_q30_pca.pdf", height = 4, width = 6)
+```

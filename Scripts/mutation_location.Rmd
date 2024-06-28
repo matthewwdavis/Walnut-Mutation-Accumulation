@@ -1,0 +1,655 @@
+---
+title: "mutation_location"
+author: "Matthew Davis"
+date: "2024-04-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+```{r, message=FALSE}
+library(polymorphology2)
+library(tidyverse)
+library(Biostrings)
+```
+
+## Function
+```{r}
+read_gff <- function(file){
+  
+  gff <- fread(file, skip = 3)
+  
+  colnames(gff) <- c("CHROM", "SOURCE", "ID", "START", "STOP", "SCORE", "STRAND", "FRAME", "ATTRIBUTE")
+  
+  gff <- gff[grep("^NC_0499", gff$CHROM), ]
+  gff$CHROM <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", gff$CHROM))
+  
+  
+  return(gff)  
+}
+
+vcf_feature_select <- function(all_denovo.table, Culture_Type, Sequence_Type = NULL, quality = 0) {
+  table <- all_denovo.table %>%
+    filter(Type == Culture_Type, QUAL >= quality) %>%
+    mutate(START = POS, STOP = POS, ID = paste0(CHROM, "_", POS))
+
+  if (!is.null(Sequence_Type)) {
+    table <- table %>% filter(Seq_Type == Sequence_Type)
+  }
+
+  table$START <- as.numeric(table$START)
+  table$STOP <- as.numeric(table$STOP)
+  table$CHROM <- as.numeric(table$CHROM)
+  table$POS <- as.numeric(table$POS)
+  
+  table <- as.data.table(table)
+
+  return(table)
+}
+
+plot_feature_windows <- function(feature_windows, variable, mode, x_axis_title = "RELATIVEPOS", y_axis_title = "y", bold_axis_titles = FALSE, plot_title = NULL, upstream_label = "-2kb", downstream_label = "+2kb",feature_color = "red", feature_linewidth = 0.5, theme_size = 6, outside_feature_color = "grey70", different_outside_lines = TRUE) {
+  if (!(mode %in% c("mean", "percent"))) {
+    stop("Invalid 'mode'. Must be one of 'mean', 'percent'.")
+  }
+  if (!(variable %in% colnames(feature_windows))) {
+    stop("The specified 'variable' column does not exist in the 'feature_windows' data.table.")
+  }
+  if (mode == "mean") {
+    summary <- feature_windows[, .(y = mean(get(variable), na.rm = TRUE)), by = .(REGION, RELATIVEPOS)]
+  } else if (mode == "percent") {
+    summary <- feature_windows[, .(y = sum(get(variable))/sum(LENGTH)), by = .(REGION, RELATIVEPOS)]
+  }
+  maxpos <- max(summary$RELATIVEPOS)
+  plot <- ggplot(summary, aes(x = RELATIVEPOS, y = y)) +
+    geom_line(col = feature_color, linewidth = feature_linewidth) +
+    geom_vline(xintercept = c(maxpos/3, maxpos/3 * 2), linetype = "dashed") +
+    labs(x = x_axis_title, y = y_axis_title) +
+    theme_classic(base_size = theme_size) +
+    scale_x_continuous(breaks = c(1, maxpos/3, maxpos/3 * 2, maxpos),
+                       labels = c(upstream_label, "START", "STOP", downstream_label)) 
+  
+  if (different_outside_lines) {
+    plot <- plot +
+      geom_line(data = subset(summary, RELATIVEPOS <= maxpos/3),
+                aes(x = RELATIVEPOS, y = y), col = outside_feature_color, linewidth = feature_linewidth + .3) +
+      geom_line(data = subset(summary, RELATIVEPOS >= maxpos/3 * 2),
+                aes(x = RELATIVEPOS, y = y), col = outside_feature_color, linewidth = feature_linewidth + .3)
+  }
+  
+  if (bold_axis_titles) {
+    plot <- plot + theme(axis.title.x = element_text(face = "bold"),
+                         axis.title.y = element_text(face = "bold"))
+  }
+  
+  if (!is.null(plot_title)) {
+    plot <- plot + ggtitle(plot_title) +
+      theme(plot.title = element_text(face = "bold", hjust = 0.5))
+  }
+  
+  return(list(summary = summary, plot = plot))
+}
+
+## Progress bar funciton is broken in original feature_windows
+
+feature_windows_noprogress <- function (features, breaks, dist, directed, IDcol) 
+{
+  if (!is.data.table(features)) {
+    stop("Error: 'features' should be a data.table")
+  }
+  required_columns <- c("CHROM", "START", "STOP", IDcol)
+  if (directed) {
+    required_columns <- c(required_columns, "DIRECTION")
+  }
+  if (any(!(required_columns %in% names(features)))) {
+    stop(paste("features object needs to have", toString(required_columns), 
+               "columns"))
+  }
+  if (!is.numeric(features[["START"]]) | !is.numeric(features[["STOP"]])) {
+    stop("Error: START and STOP columns should be numeric")
+  }
+  if (directed && !all(features[["DIRECTION"]] %in% c("+", 
+                                                        "-"))) {
+    stop("Error: When directed = T, DIRECTION column should only contain '+' and '-' values")
+  }
+  windows <- rbindlist(apply(features, 1, function(x) {
+    chrom = x["CHROM"]
+    body_starts = round(seq(as.numeric(x["START"]), as.numeric(x["STOP"]), 
+                            length.out = breaks + 1)[-(breaks + 1)])
+    body_stops = round(seq(as.numeric(x["START"]), as.numeric(x["STOP"]), 
+                           length.out = breaks + 1)[-1])
+    upstream_starts = seq(as.numeric(x["START"]) - dist, 
+                          as.numeric(x["START"]), length.out = breaks + 1)[-(breaks + 
+                                                                                1)]
+    upstream_stops = seq(as.numeric(x["START"]) - dist, 
+                         as.numeric(x["START"]), length.out = breaks + 1)[-1]
+    downstream_starts = seq(as.numeric(x["STOP"]), as.numeric(x["STOP"]) + 
+                              dist, length.out = breaks + 1)[-(breaks + 1)]
+    downstream_stops = seq(as.numeric(x["STOP"]), as.numeric(x["STOP"]) + 
+                             dist, length.out = breaks + 1)[-1]
+    out = data.table(CHROM = x["CHROM"], START = c(upstream_starts, 
+                                                    body_starts, downstream_starts), STOP = c(upstream_stops, 
+                                                                                             body_stops, downstream_stops), REGION = c(rep("upstream", 
+                                                                                                                                       length(upstream_starts)), rep("gene body", length(body_starts)), 
+                                                                                                                           rep("downstream", length(downstream_starts))))
+    out[, `:=`((IDcol), x[IDcol])]
+    out$RELATIVEPOS <- 1:nrow(out)
+    out$LENGTH <- out$STOP - out$START
+    if (directed == T) {
+      direction = x["DIRECTION"]
+      if (direction == "-") {
+        out$RELATIVEPOS <- rev(out$RELATIVEPOS)
+        out$REGION <- rev(out$REGION)
+      }
+    }
+    return(out)
+  }), fill = TRUE)
+  windows[, `:=`(ID, 1:.N)]
+  setkey(windows, CHROM, START, STOP)
+  return(windows)
+}
+```
+
+
+## Read in reference information
+```{r}
+ref_pri.fasta <- readDNAStringSet("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+ref_pri.gff <- read_gff("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
+```
+
+## Load in data
+```{r}
+all_dn.df <- fread("./Data/VCFs/Filtered/all_dn.vcf")
+```
+
+
+## Create gene windows gff object
+```{r}
+genes.gff <- ref_pri.gff %>%
+  filter(ID == "gene")
+
+gene.windows <- feature_windows_noprogress(features = genes.gff, IDcol = "ID", directed = FALSE, breaks = 10, dist = 5000)
+
+gene.windows$CHROM <- as.numeric(gene.windows$CHROM)
+```
+
+## Finding overlaps of SNPs in Windows
+```{r}
+# Embryo
+all_embryo.vcf <- vcf_feature_select(all_dn.df, Culture_Type = "Embryo")
+all_embryo.finf <- features_in_features(features = gene.windows, features2 = all_embryo.vcf,
+                                        mode = "counts") #CHROM needs to be numeric=
+all_embryo.table <- left_join(all_embryo.finf, gene.windows, by = "ID")
+all_embryo.result <- plot_feature_windows(feature_windows = all_embryo.table, 
+                                          feature_linewidth = 1, 
+                                          plot_title = "Embryo Mutation",
+                                          x_axis_title = "Gene body position",
+                                          y_axis_title = "Mean mutations in windows",
+                                          upstream_label = "-5kb", downstream_label = "+5kb",
+                                          bold_axis_titles = TRUE,
+                                          variable = "counts", mode = "mean",
+                                          feature_color = "orangered")
+
+all_embryo_q20.vcf <- vcf_feature_select(all_dn.df, Culture_Type = "Embryo", quality = 20)
+all_embryo_q20.finf <- features_in_features(features = gene.windows, features2 = all_embryo_q20.vcf,
+                                        mode = "counts") #CHROM needs to be numeric=
+all_embryo_q20.table <- left_join(all_embryo_q20.finf, gene.windows, by = "ID")
+all_embryo_q20.result <- plot_feature_windows(feature_windows = all_embryo_q20.table, 
+                                          feature_linewidth = 1, 
+                                          plot_title = "Embryo Mutation QUAL >= 20",
+                                          x_axis_title = "Gene body position",
+                                          y_axis_title = "Mean mutations in windows",
+                                          upstream_label = "-5kb", downstream_label = "+5kb",
+                                          bold_axis_titles = TRUE,
+                                          variable = "counts", mode = "mean",
+                                          feature_color = "orangered")
+
+all_embryo_q30.vcf <- vcf_feature_select(all_dn.df, Culture_Type = "Embryo", quality = 30)
+all_embryo_q30.finf <- features_in_features(features = gene.windows, features2 = all_embryo_q30.vcf,
+                                        mode = "counts") #CHROM needs to be numeric=
+all_embryo_q30.table <- left_join(all_embryo_q30.finf, gene.windows, by = "ID")
+all_embryo_q30.result <- plot_feature_windows(feature_windows = all_embryo_q30.table, 
+                                          feature_linewidth = 1, 
+                                          plot_title = "Embryo Mutation QUAL >= 30",
+                                          x_axis_title = "Gene body position",
+                                          y_axis_title = "Mean mutations in windows",
+                                          upstream_label = "-5kb", downstream_label = "+5kb",
+                                          bold_axis_titles = TRUE,
+                                          variable = "counts", mode = "mean",
+                                          feature_color = "orangered")
+
+# Shoots
+all_shoot.vcf <- vcf_feature_select(all_dn.df, Culture_Type = "Shoot")
+all_shoot.finf <- features_in_features(features = gene.windows, features2 = all_shoot.vcf,
+                                        mode = "counts")
+all_shoot.table <- left_join(all_shoot.finf, gene.windows, by = "ID")
+all_shoot.result <- plot_feature_windows(feature_windows = all_shoot.table,
+                                         feature_linewidth = 1,
+                                         plot_title = "Shoot Mutation",
+                                         x_axis_title = "Gene body position",
+                                         y_axis_title = "Mean mutations in windows",
+                                         upstream_label = "-5kb", downstream_label = "+5kb",
+                                         bold_axis_titles = TRUE,
+                                         variable = "counts", mode = "mean",
+                                         feature_color = "dodgerblue")
+
+all_shoot_q20.vcf <- vcf_feature_select(all_dn.df, Culture_Type = "Shoot", quality = 20)
+all_shoot_q20.finf <- features_in_features(features = gene.windows, features2 = all_shoot_q20.vcf,
+                                        mode = "counts") #CHROM needs to be numeric=
+all_shoot_q20.table <- left_join(all_shoot_q20.finf, gene.windows, by = "ID")
+all_shoot_q20.result <- plot_feature_windows(feature_windows = all_shoot_q20.table, 
+                                          feature_linewidth = 1, 
+                                          plot_title = "Shoot Mutation QUAL >= 20",
+                                          x_axis_title = "Gene body position",
+                                          y_axis_title = "Mean mutations in windows",
+                                          upstream_label = "-5kb", downstream_label = "+5kb",
+                                          bold_axis_titles = TRUE,
+                                          variable = "counts", mode = "mean",
+                                          feature_color = "dodgerblue")
+
+all_shoot_q30.vcf <- vcf_feature_select(all_dn.df, Culture_Type = "Shoot", quality = 30)
+all_shoot_q30.finf <- features_in_features(features = gene.windows, features2 = all_shoot_q30.vcf,
+                                        mode = "counts") #CHROM needs to be numeric=
+all_shoot_q30.table <- left_join(all_shoot_q30.finf, gene.windows, by = "ID")
+all_shoot_q30.result <- plot_feature_windows(feature_windows = all_shoot_q30.table, 
+                                          feature_linewidth = 1, 
+                                          plot_title = "Shoot Mutation QUAL >= 30",
+                                          x_axis_title = "Gene body position",
+                                          y_axis_title = "Mean mutations in windows",
+                                          upstream_label = "-5kb", downstream_label = "+5kb",
+                                          bold_axis_titles = TRUE,
+                                          variable = "counts", mode = "mean",
+                                          feature_color = "dodgerblue")
+
+
+# Trees
+all_tree.vcf <- vcf_feature_select(all_dn.df, Culture_Type = "Tree")
+all_tree.finf <- features_in_features(features = gene.windows, features2 = all_tree.vcf,
+                                        mode = "counts")
+all_tree.table <- left_join(all_tree.finf, gene.windows, by = "ID")
+all_tree.result <- plot_feature_windows(feature_windows = all_tree.table,
+                                        feature_linewidth = 1,
+                                        plot_title = "Tree Mutation",
+                                        x_axis_title = "Gene body position",
+                                        y_axis_title = "Mean mutations in windows",
+                                        upstream_label = "-5kb", downstream_label = "+5kb",
+                                        bold_axis_titles = TRUE,
+                                        variable = "counts", mode = "mean",
+                                        feature_color = "seagreen")
+
+all_tree_q20.vcf <- vcf_feature_select(all_dn.df, Culture_Type = "Tree", quality = 20)
+all_tree_q20.finf <- features_in_features(features = gene.windows, features2 = all_tree_q20.vcf,
+                                        mode = "counts") #CHROM needs to be numeric=
+all_tree_q20.table <- left_join(all_tree_q20.finf, gene.windows, by = "ID")
+all_tree_q20.result <- plot_feature_windows(feature_windows = all_tree_q20.table, 
+                                          feature_linewidth = 1, 
+                                          plot_title = "Tree Mutation QUAL >= 20",
+                                          x_axis_title = "Gene body position",
+                                          y_axis_title = "Mean mutations in windows",
+                                          upstream_label = "-5kb", downstream_label = "+5kb",
+                                          bold_axis_titles = TRUE,
+                                          variable = "counts", mode = "mean",
+                                          feature_color = "seagreen")
+
+all_tree_q30.vcf <- vcf_feature_select(all_dn.df, Culture_Type = "Tree", quality = 30)
+all_tree_q30.finf <- features_in_features(features = gene.windows, features2 = all_tree_q30.vcf,
+                                        mode = "counts") #CHROM needs to be numeric=
+all_tree_q30.table <- left_join(all_tree_q30.finf, gene.windows, by = "ID")
+all_tree_q30.result <- plot_feature_windows(feature_windows = all_tree_q30.table, 
+                                          feature_linewidth = 1, 
+                                          plot_title = "Tree Mutation QUAL >= 30",
+                                          x_axis_title = "Gene body position",
+                                          y_axis_title = "Mean mutations in windows",
+                                          upstream_label = "-5kb", downstream_label = "+5kb",
+                                          bold_axis_titles = TRUE,
+                                          variable = "counts", mode = "mean",
+                                          feature_color = "seagreen")
+
+```
+## Plot results
+```{r}
+all_embryo.result$plot
+#ggsave("./Figures/Mutation_Features/gene_body_mutation_all_embryos.pdf", height = 2, width = 4)
+#ggsave("./Figures/Mutation_Features/gene_body_mutation_all_embryos.png", height = 2, width = 4)
+all_embryo_q20.result$plot
+all_embryo_q30.result$plot
+
+all_shoot.result$plot
+#ggsave("./Figures/Mutation_Features/gene_body_mutation_all_shoots.pdf", height = 2, width = 4)
+#ggsave("./Figures/Mutation_Features/gene_body_mutation_all_shoots.png", height = 2, width = 4)
+all_shoot_q20.result$plot
+all_shoot_q30.result$plot
+
+all_tree.result$plot
+#ggsave("./Figures/Mutation_Features/gene_body_mutation_all_tree.pdf", height = 2, width = 4)
+#ggsave("./Figures/Mutation_Features/gene_body_mutation_all_tree.png", height = 2, width = 4)
+all_tree_q20.result$plot
+all_tree_q30.result$plot
+
+all_embryo.result$summary %>%
+  group_by(REGION) %>%
+  summarise(y = sum(y)) %>%
+  ggplot(aes(x = REGION, y = y, fill = REGION)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("upstream" = "grey70",
+                                "downstream" = "grey70",
+                                "gene body" = "orangered")) +
+  theme_classic() +
+  theme(legend.position = "none")
+  
+all_embryo_q20.result$summary %>%
+  group_by(REGION) %>%
+  summarise(y = sum(y)) %>%
+  ggplot(aes(x = REGION, y = y, fill = REGION)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("upstream" = "grey70",
+                                "downstream" = "grey70",
+                                "gene body" = "orangered")) +
+  theme_classic() +
+  theme(legend.position = "none")
+
+all_embryo_q30.result$summary %>%
+  group_by(REGION) %>%
+  summarise(y = sum(y)) %>%
+  ggplot(aes(x = REGION, y = y, fill = REGION)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("upstream" = "grey70",
+                                "downstream" = "grey70",
+                                "gene body" = "orangered")) +
+  theme_classic() +
+  theme(legend.position = "none")
+
+all_shoot.result$summary %>%
+  group_by(REGION) %>%
+  summarise(y = sum(y)) %>%
+  ggplot(aes(x = REGION, y = y, fill = REGION)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("upstream" = "grey70",
+                                "downstream" = "grey70",
+                                "gene body" = "dodgerblue")) +
+  theme_classic() +
+  theme(legend.position = "none")
+  
+all_shoot_q20.result$summary %>%
+  group_by(REGION) %>%
+  summarise(y = sum(y)) %>%
+  ggplot(aes(x = REGION, y = y, fill = REGION)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("upstream" = "grey70",
+                                "downstream" = "grey70",
+                                "gene body" = "dodgerblue")) +
+  theme_classic() +
+  theme(legend.position = "none")
+
+all_shoot_q30.result$summary %>%
+  group_by(REGION) %>%
+  summarise(y = sum(y)) %>%
+  ggplot(aes(x = REGION, y = y, fill = REGION)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("upstream" = "grey70",
+                                "downstream" = "grey70",
+                                "gene body" = "dodgerblue")) +
+  theme_classic() +
+  theme(legend.position = "none")
+
+all_tree.result$summary %>%
+  group_by(REGION) %>%
+  summarise(y = sum(y)) %>%
+  ggplot(aes(x = REGION, y = y, fill = REGION)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("upstream" = "grey70",
+                                "downstream" = "grey70",
+                                "gene body" = "seagreen")) +
+  theme_classic() +
+  theme(legend.position = "none")
+  
+all_tree_q20.result$summary %>%
+  group_by(REGION) %>%
+  summarise(y = sum(y)) %>%
+  ggplot(aes(x = REGION, y = y, fill = REGION)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("upstream" = "grey70",
+                                "downstream" = "grey70",
+                                "gene body" = "seagreen")) +
+  theme_classic() +
+  theme(legend.position = "none")
+
+all_tree_q30.result$summary %>%
+  group_by(REGION) %>%
+  summarise(y = sum(y)) %>%
+  ggplot(aes(x = REGION, y = y, fill = REGION)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("upstream" = "grey70",
+                                "downstream" = "grey70",
+                                "gene body" = "seagreen")) +
+  theme_classic() +
+  theme(legend.position = "none")
+```
+
+## Calculating dN/dS
+```{r}
+#Need to work on this
+```
+
+
+## Looking for hemizygous regions
+```{r}
+## Looking for normalization
+max_dp <- max(all_dn.df$DP, na.rm = TRUE)
+
+calculate_zscore <- function(x) {
+  (x - mean(x)) / sd(x)
+}
+
+all_dn.df %>%
+  group_by(CHROM) %>%
+  summarise(avg_depth = mean(DP_normalized, na.rm = TRUE))
+
+all_dn.df%>%
+  filter(Type == "Shoot", QUAL >= 30) %>%
+  ggplot(aes(x = POS, y = DP, color = VAF )) +
+  geom_point() +
+  scale_color_viridis_c() +  
+  facet_grid(Source ~ CHROM) + 
+  theme_classic()
+
+all_dn.df %>%
+  mutate(DP_normalized = DP / max(DP),
+         logDP = log10(DP)) %>%
+  filter(Type == "Embryo", GT != "0/0", CHROM %in% c(11, 12, 16)) %>%
+  group_by(Source, CHROM) %>%
+
+  ggplot(aes(x = POS, y = logDP, color = ifelse(GT == "0/1", "heterozygous", "homozygous"))) +
+  geom_point() +
+  geom_hline(aes(yintercept = mean(logDP)), linetype = "dashed", color = "black") +
+  facet_grid(Source ~ CHROM, scales = "free", labeller = labeller(Source = c(cr2_hifi = "HiFi",
+                                                                             cr21_1 = "1", cr21_2 = "2",
+                                                                             cr2_11A = "11A",
+                                                                             cr2_12A = "12A",
+                                                                             cr2_13A = "13A",
+                                                                             cr2_15A = "15A",
+                                                                             cr2_15A1 = "15A1",
+                                                                             cr2_16A = "16A",
+                                                                             cr2_16A1 = "16A1",
+                                                                             cr2_16A2 = "16A2",
+                                                                             cr2_17A1 = "17A1",
+                                                                             cr2_17A2 = "17A2",
+                                                                             cr2_18A = "18A",
+                                                                             cr2_18A1 = "18A1"))) +
+  labs(x = "Position", y = "Depth (log10)", color = "Genotype") +
+  theme_classic() +
+  theme(strip.text = element_text(face = "bold"), strip.background = element_blank(),
+        axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  scale_color_manual(values = c("heterozygous" = "lightcoral", "homozygous" = "dodgerblue4"))
+#ggsave("~/Desktop/chromosome_deletion_by_depth.pdf", height = 9, width = 11)
+#ggsave("~/Desktop/chromosome_deletion_by_depth.png", height = 9, width = 11)
+
+all_dn.df %>%
+  mutate(DP_normalized = DP / max(DP),
+         logDP = log10(DP)) %>%
+  filter(Type == "Embryo", GT != "0/0", CHROM %in% c(11, 12, 16), Source %in% c("cr2_18A1", "cr2_16A")) %>%
+  group_by(Source, CHROM) %>%
+
+  ggplot(aes(x = POS, y = logDP, color = ifelse(GT == "0/1", "heterozygous", "homozygous"))) +
+  geom_point() +
+  geom_hline(aes(yintercept = mean(logDP)), linetype = "dashed", color = "black") +
+  facet_grid(Source ~ CHROM, scales = "free", labeller = labeller(Source = c(cr2_hifi = "HiFi",
+                                                                             cr21_1 = "1", cr21_2 = "2",
+                                                                             cr2_11A = "11A",
+                                                                             cr2_12A = "12A",
+                                                                             cr2_13A = "13A",
+                                                                             cr2_15A = "15A",
+                                                                             cr2_15A1 = "15A1",
+                                                                             cr2_16A = "16A",
+                                                                             cr2_16A1 = "16A1",
+                                                                             cr2_16A2 = "16A2",
+                                                                             cr2_17A1 = "17A1",
+                                                                             cr2_17A2 = "17A2",
+                                                                             cr2_18A = "18A",
+                                                                             cr2_18A1 = "18A1"))) +
+  labs(x = "Position", y = "Depth (log10)", color = "Genotype") +
+  theme_classic() +
+  theme(strip.text = element_text(face = "bold"), strip.background = element_blank(),
+        axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  scale_color_manual(values = c("heterozygous" = "lightcoral", "homozygous" = "dodgerblue4"))
+#ggsave("~/Desktop/chromosome_deletion_by_depth_cr16_18a1.pdf", height = 3, width = 8)
+#ggsave("~/Desktop/chromosome_deletion_by_depth.png", height = 9, width = 11)
+
+
+all_dn.df%>%
+  filter(Type == "Tree", QUAL >= 30) %>%
+  ggplot(aes(x = POS, y = DP, color = VAF )) +
+  geom_point() +
+  scale_color_viridis_c() +  
+  facet_grid(Source ~ CHROM) + 
+  theme_classic()
+```
+
+## Look for hemizygous regions with ancestral snps
+```{r}
+## Load in ancestral snps
+all_an.df <- fread("./Data/VCFs/Filtered/all_an.vcf")
+
+# Find mean depth per sample
+mean_depths_an <- all_an.df %>%
+  group_by(Source) %>%
+  summarise(mean_DP = mean(DP))
+
+# Join mean depths
+all_an.df <- all_an.df %>%
+  left_join(mean_depths_an, by = "Source")
+
+# Normalize mean DP
+all_an.df <- all_an.df %>%
+  mutate(norm_DP = DP / mean_DP) %>%
+  select(-mean_DP)
+
+head(all_an.df)
+```
+
+## Plot ancestral snps for hemizygous sites in embryos
+```{r}
+all_an.df %>%
+  filter(Type == "Embryo", GT != "0/0", CHROM %in% c(4, 9, 11, 12, 16)) %>%
+  group_by(Source, CHROM) %>%
+  ggplot(aes(x = POS, y = log(norm_DP), color = ifelse(GT == "0/1", "heterozygous", "homozygous"))) +
+  geom_point() +
+  geom_hline(aes(yintercept = mean(log(norm_DP))), linetype = "dashed", color = "black") +
+  facet_grid(Source ~ CHROM, scales = "free", labeller = labeller(Source = c(cr2_hifi = "HiFi",
+                                                                             cr21_1 = "1", cr21_2 = "2",
+                                                                             cr2_11A = "11A",
+                                                                             cr2_12A = "12A",
+                                                                             cr2_13A = "13A",
+                                                                             cr2_15A = "15A",
+                                                                             cr2_15A1 = "15A1",
+                                                                             cr2_16A = "16A",
+                                                                             cr2_16A1 = "16A1",
+                                                                             cr2_16A2 = "16A2",
+                                                                             cr2_17A1 = "17A1",
+                                                                             cr2_17A2 = "17A2",
+                                                                             cr2_18A = "18A",
+                                                                             cr2_18A1 = "18A1"))) +
+  labs(x = "Position", y = "Depth (log10)", color = "Genotype") +
+  theme_classic() +
+  theme(strip.text = element_text(face = "bold"), strip.background = element_blank(),
+        axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  scale_color_manual(values = c("heterozygous" = "lightcoral", "homozygous" = "dodgerblue4"))
+#ggsave("~/Desktop/chromosome_deletion_by_depth.pdf", height = 9, width = 11)
+#ggsave("~/Desktop/chromosome_deletion_by_depth.png", height = 9, width = 11)
+
+
+all_an.df %>%
+  filter(Source %in% c("cr2_18A1", "cr2_16A"), GT != "0/0", CHROM %in% c(4, 9, 11, 12, 16)) %>%
+  ggplot(aes(x = POS, y = log(norm_DP), color = ifelse(GT == "0/1", "heterozygous", "homozygous"))) +
+  geom_point() +
+  geom_hline(aes(yintercept = mean(log(norm_DP))), linetype = "dashed", color = "black") +
+  facet_grid(Source ~ CHROM, scales = "free", labeller = labeller(Source = c(cr2_hifi = "HiFi",
+                                                                             cr21_1 = "1", cr21_2 = "2",
+                                                                             cr2_11A = "11A",
+                                                                             cr2_12A = "12A",
+                                                                             cr2_13A = "13A",
+                                                                             cr2_15A = "15A",
+                                                                             cr2_15A1 = "15A1",
+                                                                             cr2_16A = "16A",
+                                                                             cr2_16A1 = "16A1",
+                                                                             cr2_16A2 = "16A2",
+                                                                             cr2_17A1 = "17A1",
+                                                                             cr2_17A2 = "17A2",
+                                                                             cr2_18A = "18A",
+                                                                             cr2_18A1 = "18A1"))) +
+  labs(x = "Position", y = "Depth (log10)", color = "Genotype") +
+  theme_classic() +
+  theme(strip.text = element_text(face = "bold"), strip.background = element_blank(),
+        axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  scale_color_manual(values = c("heterozygous" = "lightcoral", "homozygous" = "dodgerblue4"))
+#ggsave("~/Desktop/chromosome_deletion_by_depth_cr16_18a1.pdf", height = 3, width = 8)
+#ggsave("~/Desktop/chromosome_deletion_by_depth_cr16_18a1.png", height = 3, width = 8)
+```
+
+## Plot ancestral snps for hemizygous sites in shoots
+```{r}
+all_an.df %>%
+  filter(Type == "Shoot", GT != "0/0") %>%
+  group_by(Source, CHROM) %>%
+  ggplot(aes(x = POS, y = log(norm_DP), color = ifelse(GT == "0/1", "heterozygous", "homozygous"))) +
+  geom_point() +
+  geom_hline(aes(yintercept = mean(log(norm_DP))), linetype = "dashed", color = "black") +
+  facet_grid(Source ~ CHROM, scales = "free", labeller = labeller(Source = c(cr85 = "1985", cr10 = "2010", cr13 = "2013", cr22 = "2022"))) +
+  labs(x = "Position", y = "Depth (log10)", color = "Genotype") +
+  theme_classic() +
+  theme(strip.text = element_text(face = "bold"), strip.background = element_blank(),
+        axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  scale_color_manual(values = c("heterozygous" = "lightcoral", "homozygous" = "dodgerblue4"))
+#ggsave("~/Desktop/shoots_ancestral_snp_depth.pdf", height = 9, width = 11)
+#ggsave("~/Desktop/shoots_ancestral_snp_depth.png", height = 9, width = 11)
+```
+
+## Plotting de novo SNPs from combined haplotypes
+```{r}
+all_dn_combo.vcf <- fread("./Data/VCFs/Filtered/all_dn_combined_haps.vcf")
+
+all_dn_combo.vcf %>%
+  filter(Source == "cr2_hifi", GT != "0/0", QUAL >= 20) %>%
+  group_by(Source, CHROM, Hap) %>%
+  ggplot(aes(x = POS, y = log(DP), color = ifelse(GT == "0/1", "heterozygous", "homozygous"))) +
+  geom_point() +
+  geom_hline(aes(yintercept = mean(log(DP))), linetype = "dashed", color = "black") +
+  facet_grid(Source ~ CHROM + Hap, scales = "free", space = "free", labeller = labeller(Source = c(cr2_hifi = "HiFi"))) +
+  labs(x = "Position", y = "Depth (log10)", color = "Genotype") +
+  theme_classic() +
+  theme(strip.text = element_text(face = "bold"), strip.background = element_blank(),
+        axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  scale_color_manual(values = c("heterozygous" = "lightcoral", "homozygous" = "dodgerblue4"))
+
+#ggsave("~/Desktop/cr2_hifi_denovo_snp_depth_combined_hap.pdf", height = 6, width = 45)
+#ggsave("~/Desktop/cr2_hifi_denovo_snp_depth_combined_hap.pdf", height = 6, width = 45)
+```
+
+```{r}
+#nonsyn_syn_exp3()
+
+# VCF Table - denovo snps on all 3 categories separately, reference genome, CDS coding seqeunces fasta file, 
+```
+

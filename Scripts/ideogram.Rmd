@@ -1,0 +1,301 @@
+---
+title: "ideogram"
+author: "Matthew Davis"
+date: "2024-02-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+```{r}
+library(tidyverse)
+library(data.table)
+library(seqinr)
+library(Biostrings)
+library(RIdeogram)
+```
+
+## Functions
+```{r}
+## Function for fixing read coverage data
+fix_coverage <- function(path, color = "48C9B0", coverage = 1000000 ) {
+  # Read in data
+  data <-fread(path)
+  
+  # Extract chromosomes
+  data <- data[grepl("NC_04", data$V1),] #select chromosomes
+
+  # Extract the chromosome number 
+  data$Chr <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", data$V1))
+
+  # Select for the new Chr column
+  data <- 
+    data %>% 
+    select(Chr, V2, V3, V4)
+  
+  # Name column headers
+  colnames(data) <- c("Chr", "Start", "End", "Value")
+  
+  # Divide coverage value to get coverage
+  data <- data %>%
+    mutate(Value = Value/coverage)
+  
+  # Add color column
+  data$Color <- rep(color, nrow(data))
+
+  # Output data
+  return(data)
+}
+
+## Plotting contig breaks
+contig_break_table <- function(path, type = "Contig", shape = "circle", color = "181F4C") {
+  # Read in data
+  data <-fread(path, skip = 2, fill = TRUE)
+  
+  #Extract chromosomes
+  data <- data[grepl("NC_04", data$V1),] #select chromosomes
+
+  # Extract the chromosome number 
+  data$Chr <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1", data$V1))
+
+  # Filter for contigs and not gaps, select chromosomes and end points
+  data <- data %>% 
+    filter(V5=="W") %>%
+    select(Chr, V3)
+
+  # Rename columns 
+  names(data)[names(data) == "V3"] <- "Start"
+
+  # Create other necessary columns
+  data <- data %>%
+    mutate(End = Start) %>%
+    mutate(Type = type) %>%
+    mutate(Shape = shape) %>%
+    mutate(Color = color) %>%
+    select(Type, Shape, Chr, Start, End, Color)
+
+  # Return data
+  return(data)
+}
+
+## Extract chromosome lengths
+chr_lengths <- function(fasta){
+  
+  data <- data.table(Chr = names(fasta), End = width(fasta))
+  data <- data %>%
+    mutate(Start = 0)
+  data <- data[grepl("NC_04", data$Chr),] # select chromosomes
+  
+  # Extract the chromosome number 
+  data$Chr <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", data$Chr))
+  
+  data <- data %>%
+    select(c("Chr", "Start", "End"))
+  
+  return(data)
+}
+
+feature_density <- function(gff_file, feature_type = "gene", window = 1000000) {
+  # Read in data
+gff <- fread(gff_file, sep = "\t", header = FALSE, stringsAsFactors = FALSE)
+
+# Extract chromosomes
+gff <- gff[grepl("NC_04", gff$V1),]
+
+# Extract the chromosome number
+gff$Chr <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", gff$V1))
+
+# Filter for the specified feature type
+gff <- gff %>%
+  filter(V3 == feature_type)
+
+# Select and rename columns
+gff <- gff %>%
+  select(Chr, V3, V4, V5)
+
+colnames(gff) <- c("Chr", "Feature", "Start", "End")
+
+# Create a new data frame to store the results
+feature_density.table <- data.frame(
+  Chr = integer(),
+  Start = integer(),
+  End = integer(),
+  Value = integer(),
+  stringsAsFactors = FALSE
+)
+
+# Loop through chromosomes in your data
+for (chr in unique(gff$Chr)) {
+  chr_data <- filter(gff, Chr == chr)  # Subset data for the current chromosome
+  
+  # Determine the number of windows for the current chromosome
+  max_end <- max(chr_data$End)
+  window_size <- window
+  step_size <- window/2  # Set the step size for sliding windows
+  
+  # Loop through windows and count genes
+  for (window_start in seq(0, max_end - window_size, step_size)) {
+    window_end <- window_start + window_size
+    
+    # Count the number of genes within the current window
+    count <- nrow(filter(chr_data, Start <= window_end & End >= window_start))
+    
+    # Add the result to the result data frame
+    feature_density.table <- bind_rows(feature_density.table, data.frame(
+      Chr = chr,
+      Start = window_start,
+      End = window_end,
+      Value = count
+    ))
+  }
+  
+  # Handle the last window separately to ensure it covers the very end of the chromosome
+  last_window_start <- max_end - window_size
+  last_window_end <- max_end
+  
+  # Count the number of genes within the last window
+  count <- nrow(filter(chr_data, Start <= last_window_end & End >= last_window_start))
+  
+  # Add the result to the result data frame
+  feature_density.table <- bind_rows(feature_density.table, data.frame(
+    Chr = chr,
+    Start = last_window_start,
+    End = last_window_end,
+    Value = count
+  ))
+}
+  
+  return(feature_density.table)
+}
+
+cM_per_Mb_markers <- function(linkage_map, window = 500000, color_numbers = 10, color_start = "#1d4877", color_end = "#ee3e32"){
+  
+  # read in linkage map
+  linkage.map <- fread("./Data/Linkage_Maps/map_LBF2402_yesOmniC.csv")
+  setnames(linkage.map, old = c("chr"), new = c("Chr"))
+  
+  # Create 1 Mb windows
+  window_size <- window
+
+  # Create a new data.table with Chr, Start, and End columns
+  window_table <- linkage.map[, .(Start = seq(0, max(bp), by = window_size),
+                                  End = pmin(seq(window_size, max(bp) + window_size, by = window_size), max(bp))),
+                              by = Chr]
+
+  # Initialize empty vectors to store mean, count, and middle bp values
+  mean_values <- numeric()
+  count_values <- numeric()
+  middle_bp_values <- numeric()
+
+  # Iterate over each row in window_table
+  for (i in seq_len(nrow(window_table))) {
+    # Extract relevant information from the current row
+    chr <- window_table$Chr[i]
+    start <- window_table$Start[i]
+    end <- window_table$End[i]
+
+    # Calculate the mean of Start and End for the current window
+    mean_start <- mean(c(start, end))
+
+    # Subset linkage_omnic.map for the current window
+    current_window <- linkage.map[Chr == chr & bp >= start & bp <= end]
+
+    # Calculate the mean of the 'dist' column for the current window
+    mean_value <- mean(current_window$dist)
+
+    # Count the number of rows for the current window
+    count_value <- nrow(current_window)
+
+    # Store the mean, count, and middle bp values in the vectors
+    mean_values <- c(mean_values, mean_value)
+    count_values <- c(count_values, count_value)
+    middle_bp_values <- c(middle_bp_values, mean_start)
+    }
+
+  # Add the mean, count, and middle bp values as new columns to window_table
+  window_table$MeanDist <- mean_values
+  window_table$RowCount <- count_values
+  window_table$WindowMiddleBP <- middle_bp_values
+
+  # Remove all windows with no markers
+  window_table <- window_table[RowCount > 0]
+
+  # Order the data.table by Chr and Start
+  setorder(window_table, Chr, Start)
+
+  # Calculate the difference for each Chr
+  window_table[, DiffMeanDist := c(NA, abs(diff(MeanDist))), by = Chr]
+
+  # Calculate the difference for each Chr in WindowMiddleBP
+  window_table[, Diff_in_Mb := c(NA, abs(diff(WindowMiddleBP))), by = Chr]
+
+  # Take mean of window middle bp from the two samples being used in subtraction 
+  window_table <- window_table %>%
+    group_by(Chr) %>%
+    mutate(Plot_Pos = ifelse(row_number() == 1, NA, (WindowMiddleBP + lag(WindowMiddleBP, default = 0)) / 2)) %>%
+    ungroup()
+
+  # Calculate cM per Mb
+  window_table <- window_table %>%
+    mutate(cM_per_Mb = DiffMeanDist/Diff_in_Mb)
+
+  # Determine the number of shades
+  num_shades <- color_numbers
+
+  red_palette <- colorRampPalette(c(color_start, color_end))
+
+  # Determine breakpoints for cM_per_Mb values
+  breakpoints <- quantile(window_table$cM_per_Mb, probs = seq(0, 1, length.out = num_shades + 1), na.rm = TRUE)
+
+  # Assign colors based on cM_per_Mb values
+  window_table <- window_table %>%
+    mutate(color = cut(cM_per_Mb, breaks = breakpoints, labels = red_palette(num_shades), include.lowest = TRUE))
+  
+  recom_marker.table <- window_table %>%
+    select(Chr, Plot_Pos, color)
+
+  recom_marker.table <- recom_marker.table %>%
+    mutate(Type = "Difference in cM per Mb") %>%
+    mutate(Shape = "circle") %>%
+    mutate(End = Plot_Pos) %>%
+    mutate(Start = Plot_Pos) %>%
+    mutate(color = gsub("#", "", color)) %>%
+    na.omit() %>%
+    select(Type, Shape, Chr, Start, End, color)
+
+  return(recom_marker.table)
+}
+```
+
+## Read in data
+```{r}
+# Fasta assembly
+ref_pri.fasta <- readDNAStringSet("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+# Genome coverage
+ref_pri.cov <- fix_coverage("./Data/Coverage/Longread_Coverage/ref_chandler_primary_default_scaffold_1mb.cov", 
+                            color = "CCCCFF")
+# Contig breakpoints
+ref_pri.breaks <- contig_break_table("./Data/AGPs/ref_chandler_primary_default_scaffold.agp")
+#Chromosome lengths
+ref_pri.lengths <- chr_lengths(ref_pri.fasta)
+# Gene density
+gene_density <- feature_density(gff_file = "./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
+# Recombination frequency
+recom_marker.table <- cM_per_Mb_markers(linkage_map = "./Data/Linkage_Maps/map_LBF2402_yesOmniC.csv", color_numbers = 10, color_start = "#00008B", color_end = "#FF0000")
+```
+
+## Ideogram
+```{r}
+ideogram(karyotype = ref_pri.lengths, overlaid = gene_density, label = ref_pri.cov, label_type = "line",
+         width = 150, Lx = 20, Ly = 25, output = "./Figures/Ideograms/ref_chandler_primary_ideogram.svg")
+convertSVG(svg = "./Figures/Ideograms/ref_chandler_primary_ideogram.svg", file = "./Figures/Ideograms/ref_chandler_primary_ideogram",  device = "pdf")
+convertSVG(svg = "./Figures/Ideograms/ref_chandler_primary_ideogram.svg", file = "./Figures/Ideograms/ref_chandler_primary_ideogram",  device = "png")
+
+ideogram(karyotype = ref_pri.lengths, overlaid = gene_density, label = recom_marker.table, label_type = "marker",
+         width = 150, Lx = 20, Ly = 25, output = "./Figures/Ideograms/ref_chandler_primary_ideogram_recomb.svg")
+convertSVG(svg = "./Figures/Ideograms/ref_chandler_primary_ideogram_recomb.svg", file = "./Figures/Ideograms/ref_chandler_primary_ideogram_recomb",  device = "pdf")
+convertSVG(svg = "./Figures/Ideograms/ref_chandler_primary_ideogram_recomb.svg", file = "./Figures/Ideograms/ref_chandler_primary_ideogram_recomb",  device = "png")
+```

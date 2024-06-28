@@ -1,0 +1,564 @@
+---
+title: "telomere_identification"
+author: "Matthew Davis"
+date: "2023-12-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+```{r, message=FALSE}
+library(data.table)
+library(tidyverse)
+library(seqinr)
+library(Biostrings)
+```
+
+## Functions
+```{r}
+# Function to split a sequence into windows
+create_windows <- function(genome, window_size) {
+  n_windows <- ceiling(nchar(genome) / window_size) # I don't think this is a necessary line
+  windows <- substring(genome, seq(1, nchar(genome), window_size),
+                       seq(window_size, nchar(genome) + window_size, window_size))
+  return(windows)
+}
+
+# Function to count occurrences of a specific sequence in a window
+count_sequence <- function(window, sequence) {
+  count <- sum(countPattern(sequence, window))
+  return(count)
+}
+
+# Function for the for loop to create windows and count sequences
+telomere_repeat_number <- function(fasta, window = 1000000, dt) {
+  for (i in 1:length(fasta)) {
+    seq_name <- names(fasta[i])
+    sequence <- as.character(fasta[i])
+
+    # Split the sequence into 1 Mb windows
+    windows <- create_windows(genome = sequence, window_size = window)
+
+    # Count occurrences of the first telomere sequence in each window
+    telomere_start_counts <- sapply(windows, count_sequence, sequence = telomere_start)
+  
+    # Count occurrences of the last telomere sequence in each window
+    telomere_end_counts <- sapply(windows, count_sequence, sequence = telomere_end)
+
+    # Create a data table for the window counts
+    dt_chromosome <- data.table(Chromosome = rep(seq_name, length(windows)),
+                                Window = seq_along(windows),
+                                CCCTAAA_Counts = telomere_start_counts,
+                                TTTAGGG_Counts = telomere_end_counts)
+
+    # Append the counts for the current chromosome to the main data table
+    dt <- rbind(dt, dt_chromosome)
+    }
+  return(dt)
+} 
+
+# Renaming chromosomes
+rename_chr <- function(data) {
+    # Remove extraneous scaffolds
+  data <- data[!grepl("NW_", data$Chromosome),] #Remove contigs starting with NW_
+  data <- data[!grepl("NC_02", data$Chromosome),] # Remove contigs starting with NC_02
+  data <- data[!grepl("ptg", data$Chromosome),]
+  data <- data[!grepl("h1tg", data$Chromosome),]
+  data <- data[!grepl("h2tg", data$Chromosome),]
+  
+  data$Chromosome <- gsub("NC_0499.*?([0-9]+).*", "\\1", data$Chromosome) # Rename chromosomes to just number
+  data$Chromosome <- str_remove(data$Chromosome, "^0+") # Remove leading zeros
+  data$Chromosome <- as.numeric(data$Chromosome) # Make CHROM numeric. This should allow for proper order plotting
+  return(data)
+}
+
+plot_table <- function(fasta_lengths_table, telomere_table, name, genome_size){
+  
+  table <- left_join(fasta_lengths_table, telomere_table, by = "Chromosome") %>%
+    select(!Window) %>%
+    mutate(begin_telo_bp = CCCTAAA_Counts*21) %>%
+    mutate(end_telo_bp = TTTAGGG_Counts*21) %>%
+    mutate(begin_telo_start = 0) %>%
+    mutate(begin_telo_end = begin_telo_bp) %>%
+    mutate(end_telo_start = Length - end_telo_bp) %>%
+    mutate(end_telo_end = Length) %>%
+    mutate(total_telo_bp = begin_telo_bp + end_telo_bp) %>%
+    mutate(normalized_total_telo_size = total_telo_bp/genome_size) %>%
+    mutate(Source = name)
+  return(table)
+}
+
+telomere_plot <- function(plot_table, title = NULL, barcolor = "lightblue", dotcolor = "red3"){
+  na_table <- plot_table %>% mutate_all(~ ifelse(. == 0, NA, .))
+  na_table$end_telo_start <- ifelse(na_table$end_telo_start == na_table$end_telo_end, NA,
+                                    na_table$end_telo_start)
+  na_table$end_telo_end <- ifelse(na_table$end_telo_start == na_table$end_telo_end, NA,
+                                  na_table$end_telo_end)
+
+  plot <- na_table %>%
+    ggplot(aes(x = Chromosome, y = Length)) +
+    geom_bar(stat = "identity", fill = barcolor, position = "dodge") +
+    scale_x_continuous(breaks = na_table$Chromosome) +
+    geom_point(data = na_table, aes(y = begin_telo_end, color = "Telomere Presence"), shape = 16,
+               size = 3) +
+    geom_point(data = na_table, aes(y = end_telo_end), shape = 16, color = dotcolor, size = 3) +
+    labs(y = "Chromosome Length", title = title) +
+    scale_color_manual(values = c("Telomere Presence" = dotcolor)) +
+    guides(color = guide_legend(title = NULL)) +
+    theme_classic(base_size = 6) +
+    theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5, face = "bold"))
+  return(plot)
+}
+
+bp_correction <- function(df, name, bp_number){
+  new_df <- df %>% 
+    mutate(Corrected_Count = sum(V2)/(bp_number/21)) %>%
+    mutate(ID = name) %>%
+    mutate(Rounded_Corrected_Count = round(Corrected_Count, digits = 6)) %>%
+    mutate(Scientific_Notation = format(Corrected_Count, scientific = TRUE, digits = 2)) %>%
+    rename(V1 = "Sequence", V2 = "Count")
+  
+  return(new_df)
+}
+```
+
+## Read in fasta sequences
+```{r}
+ref_pri.fasta <- readDNAStringSet("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+ref_h1.fasta <- readDNAStringSet("./Data/Fastas/ref_chandler_hap1_default_scaffold.fasta")
+ref_h2.fasta <- readDNAStringSet("./Data/Fastas/ref_chandler_hap2_default_scaffold.fasta")
+ref_pri_bcov2.fasta <- readDNAStringSet("./Data/Fastas/ref_chandler_primary_bcov2_scaffold.fasta")
+ref_h1_bcov2.fasta <- readDNAStringSet("./Data/Fastas/ref_chandler_hap1_bcov2_scaffold.fasta")
+ref_h2_bcov2.fasta <- readDNAStringSet("./Data/Fastas/ref_chandler_hap2_bcov2_scaffold.fasta")
+
+term_pri.fasta <- readDNAStringSet("./Data/Fastas/term_chandler_primary_default_scaffold.fasta")
+term_h1.fasta <- readDNAStringSet("./Data/Fastas/term_chandler_hap1_default_scaffold.fasta")
+term_h2.fasta <- readDNAStringSet("./Data/Fastas/term_chandler_hap2_default_scaffold.fasta")
+term_pri_bcov2.fasta <- readDNAStringSet("./Data/Fastas/term_chandler_primary_bcov2_scaffold.fasta")
+term_h1_bcov2.fasta <- readDNAStringSet("./Data/Fastas/term_chandler_hap1_bcov2_scaffold.fasta")
+term_h2_bcov2.fasta <- readDNAStringSet("./Data/Fastas/term_chandler_hap2_bcov2_scaffold.fasta")
+
+cr2_pri.fasta <- readDNAStringSet("./Data/Fastas/cr2_primary_default_scaffold.fasta")
+cr2_h1.fasta <- readDNAStringSet("./Data/Fastas/cr2_hap1_default_scaffold.fasta")
+cr2_h2.fasta <- readDNAStringSet("./Data/Fastas/cr2_hap2_default_scaffold.fasta")
+cr2_pri_bcov2.fasta <- readDNAStringSet("./Data/Fastas/cr2_primary_bcov2_scaffold.fasta")
+cr2_h1_bcov2.fasta <- readDNAStringSet("./Data/Fastas/cr2_hap1_bcov2_scaffold.fasta")
+cr2_h2_bcov2.fasta <- readDNAStringSet("./Data/Fastas/cr2_hap2_bcov2_scaffold.fasta")
+```
+
+## Define telomeric sequences
+```{r}
+telomere_start <- "CCCTAAACCCTAAACCCTAAA"
+telomere_end <- "TTTAGGGTTTAGGGTTTAGGG"
+```
+
+## Create blank data table for output
+```{r}
+dt <- data.table(Chromosome = character(),
+                 Window = integer(),
+                 CCCTAAA_Counts = integer(),
+                 TTTAGGG_Counts = integer())
+# We only need one because the new variable will be specified later. This is a place holder
+```
+
+## Get lengths of chromsomes in assemblies
+```{r}
+ref_pri_chr_length <- data.table(Chromosome = names(ref_pri.fasta), Length = width(ref_pri.fasta))
+ref_pri_genome_size <- sum(ref_pri_chr_length$Length)
+ref_h1_chr_length <- data.table(Chromosome = names(ref_h1.fasta), Length = width(ref_h1.fasta))
+ref_h1_genome_size <- sum(ref_h1_chr_length$Length)
+ref_h2_chr_length <- data.table(Chromosome = names(ref_h2.fasta), Length = width(ref_h2.fasta))
+ref_h2_genome_size <- sum(ref_h2_chr_length$Length)
+ref_pri_bcov2_chr_length <- data.table(Chromosome = names(ref_pri_bcov2.fasta),
+                                       Length = width(ref_pri_bcov2.fasta))
+ref_pri_bcov2_genome_size <- sum(ref_pri_bcov2_chr_length$Length)
+ref_h1_bcov2_chr_length <- data.table(Chromosome = names(ref_h1_bcov2.fasta),
+                                      Length = width(ref_h1_bcov2.fasta))
+ref_h1_bcov2_genome_size <- sum(ref_h1_bcov2_chr_length$Length)
+ref_h2_bcov2_chr_length <- data.table(Chromosome = names(ref_h2_bcov2.fasta),
+                                      Length = width(ref_h2_bcov2.fasta))
+ref_h2_bcov2_genome_size <- sum(ref_h2_bcov2_chr_length$Length)
+
+term_pri_chr_length <- data.table(Chromosome = names(term_pri.fasta), Length = width(term_pri.fasta))
+term_pri_genome_size <- sum(term_pri_chr_length$Length)
+term_h1_chr_length <- data.table(Chromosome = names(term_h1.fasta), Length = width(term_h1.fasta))
+term_h1_genome_size <- sum(term_h1_chr_length$Length)
+term_h2_chr_length <- data.table(Chromosome = names(term_h2.fasta), Length = width(term_h2.fasta))
+term_h2_genome_size <- sum(term_h2_chr_length$Length)
+term_pri_bcov2_chr_length <- data.table(Chromosome = names(term_pri_bcov2.fasta),
+                                       Length = width(term_pri_bcov2.fasta))
+term_pri_bcov2_genome_size <- sum(term_pri_bcov2_chr_length$Length)
+term_h1_bcov2_chr_length <- data.table(Chromosome = names(term_h1_bcov2.fasta),
+                                      Length = width(term_h1_bcov2.fasta))
+term_h1_bcov2_genome_size <- sum(term_h1_bcov2_chr_length$Length)
+term_h2_bcov2_chr_length <- data.table(Chromosome = names(term_h2_bcov2.fasta),
+                                      Length = width(term_h2_bcov2.fasta))
+term_h2_bcov2_genome_size <- sum(term_h2_bcov2_chr_length$Length)
+
+cr2_pri_chr_length <- data.table(Chromosome = names(cr2_pri.fasta), Length = width(cr2_pri.fasta))
+cr2_pri_genome_size <- sum(cr2_pri_chr_length$Length)
+cr2_h1_chr_length <- data.table(Chromosome = names(cr2_h1.fasta), Length = width(cr2_h1.fasta))
+cr2_h1_genome_size <- sum(cr2_h1_chr_length$Length)
+cr2_h2_chr_length <- data.table(Chromosome = names(cr2_h2.fasta), Length = width(cr2_h2.fasta))
+cr2_h2_genome_size <- sum(cr2_h2_chr_length$Length)
+cr2_pri_bcov2_chr_length <- data.table(Chromosome = names(cr2_pri_bcov2.fasta),
+                                       Length = width(cr2_pri_bcov2.fasta))
+cr2_pri_bcov2_genome_size <- sum(cr2_pri_bcov2_chr_length$Length)
+cr2_h1_bcov2_chr_length <- data.table(Chromosome = names(cr2_h1_bcov2.fasta),
+                                      Length = width(cr2_h1_bcov2.fasta))
+cr2_h1_bcov2_genome_size <- sum(cr2_h1_bcov2_chr_length$Length)
+cr2_h2_bcov2_chr_length <- data.table(Chromosome = names(cr2_h2_bcov2.fasta),
+                                      Length = width(cr2_h2_bcov2.fasta))
+cr2_h2_bcov2_genome_size <- sum(cr2_h2_bcov2_chr_length$Length)
+```
+
+## Count telomeres
+```{r}
+# There is no default for dt variable, so must specify
+ref_pri_tel_count <- telomere_repeat_number(fasta = ref_pri.fasta, dt = dt)
+ref_h1_tel_count <- telomere_repeat_number(fasta = ref_h1.fasta, dt = dt)
+ref_h2_tel_count <- telomere_repeat_number(fasta = ref_h2.fasta, dt = dt)
+ref_pri_bcov2_tel_count <- telomere_repeat_number(fasta = ref_pri_bcov2.fasta, dt = dt)
+ref_h1_bcov2_tel_count <- telomere_repeat_number(fasta = ref_h1_bcov2.fasta, dt = dt)
+ref_h2_bcov2_tel_count <- telomere_repeat_number(fasta = ref_h2_bcov2.fasta, dt = dt)
+
+term_pri_tel_count <- telomere_repeat_number(fasta = term_pri.fasta, dt = dt)
+term_h1_tel_count <- telomere_repeat_number(fasta = term_h1.fasta, dt = dt)
+term_h2_tel_count <- telomere_repeat_number(fasta = term_h2.fasta, dt = dt)
+term_pri_bcov2_tel_count <- telomere_repeat_number(fasta = term_pri_bcov2.fasta, dt = dt)
+term_h1_bcov2_tel_count <- telomere_repeat_number(fasta = term_h1_bcov2.fasta, dt = dt)
+term_h2_bcov2_tel_count <- telomere_repeat_number(fasta = term_h2_bcov2.fasta, dt = dt)
+
+cr2_pri_tel_count <- telomere_repeat_number(fasta = cr2_pri.fasta, dt = dt)
+cr2_h1_tel_count <- telomere_repeat_number(fasta = cr2_h1.fasta, dt = dt)
+cr2_h2_tel_count <- telomere_repeat_number(fasta = cr2_h2.fasta, dt = dt)
+cr2_pri_bcov2_tel_count <- telomere_repeat_number(fasta = cr2_pri_bcov2.fasta, dt = dt)
+cr2_h1_bcov2_tel_count <- telomere_repeat_number(fasta = cr2_h1_bcov2.fasta, dt = dt)
+cr2_h2_bcov2_tel_count <- telomere_repeat_number(fasta = cr2_h2_bcov2.fasta, dt = dt)
+```
+
+## Filter for over 50 counts of the telomere 21-mer in a window
+```{r}
+ref_pri_tel <- ref_pri_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+ref_h1_tel <- ref_h1_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+ref_h2_tel <- ref_h2_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+ref_pri_bcov2_tel <- ref_pri_bcov2_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+ref_h1_bcov2_tel <- ref_h1_bcov2_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+ref_h2_bcov2_tel <- ref_h2_bcov2_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+
+term_pri_tel <- term_pri_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+term_h1_tel <- term_h1_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+term_h2_tel <- term_h2_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+term_pri_bcov2_tel <- term_pri_bcov2_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+term_h1_bcov2_tel <- term_h1_bcov2_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+term_h2_bcov2_tel <- term_h2_bcov2_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+
+cr2_pri_tel <- cr2_pri_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+cr2_h1_tel <- cr2_h1_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+cr2_h2_tel <- cr2_h2_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+cr2_pri_bcov2_tel <- cr2_pri_bcov2_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+cr2_h1_bcov2_tel <- cr2_h1_bcov2_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+cr2_h2_bcov2_tel <- cr2_h2_bcov2_tel_count %>%
+  filter(CCCTAAA_Counts > 50 | TTTAGGG_Counts > 50)
+```
+
+## Renaming chromosomes to be just chromosome numbers
+```{r}
+# Renaming chromosome lengths table
+ref_pri_chr_length <- rename_chr(ref_pri_chr_length)
+ref_h1_chr_length <- rename_chr(ref_h1_chr_length)
+ref_h2_chr_length <- rename_chr(ref_h2_chr_length)
+ref_pri_bcov2_chr_length <- rename_chr(ref_pri_bcov2_chr_length)
+ref_h1_bcov2_chr_length <- rename_chr(ref_h1_bcov2_chr_length)
+ref_h2_bcov2_chr_length <- rename_chr(ref_h2_bcov2_chr_length)
+
+term_pri_chr_length <- rename_chr(term_pri_chr_length)
+term_h1_chr_length <- rename_chr(term_h1_chr_length)
+term_h2_chr_length <- rename_chr(term_h2_chr_length)
+term_pri_bcov2_chr_length <- rename_chr(term_pri_bcov2_chr_length)
+term_h1_bcov2_chr_length <- rename_chr(term_h1_bcov2_chr_length)
+term_h2_bcov2_chr_length <- rename_chr(term_h2_bcov2_chr_length)
+
+cr2_pri_chr_length <- rename_chr(cr2_pri_chr_length)
+cr2_h1_chr_length <- rename_chr(cr2_h1_chr_length)
+cr2_h2_chr_length <- rename_chr(cr2_h2_chr_length)
+cr2_pri_bcov2_chr_length <- rename_chr(cr2_pri_bcov2_chr_length)
+cr2_h1_bcov2_chr_length <- rename_chr(cr2_h1_bcov2_chr_length)
+cr2_h2_bcov2_chr_length <- rename_chr(cr2_h2_bcov2_chr_length)
+
+# Renaming telomere count table
+ref_pri_tel <- rename_chr(ref_pri_tel)
+ref_h1_tel <- rename_chr(ref_h1_tel)
+ref_h2_tel <- rename_chr(ref_h2_tel)
+ref_pri_bcov2_tel <- rename_chr(ref_pri_bcov2_tel)
+ref_h1_bcov2_tel <- rename_chr(ref_h1_bcov2_tel)
+ref_h2_bcov2_tel <- rename_chr(ref_h2_bcov2_tel)
+
+term_pri_tel <- rename_chr(term_pri_tel)
+term_h1_tel <- rename_chr(term_h1_tel)
+term_h2_tel <- rename_chr(term_h2_tel)
+term_pri_bcov2_tel <- rename_chr(term_pri_bcov2_tel)
+term_h1_bcov2_tel <- rename_chr(term_h1_bcov2_tel)
+term_h2_bcov2_tel <- rename_chr(term_h2_bcov2_tel)
+
+cr2_pri_tel <- rename_chr(cr2_pri_tel)
+cr2_h1_tel <- rename_chr(cr2_h1_tel)
+cr2_h2_tel <- rename_chr(cr2_h2_tel)
+cr2_pri_bcov2_tel <- rename_chr(cr2_pri_bcov2_tel)
+cr2_h1_bcov2_tel <- rename_chr(cr2_h1_bcov2_tel)
+cr2_h2_bcov2_tel <- rename_chr(cr2_h2_bcov2_tel)
+```
+
+## Create tables for plotting
+```{r}
+ref_pri.table <- plot_table(ref_pri_chr_length, ref_pri_tel, name = "ref_primary", genome_size = ref_pri_genome_size)
+ref_h1.table <- plot_table(ref_h1_chr_length, ref_h1_tel, name = "ref_hap1", genome_size = ref_h1_genome_size)
+ref_h2.table <- plot_table(ref_h2_chr_length, ref_h2_tel, name = "ref_hap2", genome_size = ref_h2_genome_size)
+ref_pri_bcov2.table <- plot_table(ref_pri_bcov2_chr_length, ref_pri_bcov2_tel, name = "ref_primary_bcov2", genome_size = ref_pri_bcov2_genome_size)
+ref_h1_bcov2.table <- plot_table(ref_h1_bcov2_chr_length, ref_h1_bcov2_tel, name = "ref_hap1_bcov2", genome_size = ref_h1_bcov2_genome_size)
+ref_h2_bcov2.table <- plot_table(ref_h2_bcov2_chr_length, ref_h2_bcov2_tel, name = "ref_hap2_bcov2", genome_size = ref_h2_bcov2_genome_size)
+
+term_pri.table <- plot_table(term_pri_chr_length, term_pri_tel, name = "term_primary", genome_size = term_pri_genome_size)
+term_h1.table <- plot_table(term_h1_chr_length, term_h1_tel, name = "term_hap1", genome_size = term_h1_genome_size)
+term_h2.table <- plot_table(term_h2_chr_length, term_h2_tel, name = "term_hap2", genome_size = term_h2_genome_size)
+term_pri_bcov2.table <- plot_table(term_pri_bcov2_chr_length, term_pri_bcov2_tel, name = "term_primary_bcov2", genome_size = term_pri_bcov2_genome_size)
+term_h1_bcov2.table <- plot_table(term_h1_bcov2_chr_length, term_h1_bcov2_tel, name = "term_hap1_bcov2", genome_size = term_h1_bcov2_genome_size)
+term_h2_bcov2.table <- plot_table(term_h2_bcov2_chr_length, term_h2_bcov2_tel, name = "term_hap2_bcov2", genome_size = term_h2_bcov2_genome_size)
+
+cr2_pri.table <- plot_table(cr2_pri_chr_length, cr2_pri_tel, name = "cr2_primary", genome_size = cr2_pri_genome_size)
+cr2_h1.table <- plot_table(cr2_h1_chr_length, cr2_h1_tel, name = "cr2_hap1", genome_size = cr2_h1_genome_size)
+cr2_h2.table <- plot_table(cr2_h2_chr_length, cr2_h2_tel, name = "cr2_hap2", genome_size = cr2_h2_genome_size)
+cr2_pri_bcov2.table <- plot_table(cr2_pri_bcov2_chr_length, cr2_pri_bcov2_tel, name = "cr2_primary_bcov2", genome_size = cr2_pri_bcov2_genome_size)
+cr2_h1_bcov2.table <- plot_table(cr2_h1_bcov2_chr_length, cr2_h1_bcov2_tel, name = "cr2_hap1_bcov2", genome_size = cr2_h1_bcov2_genome_size)
+cr2_h2_bcov2.table <- plot_table(cr2_h2_bcov2_chr_length, cr2_h2_bcov2_tel, name = "cr2_hap2_bcov2", genome_size = cr2_h2_bcov2_genome_size)
+```
+
+## Plot the telomere presence
+```{r}
+telomere_plot(ref_pri.table, title = "Reference Tree Primary",
+              barcolor = "seagreen", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/ref_primary_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/ref_primary_telomere_id.png", height = 4, width = 3.25)
+telomere_plot(ref_h1.table, title = "Reference Tree Haplotype 1",
+              barcolor = "seagreen", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/ref_hap1_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/ref_hap1_telomere_id.png", height = 4, width = 3.25)
+telomere_plot(ref_h2.table, title = "Reference Tree Haplotype 2",
+              barcolor = "seagreen", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/ref_hap2_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/ref_hap2_telomere_id.png", height = 4, width = 3.25)
+telomere_plot(ref_pri_bcov2.table, title = "Reference Chandler Primary Bcov2",
+              barcolor = "#D95F02", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/ref_primary_bcov2_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/ref_primary_bcov2_telomere_id.png", height = 4, width = 3.25)
+telomere_plot(ref_h1_bcov2.table, title = "Reference Chandler Haplotype 1 Bcov2",
+              barcolor = "#D95F02", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/ref_hap1_bcov2_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/ref_hap1_bcov2_telomere_id.png", height = 4, width = 3.25)
+telomere_plot(ref_h2_bcov2.table, title = "Reference Chandler Haplotype 2 Bcov2",
+              barcolor = "#D95F02", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/ref_hap2_bcov2_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/ref_hap2_bcov2_telomere_id.png", height = 4, width = 3.25)
+
+telomere_plot(term_pri.table, title = "Terminal Chandler Primary",
+              barcolor = "#7570B3", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/term_primary_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/term_primary_telomere_id.png", height = 4, width = 3.25)
+telomere_plot(term_h1.table, title = "Terminal Chandler Haplotype 1",
+              barcolor = "#7570B3", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/term_hap1_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/term_hap1_telomere_id.png", height = 4, width = 3.25)
+telomere_plot(term_h2.table, title = "Terminal Chandler Haplotype 2",
+              barcolor = "#7570B3", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/term_hap2_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/term_hap2_telomere_id.png", height = 4, width = 3.25)
+telomere_plot(term_pri_bcov2.table, title = "Terminal Chandler Primary Bcov2",
+              barcolor = "#7570B3", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/term_primary_bcov2_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/term_primary_bcov2_telomere_id.png", height = 4, width = 3.25)
+telomere_plot(term_h1_bcov2.table, title = "Terminal Chandler Haplotype 1 Bcov2",
+              barcolor = "#7570B3", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/term_hap1_bcov2_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/term_hap1_bcov2_telomere_id.png", height = 4, width = 3.25)
+telomere_plot(term_h2_bcov2.table, title = "Terminal Chandler Haplotype 2 Bcov2",
+              barcolor = "#7570B3", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/term_hap2_bcov2_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/term_hap2_bcov2_telomere_id.png", height = 4, width = 3.25)
+
+telomere_plot(cr2_pri.table, title = "CR2 Primary",
+              barcolor = "#1B9E77", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/cr2_primary_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/cr2_primary_telomere_id.png", height = 4, width = 3.25)
+telomere_plot(cr2_h1.table, title = "CR2 Haplotype 1",
+              barcolor = "#1B9E77", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/cr2_hap1_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/cr2_hap1_telomere_id.png", height = 4, width = 3.25)
+telomere_plot(cr2_h2.table, title = "CR2 Haplotype 2",
+              barcolor = "#1B9E77", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/cr2_hap2_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/cr2_hap2_telomere_id.png", height = 4, width = 3.25)
+telomere_plot(cr2_pri_bcov2.table, title = "CR2 Primary Bcov2",
+              barcolor = "#1B9E77", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/cr2_primary_bcov2_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/cr2_primary_bcov2_telomere_id.png", height = 4, width = 3.25)
+telomere_plot(cr2_h1_bcov2.table, title = "CR2 Haplotype 1 Bcov2",
+              barcolor = "#1B9E77", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/cr2_hap1_bcov2_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/cr2_hap1_bcov2_telomere_id.png", height = 4, width = 3.25)
+telomere_plot(cr2_h2_bcov2.table, title = "CR2 Haplotype 2 Bcov2",
+              barcolor = "#1B9E77", dotcolor = "black")
+ggsave("./Figures/Telomere_Identification/cr2_hap2_bcov2_telomere_id.pdf", height = 4, width = 3.25)
+ggsave("./Figures/Telomere_Identification/cr2_hap2_bcov2_telomere_id.png", height = 4, width = 3.25)
+```
+
+## Plot telomere lengths
+```{r}
+combo.table <- rbind(ref_pri.table, term_pri.table, cr2_pri.table)
+
+## I think the problem is that I need to sum the totals, then normalize the data, not normalize then sum like here.
+plotting.table <- combo.table %>%
+  group_by(Chromosome, Source) %>%
+  summarize(total_bp = sum(total_telo_bp)) %>%
+  mutate(total_normalized_size = )
+  ungroup()
+
+plotting.table %>%
+  ggplot(aes(x = Chromosome, fill = Source, y = total_normalized_size)) +
+  geom_bar(position = "dodge", stat = "identity", color = "black") + 
+  scale_x_continuous(breaks = seq(1, 16, by = 1)) +
+  scale_fill_manual(values = c("cr2_primary" = "orangered",
+                               "ref_primary" = "seagreen", 
+                               "term_primary" = "seagreen"),
+                    labels = c("Somatic Embryo", "Reference Tree", "Tree 2")) +
+  labs(title = "Telomere Lengths in Assemblies", x= "Chromosome", y = "Normalized telomere length",
+       fill = "") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "bottom")
+#ggsave("./Figures/Telomere_Identification/telomere_length_from_assembly.pdf", height = 4, width = 6)
+#ggsave("./Figures/Telomere_Identification/telomere_length_from_assembly.png", height = 4, width = 6)
+
+combo.table %>%
+  ggplot(aes(x = Chromosome, fill = Source, y = normalized_total_telo_size)) +
+  geom_bar(position = "dodge", stat = "identity") + 
+  scale_x_continuous(breaks = seq(1, 16, by = 1)) +
+  scale_fill_manual(values = c("cr2_primary" = "orangered",
+                               "ref_primary" = "seagreen", 
+                               "term_primary" = "seagreen"),
+                    labels = c("Somatic Embryo", "Reference Tree", "Tree 2")) +
+  labs(title = "Telomere Lengths in Assemblies", x= "Chromosome", y = "Normalized telomere length",
+       fill = "") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "bottom")
+ggsave("~/Desktop/stacked_telomere_length_from_assembly.pdf", height = 4, width = 6)
+ggsave("~/Desktop/stacked_telomere_length_from_assembly.png", height = 4, width = 6)
+
+combo_bcov2.table <- rbind(ref_pri_bcov2.table, term_pri_bcov2.table, cr2_pri_bcov2.table)
+
+plotting_bcov2.table <- combo_bcov2.table %>%
+  group_by(Chromosome, Source) %>%
+  summarize(total_normalized_size = sum(normalized_total_telo_size, na.rm = TRUE))
+
+plotting_bcov2.table %>%
+  ggplot(aes(x = Chromosome, fill = Source, y = total_normalized_size)) +
+  geom_bar(position = "dodge", stat = "identity", color = "black") + 
+  scale_x_continuous(breaks = seq(1, 16, by = 1)) +
+  scale_fill_manual(values = c("cr2_primary_bcov2" = "orangered",
+                               "ref_primary_bcov2" = "seagreen", 
+                               "term_primary_bcov2" = "seagreen"),
+                    labels = c("Somatic Embryo", "Reference Tree", "Tree 2")) +
+  labs(title = "Telomere Lengths Walnut Bcov2", x= "Chromosome", y = "Normalized telomere length",
+       fill = "") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "bottom")
+#ggsave("./Figures/Telomere_Identification/telomere_length_from_assembly_bcov2.pdf", height = 4, width = 6)
+#ggsave("./Figures/Telomere_Identification/telomere_length_from_assembly_bcov2.png", height = 4, width = 6)
+```
+
+## Test a combined telomere plot
+```{r}
+na_table <- combo.table %>% mutate_all(~ ifelse(. == 0, NA, .))
+  na_table$end_telo_start <- ifelse(na_table$end_telo_start == na_table$end_telo_end, NA,
+                                    na_table$end_telo_start)
+  na_table$end_telo_end <- ifelse(na_table$end_telo_start == na_table$end_telo_end, NA,
+                                  na_table$end_telo_end)
+
+na_table %>%
+    ggplot(aes(x = Chromosome, y = Length, fill = Source)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    scale_x_continuous(breaks = na_table$Chromosome) +
+    scale_fill_brewer(palette = "Dark2") + 
+    geom_point(data = na_table, aes(y = begin_telo_end, color = "Telomere Presence"), 
+               shape = 16, size = 3, ) +
+    geom_point(data = na_table, aes(y = end_telo_end), shape = 16, color = "black", size = 3) +
+    labs(y = "Chromosome Length", title = "title") +
+    scale_color_manual(values = c("Telomere Presence" = "black")) +
+    guides(color = guide_legend(title = NULL)) +
+    theme_classic(base_size = 6) +
+    theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+
+## Checking reads corrected for only reads contributing to the nuclear genome
+```{r}
+cor_ref_long <- fread("~/Projects/Walnut/Longterm_Tissue_Culture/Input/Jellyfish/21mer/Long_Reads/ref_chandler_only_chr_reads_telomere_AAACCCT_count.txt")
+cor_term_long <- fread("~/Projects/Walnut/Longterm_Tissue_Culture/Input/Jellyfish/21mer/Long_Reads/term_chandler_only_chr_reads_telomere_AAACCCT_count.txt")
+cor_cr2_long <- fread("~/Projects/Walnut/Longterm_Tissue_Culture/Input/Jellyfish/21mer/Long_Reads/cr2_only_chr_reads_telomere_AAACCCT_count.txt")
+```
+
+## Correcting for basepairs
+```{r}
+cor_ref_long <- bp_correction(cor_ref_long, "Reference Chandler", 2946721497)
+cor_term_long <- bp_correction(cor_term_long, "Terminal Chandler",  3588961090)
+cor_cr2_long <- bp_correction(cor_cr2_long, "CR2", 2889716887)
+
+read_telomeres_cor_long_bp <- rbind(cor_ref_long, cor_term_long, cor_cr2_long)
+```
+
+## Plot the corrected telomere lengths
+```{r}
+# On its side
+ggplot(data = read_telomeres_cor_long_bp, aes(x = ID, fill = ID, y = Corrected_Count)) +
+  geom_bar(stat = "identity") +
+  scale_fill_brewer(palette = "Dark2") +
+  geom_text(aes(label = Scientific_Notation), vjust = -0.7, angle = 270) +
+  labs(y = "Number of 21-mer telomere sequences in nuclear long reads\n(corrected with total bp/21)", x = "") +
+  coord_flip() +
+  theme_classic() + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
+#ggsave("~/Projects/Walnut/Longterm_Tissue_Culture/Figures/Bar_Charts/Telomeres/long_read_telomere_counts_nuclear_reads_long.png", height = 3, width = 6)
+#ggsave("~/Projects/Walnut/Longterm_Tissue_Culture/Figures/Bar_Charts/Telomeres/long_read_telomere_counts_nuclear_reads_long.pdf", height = 3, width = 6)
+
+# Right side up
+ggplot(data = read_telomeres_cor_long_bp, aes(x = ID, fill = ID, y = Corrected_Count)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Scientific_Notation), vjust = -0.7) +
+  scale_fill_manual(values = c("CR2" = "orangered",
+                               "Reference Chandler" = "seagreen", 
+                               "Terminal Chandler" = "seagreen")) +
+  labs(y = "Number of 21-mer telomere sequences in nuclear long reads\n(corrected with total bp/21)",
+       x = "", fill = "") +
+  theme_classic() + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "none")
+#ggsave("~/Desktop/long_read_telomere_counts_nuclear_reads_tall.png", height = 6, width = 5)
+#ggsave("~/Desktop/long_read_telomere_counts_nuclear_reads_tall.pdf", height = 6, width = 5)
+```
+

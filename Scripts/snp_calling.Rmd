@@ -1,0 +1,1831 @@
+---
+title: "snp_calling"
+author: "Matthew Davis"
+date: "2024-01-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+
+```{r}
+library(tidyverse)
+library(data.table)
+library(vcfR)
+library(viridis)
+library(ggrepel)
+```
+
+## Functions
+
+```{r}
+import_vcf_hifi <- function(file){
+  
+  vcf <- read.vcfR(file)
+  fix <- data.table(vcf@fix)
+  gt <- data.table(vcf@gt)
+  all <- cbind(fix, gt)
+  
+  vcf.table <- all[grep("^NC_0499", all$CHROM), ]
+  
+  vcf.table$CHROM <- gsub("NC_0499.*?([0-9]+).*", "\\1", vcf.table$CHROM) # Rename CHROMs to just number
+  vcf.table$CHROM <- str_remove(vcf.table$CHROM, "^0+") # Remove leading zeros
+  vcf.table$CHROM <- as.numeric(vcf.table$CHROM) # Make CHROM numeric. This should allow for proper order plotting
+  
+  # Separate into columns
+    vcf.table <- vcf.table %>%
+    separate(col=ref_chandler_longread, 
+               into = c("ref_GT","ref_DP","ref_AD","ref_GQ","ref_PL","ref_RNC"), sep=":") %>%
+    separate(col=term_chandler_longread, 
+               into = c("term_GT","term_DP","term_AD","term_GQ","term_PL","term_RNC"), sep=":") %>%
+    separate(col=cr2_longread, 
+               into = c("cr2_GT","cr2_DP","cr2_AD","cr2_GQ","cr2_PL","cr2_RNC"), sep=":")
+  
+  return(vcf.table)
+}
+
+import_vcf_shoots <- function(file){
+  
+  vcf <- read.vcfR(file)
+  fix <- data.table(vcf@fix)
+  gt <- data.table(vcf@gt)
+  all <- cbind(fix, gt)
+  
+  vcf.table <- all[grep("^NC_0499", all$CHROM), ]
+  
+  vcf.table$CHROM <- gsub("NC_0499.*?([0-9]+).*", "\\1", vcf.table$CHROM) # Rename CHROMs to just number
+  vcf.table$CHROM <- str_remove(vcf.table$CHROM, "^0+") # Remove leading zeros
+  vcf.table$CHROM <- as.numeric(vcf.table$CHROM) # Make CHROM numeric. This should allow for proper order plotting
+  
+  # Separate into columns
+    vcf.table <- vcf.table %>%
+      separate(col=cr85, 
+               into = c("cr85_GT","cr85_DP","cr85_AD","cr85_GQ","cr85_PL","cr85_RNC"), sep=":") %>%
+      separate(col=cr10, 
+               into = c("cr10_GT","cr10_DP","cr10_AD","cr10_GQ","cr10_PL","cr10_RNC"), sep=":") %>%
+      separate(col=cr13, 
+               into = c("cr13_GT","cr13_DP","cr13_AD","cr13_GQ","cr13_PL","cr13_RNC"), sep=":") %>%
+      separate(col=cr22, 
+               into = c("cr22_GT","cr22_DP","cr22_AD","cr22_GQ","cr22_PL","cr22_RNC"), sep=":")
+  
+  return(vcf.table)
+}
+
+qual_filter_test <- function(split.vcf, q) {
+  qual.list <- split.vcf %>%
+    filter(QUAL >= q) %>%
+    mutate(ID = row_number(),
+           start = as.numeric(POS),
+           stop = as.numeric(POS))
+  return(qual.list)
+}
+
+filter_vcf_hifi <- function(vcf.table, qual = NULL, gq = NULL, dp = NULL){
+  
+  # Begin filtering the vcf
+  valid_types <- c("0/0", "0/1", "1/1")
+  
+  filter.vcf <- vcf.table %>%
+    filter(ref_GT %in% valid_types) %>%
+    filter(term_GT %in% valid_types) %>%
+    filter(cr2_GT %in% valid_types) %>%
+    filter(QUAL >= qual) %>% 
+    filter(ref_GQ >= gq) %>% 
+    filter(term_GQ >= gq) %>%
+    filter(cr2_GQ >= gq) %>%
+    filter(ref_DP >= dp) %>% 
+    filter(term_DP >= dp) %>%
+    filter(cr2_DP >= dp)
+  
+  return(filter.vcf)
+}
+
+filter_vcf_shoots <- function(vcf.table, qual = NULL, gq = NULL, dp = NULL){
+  
+  # Begin filtering the vcf
+  valid_types <- c("0/0", "0/1", "1/1")
+  
+  filter.vcf <- vcf.table %>%
+    filter(cr85_GT %in% valid_types) %>%
+    filter(cr10_GT %in% valid_types) %>%
+    filter(cr13_GT %in% valid_types) %>%
+    filter(cr22_GT %in% valid_types) %>%
+    filter(QUAL >= qual) %>% 
+    filter(cr85_GQ >= gq) %>% 
+    filter(cr10_GQ >= gq) %>%
+    filter(cr13_GQ >= gq) %>%
+    filter(cr22_GQ >= gq) %>%
+    filter(cr85_DP >= dp) %>% 
+    filter(cr10_DP >= dp) %>%
+    filter(cr13_DP >= dp) %>%
+    filter(cr22_DP >= dp)
+  
+  return(filter.vcf)
+}
+```
+
+```{r}
+# By using this combined VCf, am I missing out on real variants? A depth of 30 may exist at the site for CR2 and ref, but not term. Looking further, this doesn't seem to be a problem.
+vcf_hifi <- import_vcf_hifi("./Data/VCFs/chandler_longread.vcf.gz")
+vcf_shoots <- import_vcf_shoots("./Data/VCFs/chandler_shoots.vcf.gz")
+genome_length <- 540705719 # This is the length of ref_primary chromosomes with the omni-c data
+```
+
+## Filtering for denovo snps in hifi and looking at qual filtering
+```{r}
+# Filter for denovo
+ref_snps <- vcf_hifi %>%
+  filter(ref_GT %in% c("0/1", "1/1")) %>%
+  filter(term_GT == "0/0") %>%
+  filter(cr2_GT == "0/0") %>%
+  filter(nchar(REF) == 1) %>%
+  filter(nchar(ALT) == 1)
+
+term_snps <- vcf_hifi %>%
+  filter(term_GT %in% c("0/1", "1/1")) %>%
+  filter(ref_GT == "0/0") %>%
+  filter(cr2_GT == "0/0") %>%
+  filter(nchar(REF) == 1) %>%
+  filter(nchar(ALT) == 1)
+
+cr2_snps <- vcf_hifi %>%
+  filter(cr2_GT %in% c("0/1", "1/1")) %>%
+  filter(ref_GT == "0/0") %>%
+  filter(term_GT == "0/0") %>%
+  filter(nchar(REF) == 1) %>%
+  filter(nchar(ALT) == 1)
+
+# Run filter from 20 - 60
+ref_quals <- rbindlist(lapply(20:60, function(q){
+  var_number<-nrow(qual_filter_test(ref_snps, q = q))
+  data.table(src = "ref", var_number = var_number, q = q)
+}))
+
+term_quals <- rbindlist(lapply(20:60, function(q){
+  var_number<-nrow(qual_filter_test(term_snps, q = q))
+  data.table(src = "term", var_number = var_number, q = q)
+}))
+
+cr2_quals <- rbindlist(lapply(20:60, function(q){
+  var_number<-nrow(qual_filter_test(cr2_snps, q = q))
+  data.table(src = "cr2", var_number = var_number, q = q)
+}))
+
+# Combine the qual tables
+all_hifi_quals <- rbindlist(list(ref_quals, term_quals, cr2_quals))
+
+# Plot
+# Define the order of individuals
+order_hifi <- c("ref", "term", "cr2")
+# Convert the 'src' column to a factor with desired levels/order
+all_hifi_quals$src <- factor(all_hifi_quals$src, levels = order_hifi)
+
+all_hifi_quals %>%
+  ggplot(aes(x = src, y = var_number, col = q))+
+  geom_point(size = 3)+
+  scale_color_viridis(name = "Quality\nThreshold", option = "cividis" ) +
+  scale_y_continuous(name = "Mutations") +
+  scale_x_discrete(name = "",labels=c("Reference Chandler","Terminal Chandler", "CR2"))+
+  theme_classic() +
+  theme(legend.title = element_text(hjust = 0.5))
+
+all_hifi_quals %>%
+  ggplot(aes(x = src, y = var_number/genome_length, col = q))+
+  geom_point(size = 3)+
+  scale_color_viridis(name = "Quality\nThreshold", option = "cividis" ) +
+  scale_y_log10(name = "Mutations per base pair (log10)")+
+  scale_x_discrete(name = "",labels=c("Reference Chandler","Terminal Chandler", "CR2"))+
+  theme_classic() +
+  theme(legend.title = element_text(hjust = 0.5))
+```
+
+## Filtering for denovo snps in hifi and looking at qual filtering
+
+```{r}
+# Filter for denovo snps
+cr85_muts <- vcf_shoots %>%
+  filter(cr85_GT %in% c("0/1", "1/1")) %>%
+  filter(cr10_GT == "0/0") %>%
+  filter(cr13_GT == "0/0") %>%
+  filter(cr22_GT == "0/0")
+
+cr10_muts <- vcf_shoots %>%
+  filter(cr10_GT %in% c("0/1", "1/1")) %>%
+  filter(cr85_GT == "0/0") %>%
+  filter(cr13_GT == "0/0") %>%
+  filter(cr22_GT == "0/0")
+
+cr13_muts <- vcf_shoots %>%
+  filter(cr13_GT %in% c("0/1", "1/1")) %>%
+  filter(cr85_GT == "0/0") %>%
+  filter(cr10_GT == "0/0") %>%
+  filter(cr22_GT == "0/0")
+
+cr22_muts <- vcf_shoots %>%
+  filter(cr22_GT %in% c("0/1", "1/1")) %>%
+  filter(cr85_GT == "0/0") %>%
+  filter(cr10_GT == "0/0") %>%
+  filter(cr13_GT == "0/0")
+
+# Run qual filter from 20-60
+cr85_quals <- rbindlist(lapply(20:60, function(q){
+  var_number<-nrow(qual_filter_test(cr85_muts, q = q))
+  data.table(src = "cr85", var_number = var_number, q = q)
+}))
+
+cr10_quals <- rbindlist(lapply(20:60, function(q){
+  var_number<-nrow(qual_filter_test(cr10_muts, q = q))
+  data.table(src = "cr10", var_number = var_number, q = q)
+}))
+
+cr13_quals <- rbindlist(lapply(20:60, function(q){
+  var_number<-nrow(qual_filter_test(cr13_muts, q = q))
+  data.table(src = "cr13", var_number = var_number, q = q)
+}))
+
+cr22_quals <- rbindlist(lapply(20:60, function(q){
+  var_number<-nrow(qual_filter_test(cr22_muts, q = q))
+  data.table(src = "cr22", var_number = var_number, q = q)
+}))
+
+# Combine the qual tables
+all_shoots_quals <- rbindlist(list(cr85_quals, cr10_quals, cr13_quals, cr22_quals))
+
+# Plot
+# Convert the 'src' column to a factor with desired levels/order
+all_shoots_quals$src <- factor(all_shoots_quals$src, levels = c("cr85", "cr10", "cr13", "cr22"))
+
+all_shoots_quals %>%
+  ggplot(aes(x = src, y = var_number, col = q))+
+  geom_point(size = 3)+
+  scale_color_viridis(name = "Quality\nThreshold", option = "cividis" ) +
+  scale_y_continuous(name = "Mutations")+
+  scale_x_discrete(name = "",labels = c("Chandler '85","Chandler '10", "Chandler '13", "Chandler '22"))+
+  theme_classic() +
+  theme(legend.title = element_text(hjust = 0.5))
+
+all_shoots_quals %>%
+  ggplot(aes(x = src, y = var_number/genome_length, col = q))+
+  geom_point(size = 3)+
+  scale_color_viridis(name = "Quality\nThreshold", option = "cividis" ) +
+  scale_y_log10(name = "Mutations per base pair(log10)")+
+  scale_x_discrete(name = "",labels = c("Chandler '85","Chandler '10", "Chandler '13", "Chandler '22"))+
+  theme_classic() +
+  theme(legend.title = element_text(hjust = 0.5))
+```
+
+## Combining hifi and shoot qual filter and plotting
+
+```{r}
+all_samples_quals <- rbindlist(list(ref_quals, term_quals, cr85_quals, cr2_quals,
+                                    cr10_quals, cr13_quals, cr22_quals))
+all_samples_quals$src <- factor(all_samples_quals$src, levels = c("ref", "term", "cr85", 
+                                                                  "cr2", "cr10", "cr13", "cr22"))
+
+all_samples_quals %>%
+  ggplot(aes(x = src, y = var_number, col = q))+
+  geom_point(size = 3)+
+  scale_color_viridis(name = "Quality\nThreshold", option = "cividis" ) +
+  scale_y_continuous(name = "Mutations")+
+  scale_x_discrete(name = "",labels = c("Reference Chandler", "Terminal Chandler", 
+                                        "Chandler '85", "CR2", "Chandler '10",
+                                        "Chandler '13", "Chandler '22")) +
+  theme_classic() +
+  theme(legend.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), legend.position = "bottom")
+#ggsave("~/Desktop/quality_filtering_comparison.pdf", height = 4, width = 6)
+#ggsave("~/Desktop/quality_filtering_comparison.png", height = 4, width = 6)
+```
+
+## Looking at unique mutations in hifi with several filtering parameters, filtering for only snps.
+
+```{r}
+filtered_hifi.vcf <- filter_vcf_hifi(vcf_hifi, qual = 40, gq = 20, dp = 30) # torn on filtering for gq. I don't really care how accurate the base pair call itself is, so its set to 20. Except when looking at mutations in gene bodies, then I care a little more.
+# Filtering for unique snps
+ref_snps_filt <- filtered_hifi.vcf %>%
+  filter(ref_GT %in% c("0/1", "1/1")) %>%
+  filter(term_GT == "0/0") %>%
+  filter(cr2_GT == "0/0") %>%
+  filter(nchar(REF) == 1) %>%
+  filter(nchar(ALT) == 1)
+
+term_snps_filt <- filtered_hifi.vcf %>%
+  filter(term_GT %in% c("0/1", "1/1")) %>%
+  filter(ref_GT == "0/0") %>%
+  filter(cr2_GT == "0/0") %>%
+  filter(nchar(REF) == 1) %>%
+  filter(nchar(ALT) == 1)
+
+cr2_snps_filt <- filtered_hifi.vcf %>%
+  filter(cr2_GT %in% c("0/1", "1/1")) %>%
+  filter(ref_GT == "0/0") %>%
+  filter(term_GT == "0/0") %>%
+  filter(nchar(REF) == 1) %>%
+  filter(nchar(ALT) == 1)
+```
+
+## Looking at unique mutations in hifi with several filtering parameters, filtering for only snps.
+
+```{r}
+filtered_shoots.vcf <- filter_vcf_shoots(vcf_shoots, qual = 40, gq = 20, dp = 30)
+
+# Filter for denovo snps and indels
+cr85_muts_filt <- filtered_shoots.vcf %>%
+  filter(cr85_GT %in% c("0/1", "1/1")) %>%
+  filter(cr10_GT == "0/0") %>%
+  filter(cr13_GT == "0/0") %>%
+  filter(cr22_GT == "0/0")
+
+cr10_muts_filt <- filtered_shoots.vcf %>%
+  filter(cr10_GT %in% c("0/1", "1/1")) %>%
+  filter(cr85_GT == "0/0") %>%
+  filter(cr13_GT == "0/0") %>%
+  filter(cr22_GT == "0/0")
+
+
+cr13_muts_filt <- filtered_shoots.vcf %>%
+  filter(cr13_GT %in% c("0/1", "1/1")) %>%
+  filter(cr85_GT == "0/0") %>%
+  filter(cr10_GT == "0/0") %>%
+  filter(cr22_GT == "0/0")
+
+
+cr22_muts_filt <- filtered_shoots.vcf %>%
+  filter(cr22_GT %in% c("0/1", "1/1")) %>%
+  filter(cr85_GT == "0/0") %>%
+  filter(cr10_GT == "0/0") %>%
+  filter(cr13_GT == "0/0")
+```
+
+## Looking into mutations per year
+
+```{r}
+## Mutations per year
+ref_years <- NA
+term_years <- NA
+cr85_years <- 2023-1985
+cr2_years <- 2022-1995
+cr10_years <- 2023-2010
+cr13_years <- 2023-2013
+cr22_years <- 2023-2022
+
+# Creating a table to plot mutations per year
+mutations <- c(
+  nrow(ref_snps_filt),
+  nrow(term_snps_filt),
+  nrow(cr85_muts_filt),
+  nrow(cr2_snps_filt),
+  nrow(cr10_muts_filt),
+  nrow(cr13_muts_filt),
+  nrow(cr22_muts_filt)
+  )
+
+mutations_per_bp <- c(
+  nrow(ref_snps_filt) / genome_length,
+  nrow(term_snps_filt) / genome_length,
+  nrow(cr85_muts_filt) / genome_length,
+  nrow(cr2_snps_filt) / genome_length,
+  nrow(cr10_muts_filt) / genome_length,
+  nrow(cr13_muts_filt) / genome_length,
+  nrow(cr22_muts_filt) / genome_length
+)
+
+mutations_per_year <- c(
+  nrow(ref_snps_filt) / ref_years,
+  nrow(term_snps_filt) / term_years,
+  nrow(cr85_muts_filt) / cr85_years,
+  nrow(cr2_snps_filt) / cr2_years,
+  nrow(cr10_muts_filt) / cr10_years,
+  nrow(cr13_muts_filt) / cr13_years,
+  nrow(cr22_muts_filt) / cr22_years
+)
+
+mutations_per_bp_per_year <- c(
+  nrow(ref_snps_filt) / genome_length / ref_years,
+  nrow(term_snps_filt) / genome_length / term_years,
+  nrow(cr85_muts_filt) / genome_length / cr85_years,
+  nrow(cr2_snps_filt) / genome_length / cr2_years,
+  nrow(cr10_muts_filt) / genome_length / cr10_years,
+  nrow(cr13_muts_filt) / genome_length / cr13_years,
+  nrow(cr22_muts_filt) / genome_length / cr22_years
+)
+
+cr_numbers <- c("Reference Chandler", "Terminal Chandler", "CR85", "CR2", "CR10", "CR13", "CR22")
+culture_type <- c("Field tree", "Field tree", "Shoot culture", "Embryogenic culture", 
+                  "Shoot culture", "Shoot culture", "Shoot culture")
+mut.table <- data.frame(
+  Individual = cr_numbers,
+  Culture_Type = culture_type,
+  Mutations = mutations,
+  Mutations_Per_BP = mutations_per_bp,
+  Mutations_Per_Year = mutations_per_year,
+  Mutations_Per_BP_Per_Year = mutations_per_bp_per_year,
+  Years_in_Culture = c(ref_years, term_years, cr85_years, cr2_years, cr10_years, cr13_years, cr22_years)
+)
+mut.table$Individual <- factor(mut.table$Individual, 
+                                       levels = c("Reference Chandler", "Terminal Chandler", 
+                                       "CR85", "CR2", "CR10", "CR13", "CR22"))
+mut.table$Culture_Type <- factor(mut.table$Culture_Type, 
+                                          levels = c("Field tree", "Shoot culture", "Embryogenic culture"))
+
+# Plot number of mutations per year
+mut.table %>%
+  ggplot(aes(x = Individual, y = Mutations, fill = Culture_Type)) +
+  geom_bar(stat = "identity") +
+  labs(x = "", y = "Mutations") +
+  scale_fill_manual(values = c("Field tree" = "seagreen", 
+                               "Shoot culture" = "dodgerblue", 
+                               "Embryogenic culture" = "orangered")) +
+  scale_x_discrete(name = "",labels = c("Reference Chandler", "Terminal Chandler", 
+                                        "Chandler '85", "CR2", "Chandler '10",
+                                        "Chandler '13", "Chandler '22")) +
+  guides(fill = guide_legend(title = NULL)) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"), 
+        legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/total_mutations_comparison_bargraph.pdf", height = 5, width = 7)
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/total_mutations_comparison_bargraph.png", height = 5, width = 7)
+
+
+mut.table %>%
+  ggplot(aes(x = Individual, y = log(Mutations), fill = Culture_Type)) +
+  geom_bar(stat = "identity") +
+  labs(x = "", y = "Mutations (log10)") +
+  scale_fill_manual(values = c("Field tree" = "seagreen", 
+                               "Shoot culture" = "dodgerblue", 
+                               "Embryogenic culture" = "orangered")) +
+  scale_x_discrete(name = "",labels = c("Reference Chandler", "Terminal Chandler", 
+                                        "Chandler '85", "CR2", "Chandler '10",
+                                        "Chandler '13", "Chandler '22")) +
+  guides(fill = guide_legend(title = NULL)) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"), 
+        legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/total_logmutations_comparison_bargraph.pdf", height = 4, width = 6)
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/total_logmutations_comparison_bargraph.png", height = 4, width = 6)
+
+mut.table %>%
+  filter(Culture_Type == "Shoot culture") %>%
+  ggplot(aes(x = reorder(Individual, -Mutations), y = Mutations, fill = Culture_Type)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Mutations), vjust = -0.5, color = "black", size = 3) +
+  labs(x = "", y = "Mutations") +
+  scale_fill_manual(values = "dodgerblue") +
+  guides(fill = guide_legend(title = NULL)) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"), 
+        legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/mutations_in_shoot_culture.pdf", height = 4.5, width = 6)
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/mutations_in_shoot_culture.png", height = 4.5, width = 6)
+
+mut.table %>%
+  filter(Individual != "Reference Chandler", Individual != "Terminal Chandler", Individual != "CR22") %>%
+  ggplot(aes(x = Individual, y = Mutations_Per_BP_Per_Year, fill = Culture_Type)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.3e", Mutations_Per_BP_Per_Year)), vjust = -0.5, color = "black", size = 3) +
+  labs(x = "", y = "Mutations per base pair per year") +
+  scale_fill_manual(values = c("Shoot culture" = "dodgerblue", 
+                               "Embryogenic culture" = "orangered")) +
+  guides(fill = guide_legend(title = NULL)) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"), 
+        legend.position = "bottom")
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/mutations_per_year_per_bp_in_tissue_culture.pdf", height = 4.5, width = 4)
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/mutations_per_year_per_bp_in_tissue_culture.png", height = 4.5, width = 4)
+
+mut.table %>%
+  filter(Individual != "Reference Chandler", Individual != "Terminal Chandler") %>%
+  ggplot(aes(x = Individual, y = Mutations_Per_Year, fill = Culture_Type)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = round(Mutations_Per_Year, 1)), vjust = -0.5, color = "black", size = 3) +
+  labs(x = "", y = "Mutations per year") +
+  scale_fill_manual(values = c("Shoot culture" = "dodgerblue", 
+                               "Embryogenic culture" = "orangered")) +
+  guides(fill = guide_legend(title = NULL)) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"), 
+        legend.position = "bottom")
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/mutations_per_year_in_tissue_culture.pdf", height = 4, width = 4)
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/mutations_per_year_in_tissue_culture.png", height = 4, width = 4)
+
+mut.table %>%
+  filter(Individual != "CR2", Individual != "Reference Chandler", Individual != "Terminal Chandler") %>%
+  mutate(Mutations_Per_Year = ifelse(Mutations_Per_Year == 33, NA, Mutations_Per_Year)) %>%
+  ggplot(aes(x = Years_in_Culture, y = Mutations)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "red3") +
+  geom_text_repel(aes(label = ifelse(is.na(Mutations_Per_Year), "", paste(round(Mutations_Per_Year, 1), "\nmutations\nper year"))), box.padding = 0, segment.color = 'grey35', nudge_y = -1, nudge_x = 5, na.rm = TRUE) +
+  labs(title = "Shoot culture mutation over time", 
+       x = "Years in tissue culture", y = "Number of Mutations") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/mutations_in_shoot_culture_over_time_and_per_year.pdf", height = 4, width = 4)
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/mutations_in_shoot_culture_over_time_and_per_year.png", height = 4, width = 4)
+```
+
+## Plotting without filtering the VCF
+
+```{r}
+# Filter for ancestral heterozygous sites
+nofilter_hets <- vcf_hifi %>%
+  filter(ref_GT %in% c("0/1")) %>%
+  filter(term_GT == "0/1") %>%
+  filter(cr2_GT == "0/1") %>%
+  separate(col = ref_AD, into = c("ref_REF", "ref_ALT"), sep = ",") %>%
+  separate(col = term_AD, into = c("term_REF", "term_ALT"), sep = ",") %>%
+  separate(col = cr2_AD, into = c("cr2_REF", "cr2_ALT"), sep = ",") %>%
+  mutate(ref_VAF = as.numeric(ref_ALT) / as.numeric(ref_DP)) %>%
+  mutate(term_VAF = as.numeric(term_ALT) / as.numeric(term_DP)) %>%
+  mutate(cr2_VAF = as.numeric(cr2_ALT) / as.numeric(cr2_DP)) %>%
+  mutate(ref_RAF = 1 - ref_VAF) %>%
+  mutate(term_RAF = 1 - term_VAF) %>%
+  mutate(cr2_RAF = 1 - cr2_VAF)
+
+linkage.map <- fread("./Data/Linkage_Maps/map_LBF2401_RefChandlerPrimary.csv")
+setnames(linkage.map, old = c("chr", "bp"), new = c("CHROM", "POS"))
+
+nofilter.map <- merge(nofilter_hets, linkage.map, by = c("CHROM", "POS"), all = FALSE)
+nofilter.map$POS <- as.numeric(nofilter.map$POS)
+nofilter.map <- nofilter.map %>%
+  mutate(VAFpoint_color = case_when(ALT == hap1 ~ "gold", ALT == hap2 ~ "dodgerblue", TRUE ~ "grey")) %>%
+  mutate(RAFpoint_color = case_when(REF == hap1 ~ "gold", REF == hap2 ~ "dodgerblue", TRUE ~ "grey")) %>%
+  mutate(variant_is_hap1 = case_when(ALT == hap1 ~ TRUE, TRUE ~ FALSE)) %>%
+  mutate(variant_is_hap2 = case_when(ALT == hap2 ~ TRUE, TRUE ~ FALSE))
+
+refnofilter.table <- nofilter.map %>%
+  select(CHROM, POS, REF, ALT, ref_VAF, ref_RAF, hap1, hap2, VAFpoint_color, RAFpoint_color, variant_is_hap1, variant_is_hap2) ## RAF = Reference allele frequency
+
+termnofilter.table <- nofilter.map %>%
+  select(CHROM, POS, REF, ALT, term_VAF, term_RAF, hap1, hap2, VAFpoint_color, RAFpoint_color, variant_is_hap1, variant_is_hap2)
+
+cr2nofilter.table <- nofilter.map %>%
+  select(CHROM, POS, REF, ALT, cr2_VAF, cr2_RAF, hap1, hap2, VAFpoint_color, RAFpoint_color, variant_is_hap1, variant_is_hap2)
+
+refnofilter.table %>%
+  ggplot(aes(x = POS, y = ref_VAF, color = VAFpoint_color)) +
+  geom_point(size = 3, alpha = 0.5) +
+  geom_point(aes(y = ref_RAF), color = refnofilter.table$RAFpoint_color, size = 3, alpha = 0.5) +
+  facet_wrap(~CHROM, scales = "free") +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "black") +
+  labs(title = "Reference Chandler Primary", x = "Position (1Mb)", y = "Allele Frequency") +
+  scale_color_identity() +
+  scale_x_continuous(labels = function(x) sprintf("%.1f", x / 1e6)) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+termnofilter.table %>%
+  ggplot(aes(x = POS, y = term_VAF, color = VAFpoint_color)) +
+  geom_point(size = 3, alpha = 0.5) +
+  geom_point(aes(y = term_RAF), color = termnofilter.table$RAFpoint_color, size = 3, alpha = 0.5) +
+  facet_wrap(~CHROM, scales = "free") +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "black") +
+  labs(title = "Terminal Chanlder Primary", x = "Position (1 Mb)", y = "Allele Frequency") +
+  scale_color_identity() +
+  scale_x_continuous(labels = function(x) sprintf("%.1f", x / 1e6)) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+
+cr2nofilter.table %>%
+  ggplot(aes(x = POS, y = cr2_VAF, color = VAFpoint_color)) +
+  geom_point(size = 1, alpha = 0.5) +
+  geom_point(aes(y = cr2_RAF), color = cr2nofilter.table$RAFpoint_color, size = 1, alpha = 0.5) +
+  facet_wrap(~CHROM, scales = "free") +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "black") +
+  labs(title = "CR2 Primary", x = "Position (1Mb)", y = "Allele Frequency") +
+  scale_color_identity() +
+  scale_x_continuous(labels = function(x) sprintf("%.1f", x / 1e6)) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/cr2_vaf_per_chr.pdf", height = 4, width = 8)
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/cr2_vaf_per_chr.png", height = 4, width = 8)
+
+cr2_vaf_149 <- cr2nofilter.table %>%
+  filter(CHROM %in% c("1", "4", "9"))
+
+cr2_vaf_149 %>%
+  ggplot(aes(x = POS, y = cr2_VAF, color = VAFpoint_color)) +
+  geom_point(size = 2, alpha = 0.5) +
+  geom_point(aes(y = cr2_RAF), color = cr2_vaf_149$RAFpoint_color, size = 2, alpha = 0.5) +
+  facet_wrap(~CHROM, scales = "free") +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "black") +
+  labs(title = "CR2 Primary", x = "Position (1Mb)", y = "Allele Frequency") +
+  scale_color_identity() +
+  scale_x_continuous(labels = function(x) sprintf("%.1f", x / 1e6)) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"), strip.background = element_blank())
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/cr2_vaf_chr149.pdf", height = 3, width = 8)
+ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/SNP_Calling/cr2_vaf_chr149.png", height = 3, width = 8)
+
+## Try to plot 1 haplotype
+```
+
+####################################################################################################################################################################################################################################################################
+
+## Restarting with individual vcfs
+
+## Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(data.table)
+library(Biostrings)
+library(viridis)
+library(ggrepel)
+library(polymorphology2)
+```
+
+## Functions
+```{r}
+read_gff <- function(file){
+  
+  gff <- fread(file, skip = 3)
+  
+  colnames(gff) <- c("CHROM", "SOURCE", "ID", "START", "STOP", "SCORE", "STRAND", "FRAME", "ATTRIBUTE")
+  
+  gff <- gff[grep("^NC_0499", gff$CHROM), ]
+  gff$CHROM <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", gff$CHROM))
+  
+  return(gff)  
+}
+
+genome_length <- function(fasta){
+  fasta_seq_length <- data.table(Chromosome = names(fasta), Length = width(fasta))
+  
+  fasta_chr_length <- fasta_seq_length[grep("^NC_0499", fasta_seq_length$Chromosome), ]
+  
+  fasta_chr_length$Chromosome <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", fasta_chr_length$Chromosome))
+  
+  genome_chr_length <- sum(fasta_chr_length$Length)
+  
+  return(genome_chr_length)
+}
+
+qual_filter_test <- function(df, q) {
+  # Apply filtering grouped by 'Source'
+  grouped_counts <- df %>%
+    group_by(Source) %>%
+    summarise(
+      qual_varnumber = sum(QUAL >= q),       # count QUAL >= q
+      median_qual_varnumber = sum(median_QUAL >= q), # count median_QUAL >= q
+      .groups = 'drop'  # Drop grouping for further manipulation
+    )
+  
+  return(grouped_counts)
+}
+```
+
+## Genome data
+```{r}
+ref_pri.fasta <- readDNAStringSet("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+genome_size <- genome_length(ref_pri.fasta)
+ref_chandler_gff <- read_gff("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
+```
+
+## Read in VCFs
+```{r}
+all_dn.df <- fread("./Data/VCFs/Filtered/all_dn.vcf")
+```
+
+## Finding mean DP and median QUAL. Normalizing depth
+```{r}
+# Find mean depths
+mean_depths <- all_dn.df %>%
+  group_by(Source) %>%
+  summarise(mean_DP = mean(DP))
+
+# Join mean depths
+all_dn.df <- all_dn.df %>%
+  left_join(mean_depths, by = "Source")
+
+# Normalize mean DP
+all_dn.df <- all_dn.df %>%
+  mutate(norm_DP = DP / mean_DP) %>%
+  select(-mean_DP)
+
+# Find media qual at shared sites
+median_qual <- all_dn.df %>%
+  group_by(unique) %>%
+  summarise(median_QUAL = median(QUAL))
+
+# Join median qual
+all_dn.df <- all_dn.df %>%
+  left_join(median_qual, by = "unique")
+
+all_dn.df <- all_dn.df %>%
+  separate(AD, into = c("REF_DP", "ALT_DP"), convert = TRUE)
+```
+
+## Looking at distribution of Depths
+```{r}
+# Depth distribution
+all_dn.df %>%
+  ggplot(aes(x = DP, color = Type)) +
+  geom_density() +
+  labs(title = "Depth distribution by type") +
+  theme_classic()
+
+#Normalized depth distribution
+all_dn.df %>%
+  ggplot(aes(x = norm_DP, color = Type)) +
+  geom_density() +
+  labs(title = "Normalized depth distribution by type") +
+  theme_classic()
+
+min(all_dn.df$ALT_DP)
+
+all_dn.df %>%
+  ggplot(aes(x = ALT_DP, color = Type)) +
+  geom_density(linewidth = 1) +
+  scale_color_manual(values=c("Tree" = "seagreen", "Shoot" = "dodgerblue", "Embryo" = "orangered")) +
+  labs(title = "Alt depth distribution by type") +
+  theme_classic()
+
+all_dn.df %>%
+  ggplot(aes(x = ALT_DP, color = Seq_Type)) +
+  geom_density(linewidth = 1)  +
+  labs(title = "Alt depth distribution by sequencing") +
+  theme_classic()
+```
+
+## Looking at distribution of QUAL and VAF
+```{r}
+all_dn.df %>%
+  filter(Type == "Shoot", median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, y = DP)) +
+  geom_hex() +
+  labs(x = "Variant Allele Frequency", y = "Density", title = "Shoot Culture VAF") +
+  theme_classic() + 
+  theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5, face = "bold"))
+
+all_dn.df %>%
+  filter(median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, color = Type)) +
+  geom_density(linewidth = 1.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  scale_color_manual(values=c("Tree" = "seagreen", "Shoot" = "dodgerblue", "Embryo" = "orangered")) +
+  ylim(0, 7) +
+  xlim(0, 1) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+#ggsave("./Figures/SNP_Calling/vaf_density_all_q30.pdf", height = 6, width = 12)
+#ggsave("./Figures/SNP_Calling/vaf_density_all_q30.png", height = 6, width = 12)
+
+all_dn.df %>%
+  filter(median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, fill = Type)) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  scale_color_manual(values=c("Tree" = "seagreen", "Shoot" = "dodgerblue", "Embryo" = "orangered")) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_dn.df %>%
+  filter(Type != "Tree", median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, color = Type)) +
+  geom_density(linewidth = 1.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  scale_color_manual(values=c("Shoot" = "dodgerblue", "Embryo" = "orangered")) +
+  ylim(0, 7) +
+  xlim(0, 1) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+#ggsave("./Figures/SNP_Calling/vaf_density_shoots_vs_embryos_q30.pdf", height = 6, width = 12)
+#ggsave("./Figures/SNP_Calling/vaf_density_shoots_vs_embryos_q30.png", height = 6, width = 12)
+
+all_dn.df %>%
+  filter(Type != "Shoot", median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, color = Type)) +
+  geom_density(linewidth = 1.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  scale_color_manual(values=c("Tree" = "seagreen", "Embryo" = "orangered")) +
+  ylim(0, 7) +
+  xlim(0, 1) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+#ggsave("./Figures/SNP_Calling/vaf_density_trees_vs_embryos_q30.pdf", height = 6, width = 12)
+#ggsave("./Figures/SNP_Calling/vaf_density_trees_vs_embryos_q30.png", height = 6, width = 12)
+
+
+all_dn.df %>%
+  filter(Type != "Tree", Type !=  "Shoot", median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, color = Type)) +
+  geom_density(linewidth = 1.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  scale_color_manual(values=c("Embryo" = "orangered")) +
+  ylim(0, 7) +
+  xlim(0, 1) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+#ggsave("./Figures/SNP_Calling/vaf_density_embryos_q30.pdf", height = 6, width = 12)
+#ggsave("./Figures/SNP_Calling/vaf_density_embryos_q30.png", height = 6, width = 12)
+
+all_dn.df %>%
+  filter(median_QUAL >= 30) %>%
+  ggplot(aes(x = norm_DP, y = VAF, color = Type)) +
+  geom_density2d() +
+  labs(x = "Normalized Depth", y = "Variant Allele Frequency") +
+  scale_color_manual(values=c("Tree" = "seagreen", "Shoot" = "dodgerblue", "Embryo" = "orangered")) +
+  facet_grid(~Type) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+```
+
+## Creating quality filter table test and plotting
+```{r}
+# Turn df into a list
+dn_list <- split(all_dn.df, f = all_dn.df$Source)
+
+quality_table <- data.table()  # Initialize an empty dataframe to store the results
+
+for (i in 20:40) {
+  
+  qual_temp <- qual_filter_test(df = all_dn.df, q = i)
+  
+  qual_temp <- qual_temp %>%
+    mutate(q_value = i)
+  
+  quality_table <- rbind(quality_table, qual_temp)  # Append the new data to the existing dataframe
+}
+
+## Setting levels, adding culture type to the data
+quality_table$Source <- factor(quality_table$Source, 
+                                       levels = c("ref_chandler", "tree2", "cr2_hifi", "cr21_1", "cr21_2",
+                                                  "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A",
+                                                  "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A",
+                                                  "cr2_18A1", "cr85", "cr10", "cr13", "cr22"))
+
+quality_table <- quality_table %>%
+  mutate(Type = case_when(
+    Source %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    Source %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "Embryo",
+    Source %in% c("cr85", "cr10", "cr13", "cr22") ~ "Shoot")) %>%
+  mutate(Type = factor(Type, levels = c("HiFi", "Embryo", "Shoot")))
+
+quality_table <- quality_table %>%
+  mutate(Seq = case_when(
+    Source %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    Source %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ "Short"))
+  mutate(Seq = factor(Seq, levels = c("HiFi", "Short")))
+```
+
+## Plotting mutation in embryo cultures
+```{r}
+## Facet Grid by type
+quality_table %>%
+  ggplot(aes(x = Source, y = qual_varnumber, col = q_value)) +
+  geom_point(size = 3) +
+  facet_grid(~Type, scales = "free", space = "free", 
+             labeller = labeller(type = c(HiFi = "HiFi", Embryo = "Short Read Somatic Embryos", 
+                                          Shoot = "Shoot Culture"))) +
+  scale_color_viridis(name = "Quality\nThreshold", option = "cividis" ) +
+  scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
+                              "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
+                              "cr2_11A" = "11A", "cr2_12A" = "12A", "cr2_13A" = "13A",
+                              "cr2_15A" = "15A", "cr2_15A1" = "15A1", "cr2_16A" = "16A",
+                              "cr2_16A1" = "16A1", "cr2_16A2" = "16A2", "cr2_17A1" = "17A1",
+                              "cr2_17A2" = "17A2", "cr2_18A" = "18A", "cr2_18A1" = "18A1",
+                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
+                              "cr22" = "Chandler '22")) +
+  scale_y_continuous(name = "Mutations", limits = c(0, 3000)) +
+  theme_classic() +
+  theme(legend.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom")
+#ggsave("./Figures/SNP_Calling/snp_quality_filtering_all.pdf", height = 4, width = 6)
+#ggsave("./Figures/SNP_Calling/snp_quality_filtering_all.png", height = 4, width = 6)
+
+quality_table %>%
+  ggplot(aes(x = Source, y = median_qual_varnumber, col = q_value)) +
+  geom_point(size = 3) +
+  facet_grid(~Type, scales = "free", space = "free", 
+             labeller = labeller(type = c(HiFi = "HiFi", Embryo = "Short Read Somatic Embryos", 
+                                          Shoot = "Shoot Culture"))) +
+  scale_color_viridis(name = "Median Quality\nThreshold", option = "mako" ) +
+  scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
+                              "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
+                              "cr2_11A" = "11A", "cr2_12A" = "12A", "cr2_13A" = "13A",
+                              "cr2_15A" = "15A", "cr2_15A1" = "15A1", "cr2_16A" = "16A",
+                              "cr2_16A1" = "16A1", "cr2_16A2" = "16A2", "cr2_17A1" = "17A1",
+                              "cr2_17A2" = "17A2", "cr2_18A" = "18A", "cr2_18A1" = "18A1",
+                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
+                              "cr22" = "Chandler '22")) +
+  scale_y_continuous(name = "Mutations", limits = c(0, 3000)) +
+  theme_classic() +
+  theme(legend.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom")
+#ggsave("./Figures/SNP_Calling/snp_median_quality_filtering_all.pdf", height = 4, width = 6)
+#ggsave("./Figures/SNP_Calling/snp_median_quality_filtering_all.png", height = 4, width = 6)
+```
+
+## Distribution of calls between QUAL and Median_Qual
+```{r}
+quality_table %>%
+  ggplot(aes(x = q_value, y = qual_varnumber, color = Source)) +
+  geom_point() +
+  theme_classic()
+
+quality_table %>%
+  ggplot(aes(x = q_value, y = median_qual_varnumber, color = Source)) +
+  geom_point() +
+  theme_classic()
+
+quality_table %>%
+  filter() %>%
+  ggplot(aes(x = q_value, y = median_qual_varnumber - qual_varnumber, color = Type)) +
+  geom_point() +
+  labs(x = "Quality Filter", y = "SNPs from Median QUAL Filter - SNPs from QUAL Filter ") +
+  theme_classic()
+# if below 0, that means there are more SNPs called by the QUAL than the median QUAL. If above 0, there are more SNPs in the median QUAL than the QUAL. This looks like it will help balance out the effect of HiFi
+
+# Shoots and trees are all overlapping each other at 0. so can't be seen
+
+quality_table %>%
+  filter() %>%
+  ggplot(aes(x = q_value, y = median_qual_varnumber - qual_varnumber, color = Seq)) +
+  geom_point() +
+  labs(x = "Quality Filter", y = "SNPs from Median QUAL Filter - SNPs from QUAL Filter ") +
+  theme_classic()
+```
+
+
+## Create plotting table
+```{r}
+# Creating table for years in culture
+Source <- c("ref_chandler", "tree2", "cr85", "cr2_hifi", "cr21_1", "cr21_2",
+                    "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1",
+                    "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
+                    "cr2_18A", "cr2_18A1", "cr10", "cr13", "cr22")
+years <- as.numeric(c(NA, NA, 2023-1985, 2022-1995, 2022-1995, 2022-1995, 2022-1995, 2022-1995, 2022-1995, 2022-1995,
+                 2022-1995, 2022-1995, 2022-1995, 2022-1995, 2022-1995, 2022-1995, 2022-1995, 2022-1995, 2023-2010,
+                 2023-2013, 2023-2022))
+
+year.table <- as.data.table(cbind(Source, Year = years))
+
+year.table$Year <- as.numeric(year.table$Year)
+
+# Creating a table to plot mutations per year at different quals
+mut_q10.table <- all_dn.df %>%
+  filter(QUAL >= 10) %>%
+  group_by(Source) %>%
+  summarise(Mutations = n())
+
+mut_q10.table <- left_join(mut_q10.table, year.table)
+
+mut_q10.table <- mut_q10.table %>%
+  mutate(Genome_size = genome_size) %>%
+  mutate(Mut_per_year = Mutations/Year) %>%
+  mutate(Mut_per_bp = Mutations/Genome_size) %>%
+  mutate(Mut_per_bp_per_year = Mutations/Genome_size/Year) %>%
+  mutate(QUAL = 10)
+
+mut_q20.table <- all_dn.df %>%
+  filter(QUAL >= 20) %>%
+  group_by(Source) %>%
+  summarise(Mutations = n())
+
+mut_q20.table <- left_join(mut_q20.table, year.table)
+
+mut_q20.table <- mut_q20.table %>%
+  mutate(Genome_size = genome_size) %>%
+  mutate(Mut_per_year = Mutations/Year) %>%
+  mutate(Mut_per_bp = Mutations/Genome_size) %>%
+  mutate(Mut_per_bp_per_year = Mutations/Genome_size/Year) %>%
+  mutate(QUAL = 20)
+
+mut_q30.table <- all_dn.df %>%
+  filter(QUAL >= 30) %>%
+  group_by(Source) %>%
+  summarise(Mutations = n())
+
+mut_q30.table <- left_join(mut_q30.table, year.table)
+
+mut_q30.table <- mut_q30.table %>%
+  mutate(Genome_size = genome_size) %>%
+  mutate(Mut_per_year = Mutations/Year) %>%
+  mutate(Mut_per_bp = Mutations/Genome_size) %>%
+  mutate(Mut_per_bp_per_year = Mutations/Genome_size/Year) %>%
+  mutate(QUAL = 30)
+
+mut_q40.table <- all_dn.df %>%
+  filter(QUAL >= 40) %>%
+  group_by(Source) %>%
+  summarise(Mutations = n())
+
+mut_q40.table <- left_join(mut_q40.table, year.table)
+
+mut_q40.table <- mut_q40.table %>%
+  mutate(Genome_size = genome_size) %>%
+  mutate(Mut_per_year = Mutations/Year) %>%
+  mutate(Mut_per_bp = Mutations/Genome_size) %>%
+  mutate(Mut_per_bp_per_year = Mutations/Genome_size/Year) %>%
+  mutate(QUAL = 40)
+
+mut.table <- rbind(mut_q10.table, mut_q20.table, mut_q30.table, mut_q40.table)
+
+
+
+# Culture Type
+mut.table <- mut.table %>%
+  mutate(Type = case_when(
+    Source %in% c("ref_chandler", "tree2") ~ "Tree",
+    Source %in% c("cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1",
+                      "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "Embryo",
+    Source %in% c("cr85", "cr10", "cr13", "cr22") ~ "Shoot")) %>%
+  mutate(Type = factor(Type, levels = c("Tree", "Embryo", "Shoot")))
+
+# Color separation
+mut.table <- mut.table %>%
+  mutate(Sequence = case_when(
+    Source %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    Source %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", 
+                      "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "short_embryo",
+    Source %in% c("cr85", "cr10", "cr13", "cr22") ~ "short_shoot")) %>%
+  mutate(Sequence = factor(Sequence, levels = c("HiFi", "short_embryo", "short_shoot")))
+# Levels for plotting
+levels(mut.table$Sequence) <- c("HiFi", " short_embryo", "short_shoot")
+
+# Levels for individuals
+mut.table$Source <- factor(mut.table$Source, 
+                                       levels = c("ref_chandler", "tree2", "cr2_hifi", "cr21_1", "cr21_2",
+                                                  "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A",
+                                                  "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A",
+                                                  "cr2_18A1", "cr85", "cr10", "cr13", "cr22"))
+```
+
+## Plot mutations
+```{r}
+# Plot number of mutations
+mut.table %>%
+  filter(QUAL == 30) %>%
+  ggplot(aes(x = Source, y = Mutations, fill = Type)) +
+  geom_bar(stat = "identity") +
+  facet_grid(~Type, scales = "free", space = "free", labeller = labeller(Type = c("Tree" = "Field Trees", "Shoot" = "Shoot Cultures", "Embryo" = "Somatic Embryo Cultures"))) +
+  labs(x = "", y = "Mutations") +
+  scale_fill_manual(values = c("Tree" = "seagreen", 
+                               "Shoot" = "dodgerblue", 
+                               "Embryo" = "orangered"),
+                    labels = c("Tree" = "Field Trees", 
+                               "Shoot" = "Shoot Cultures", 
+                               "Embryo" = "Somatic Embryo Cultures"),
+                    breaks = c("Field Trees", "Somatic Embryo Cultures", "Shoot Cultures")) +
+  guides(fill = guide_legend(title = NULL)) +
+  theme_classic() +
+  theme(legend.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(face = "bold"),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom")
+#ggsave("./Figures/SNP_Calling/filtered_mutations_all_barchart.pdf", height = 6, width = 12)
+#ggsave("./Figures/SNP_Calling/filtered_mutations_all_barchart.png", height = 6, width = 12)
+
+mut.table %>%
+  filter(QUAL == 30) %>%
+  ggplot(aes(x = Source, y = log(Mutations), fill = Type)) +
+  geom_bar(stat = "identity") +
+  facet_grid(~Type, scales = "free", space = "free", labeller = labeller(Type = c("Tree" = "Field Trees", "Shoot" = "Shoot Cultures", "Embryo" = "Somatic Embryo Cultures"))) +
+  labs(x = "", y = "Mutations (log)") +
+  scale_fill_manual(values = c("Tree" = "seagreen", 
+                               "Shoot" = "dodgerblue", 
+                               "Embryo" = "orangered"),
+                    labels = c("Tree" = "Field Trees", 
+                               "Shoot" = "Shoot Cultures", 
+                               "Embryo" = "Somatic Embryo Cultures"),
+                    breaks = c("Field Trees", "Somatic Embryo Cultures", "Shoot Cultures")) +
+  guides(fill = guide_legend(title = NULL)) +
+  theme_classic() +
+  theme(legend.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(face = "bold"),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom")
+#ggsave("./Figures/SNP_Calling/filtered_log_mutations_all_barchart.pdf", height = 6, width = 12)
+#ggsave("./Figures/SNP_Calling/filtered_log_mutations_all_barchart.png", height = 6, width = 12)
+
+mut.table %>%
+  filter(QUAL == 30) %>%
+  filter(Type =="Shoot") %>%
+  ggplot(aes(x = Source, y = Mutations, fill = Type)) +
+  geom_bar(stat = "identity") +
+  facet_grid(~Type, scales = "free", space = "free", labeller = labeller(Type = c("Tree" = "Field Trees", "Shoot" = "Shoot Cultures", "Embryo" = "Somatic Embryo Cultures"))) +
+  labs(x = "", y = "Mutations") +
+  scale_fill_manual(values = c("Shoot" = "dodgerblue")) +
+  scale_x_discrete(labels = c("cr85" = "Chandler 1985", "cr10" = "Chandler 2010", "cr13" = "Chandler 2013", "cr22" = "Chandler 2022")) +
+  guides(fill = guide_legend(title = NULL)) +
+  theme_classic() +
+  theme(legend.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(face = "bold"),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom")
+#ggsave("./Figures/SNP_Calling/filtered_mutations_shoots_barchart.pdf", height = 5, width = 6)
+#ggsave("./Figures/SNP_Calling/filtered_mutations_shoots_barchart.png", height = 5, width = 6)
+
+mut.table %>%
+  filter(QUAL == 30) %>%
+  filter(Source != "ref_chandler", Source != "tree2") %>%
+  ggplot(aes(x = Source, y = Mut_per_bp_per_year, fill = Type)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.1e", Mut_per_bp_per_year)),
+            vjust = -0.5, color = "black", size = 3) +
+  labs(x = "", y = "Mutations per base pair per year") +
+  scale_fill_manual(values = c("Shoot" = "dodgerblue", 
+                               "Embryo" = "orangered")) +
+  guides(fill = guide_legend(title = NULL)) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"), 
+        legend.position = "bottom",
+        axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1))
+#ggsave("./Figures/SNP_Calling/filtered_mutations_per_bp_per_year_tissue_culture_barchart.pdf", height = 6, width = 12)
+#ggsave("./Figures/SNP_Calling/filtered_mutations_per_bp_per_year_tissue_culture_barchart.png", height = 6, width = 12)
+```
+
+## Looking at shoots over time
+```{r}
+mut.table %>%
+  filter(QUAL == 30, Type == "Shoot") %>%
+  ggplot(aes(x = Year, y = Mutations)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "red3") +
+  geom_text_repel(aes(label = ifelse(is.na(Mut_per_year), "", paste(round(Mut_per_year, 1), "\nmutations\nper year"))), box.padding = 0, segment.color = 'grey35', nudge_y = -1, nudge_x = 2, na.rm = TRUE) +
+  labs(title = "Shoot culture mutation over time", 
+       x = "Years in tissue culture", y = "Number of Mutations") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"))
+#ggsave("./Figures/SNP_Calling/filtered_mutations_over_time_shoots_line.pdf", height = 4, width = 6)
+#ggsave("./Figures/SNP_Calling/filtered_mutations_over_time_shoots_line.png", height = 4, width = 6)
+
+mut.table %>%
+  filter(Type == "Shoot") %>%
+  ggplot(aes(x = Year, y = Mutations, color = factor(QUAL))) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_color_manual(values = c("purple3", "darkgreen", "orange", "royalblue"),
+                     breaks = c("10", "20", "30", "40"),
+                     labels = c("QUAL = 10", "QUAL = 20", "QUAL = 30", "QUAL = 40")) +
+  labs(title = "Shoot culture mutation over time", 
+       x = "Years in tissue culture", y = "Number of Mutations",
+       color = "QUAL") +
+  facet_wrap(~QUAL, scales = "free_y") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold")) +
+  theme_classic()
+#ggsave("./Figures/SNP_Calling/filtered_mutations_over_time_shoots_line_no_labels.pdf", height = 4, width = 6)
+#ggsave("./Figures/SNP_Calling/filtered_mutations_over_time_shoots_line_no_labels.png", height = 4, width = 6)
+```
+
+
+## Calculating mutation rates for shoots and embryos
+```{r}
+mut_rates_embryo.table <- all_dn.df %>%
+  filter(Type == "Embryo", QUAL >= 30) %>%
+  group_by(Source) %>%
+  summarise(Count = n()) %>%
+  mutate(mut_per_bp = Count/genome_size) %>%
+  mutate(mut_per_bp_per_year = mut_per_bp/28) %>%
+  mutate(fill = "embryo")
+
+mut_rates_shoots.table <- all_dn.df %>%
+  filter(Type == "Shoot", QUAL >= 30) %>%
+  group_by(Source) %>%
+  summarise(Count = n()) %>%
+  mutate(mut_per_bp = Count/genome_size) %>%
+  mutate(year_in_culture = c(13, 10, 1, 38)) %>%
+  mutate(mut_per_bp_per_year = mut_per_bp/year_in_culture) %>%
+  select(-year_in_culture) %>%
+  mutate(fill = "shoot")
+
+mut_rates_embryo_shoot.table <- full_join(mut_rates_embryo.table, mut_rates_shoots.table)
+
+mut_rates_per_year <- mut_rates_embryo_shoot.table %>%
+  select(c(Source, mut_per_bp_per_year, fill))
+```
+
+## Plant mutation rate comparison
+```{r}
+plant_mut.table <- tribble(
+  ~"Source", ~"mut_per_bp_per_year", ~"fill",
+  "Oryza sativa(callus)", 2.87e-07, "callus",
+  "Oryza sativa(tiller)", 9.01e-09, "annual",
+  "Arabidopsis thaliana", 4.35e-09, "annual",
+  "Prunus mira", 8.00e-11, "perennial",
+  "Eucalyptus melliodora", 1.16e-10, "perennial",
+  "Populus trichocarpa", 1.33e-10, "perennial"
+)
+
+plant_mut.table
+
+plant_mut.table <- full_join(plant_mut.table, mut_rates_per_year)
+
+plant_mut.table %>%
+  ggplot(aes(x = reorder(Source, log10(mut_per_bp_per_year)), y = log10(mut_per_bp_per_year), fill = fill)) +
+  geom_bar(stat = "identity") +
+  scale_x_discrete(name = "Source", position="top") +
+  scale_y_continuous(name = "Mutation Rate (log10)") +  # Changed to scale_y_continuous for a continuous log scale
+  scale_fill_manual(values = c(callus = "wheat2", annual = "lightcyan3", embryo = "orangered", shoot = "dodgerblue", perennial = "darkslategrey")) + 
+  theme_classic() +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 0),
+        axis.ticks.y = element_blank(), axis.text.y = element_blank())
+#ggsave("./Figures/SNP_Calling/other_plants_mutation_rate_comparison_q30.pdf", height = 4, width = 8)
+#ggsave("./Figures/SNP_Calling/other_plants_mutation_rate_comparison_q30.png", height = 4, width = 8)
+```
+
+## Looking into which chromosome was lost
+```{r}
+all_an.df <- fread("./Data/VCFs/Filtered/all_an.vcf")
+```
+
+## Plotting VAF of the lost chr
+```{r}
+all_an.df %>%
+  filter(CHROM == 4, Source %in% c("cr2_16A", "cr2_18A1")) %>%
+  ggplot(aes(x = VAF, fill = Source)) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_an.df %>%
+  filter(CHROM == 9, Source %in% c("cr2_16A", "cr2_18A1")) %>%
+  ggplot(aes(x = VAF, fill = Source)) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_an.df %>%
+  filter(CHROM == 1, Source %in% c("cr2_16A", "cr2_18A1")) %>%
+  ggplot(aes(x = VAF, fill = Source)) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_an.df %>%
+  filter(CHROM %in% c(1,4,9,11,16), Source %in% c("cr2_16A", "cr2_18A1")) %>%
+  ggplot(aes(x = VAF, fill = Source)) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  facet_wrap(~CHROM) + 
+  theme_classic() + 
+  theme(legend.position = "bottom")
+ggsave("~/Desktop/18_16.pdf", height = 6, width = 10)
+ggsave("~/Desktop/18_16.png", height = 6, width = 10)
+
+all_an.df %>%
+  filter(Source %in% c("cr2_16A", "cr2_18A1")) %>%
+  ggplot(aes(x = VAF, fill = Source)) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  labs(x = "Variant Allele Frequency", y = "Density", title = "16A and 18A1 VAF distribution") +
+  facet_wrap(~CHROM) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+  
+all_an.df %>%
+  filter(Source %in% "cr2_hifi") %>%
+  ggplot(aes(x = VAF, fill = Source)) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  labs(x = "Variant Allele Frequency", y = "Density", title = "CR2 HiFi VAF distribution") +
+  facet_wrap(~CHROM, scales = "free") +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_an.df %>%
+  filter(CHROM %in% c(1,4,9,11,16), Source %in% c("cr2_hifi")) %>%
+  ggplot(aes(x = VAF, fill = Source)) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  facet_wrap(~CHROM) + 
+  theme_classic() + 
+  theme(legend.position = "bottom")
+ggsave("~/Desktop/cr2_hifi.pdf", height = 6, width = 10)
+ggsave("~/Desktop/cr2_hifi.png", height = 6, width = 10)
+```
+
+## Loading in ancestral combined haplotype snps
+```{r}
+all_dn_combo.vcf <- fread("./Data/VCFs/Filtered/all_dn_combined_haps.vcf")
+```
+
+## Plotting to see chromosomal duplication time
+```{r}
+all_dn_combo.vcf %>%
+  filter(Source == "cr2_hifi", QUAL >= 30 ) %>%
+  ggplot(aes(x = VAF, fill = Source)) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  labs(x = "Variant Allele Frequency", y = "Density", title = "CR2 HiFi VAF distribution") +
+  facet_wrap(~CHROM + Hap, scales = "free") +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_dn_combo.vcf %>%
+  filter(Source == "cr2_hifi") %>%
+  ggplot(aes(x = GT, fill = Source)) +
+  geom_bar(position = "identity", alpha = 0.5) +
+  labs(x = "Variant Allele Frequency", y = "Density", title = "CR2 HiFi VAF distribution") +
+  facet_wrap(~CHROM + Hap, scales = "free") +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_dn_combo.vcf %>%
+  filter(CHROM %in% c(4,9), Source == "cr2_hifi") %>%
+  ggplot(aes(x = VAF, fill = Source)) +
+  geom_density(position = "identity", alpha = 0.5) +
+  labs(x = "Variant Allele Frequency", y = "Density", title = "CR2 HiFi VAF distribution") +
+  facet_wrap(~CHROM + Hap, scales = "free") +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_dn_combo.vcf %>%
+  filter(CHROM %in% c(4,9),Source == "cr2_hifi", QUAL >= 20) %>%
+  ggplot(aes(x = GT, fill = Source)) +
+  geom_bar(position = "identity", alpha = 0.5) +
+  labs(x = "Variant Allele Frequency", y = "Density", title = "CR2 HiFi VAF distribution") +
+  facet_wrap(~CHROM + Hap, scales = "free") +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+unique(all_dn_combo.vcf$Source)
+```
+
+## Checking mutations in other filters
+```{r}
+all_by_tree_dn.df <- fread("./Data/VCFs/Filtered/all_by_tree_dn.vcf")
+
+all_by_all_dn.df <- fread("./Data/VCFs/Filtered/all_by_all_dn.vcf")
+```
+
+## Finding mean DP and median QUAL. Normalizing depth
+```{r}
+# Find mean depths
+mean_depths <- all_by_tree_dn.df %>%
+  group_by(Source) %>%
+  summarise(mean_DP = mean(DP))
+
+# Join mean depths
+all_by_tree_dn.df <- all_by_tree_dn.df %>%
+  left_join(mean_depths, by = "Source")
+
+# Normalize mean DP
+all_by_tree_dn.df <- all_by_tree_dn.df %>%
+  mutate(norm_DP = DP / mean_DP) %>%
+  select(-mean_DP)
+
+# Find media qual at shared sites
+median_qual <- all_by_tree_dn.df %>%
+  group_by(unique) %>%
+  summarise(median_QUAL = median(QUAL))
+
+# Join median qual
+all_by_tree_dn.df <- all_by_tree_dn.df %>%
+  left_join(median_qual, by = "unique")
+
+all_by_tree_dn.df <- all_by_tree_dn.df %>%
+  separate(AD, into = c("REF_DP", "ALT_DP"), convert = TRUE)
+```
+
+## Looking at distribution of Depths
+```{r}
+# Depth distribution
+all_by_tree_dn.df %>%
+  ggplot(aes(x = DP, color = Type)) +
+  geom_density() +
+  labs(title = "Depth distribution by type") +
+  theme_classic()
+
+#Normalized depth distribution
+all_by_tree_dn.df %>%
+  ggplot(aes(x = norm_DP, color = Type)) +
+  geom_density() +
+  labs(title = "Normalized depth distribution by type") +
+  theme_classic()
+
+min(all_by_tree_dn.df$ALT_DP)
+
+all_by_tree_dn.df %>%
+  ggplot(aes(x = ALT_DP, color = Type)) +
+  geom_density(linewidth = 1) +
+  scale_color_manual(values=c("Tree" = "seagreen", "Shoot" = "dodgerblue", "Embryo" = "orangered")) +
+  labs(title = "Alt depth distribution by type") +
+  theme_classic()
+
+all_by_tree_dn.df %>%
+  ggplot(aes(x = ALT_DP, color = Seq_Type)) +
+  geom_density(linewidth = 1)  +
+  labs(title = "Alt depth distribution by sequencing") +
+  theme_classic()
+```
+
+## Looking at distribution of QUAL and VAF
+```{r}
+all_by_tree_dn.df %>%
+  filter(Type == "Shoot", median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, y = DP)) +
+  geom_hex() +
+  labs(x = "Variant Allele Frequency", y = "Density", title = "Shoot Culture VAF") +
+  theme_classic() + 
+  theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5, face = "bold"))
+
+all_by_tree_dn.df %>%
+  filter(median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, color = Type)) +
+  geom_density(linewidth = 1.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  scale_color_manual(values=c("Tree" = "seagreen", "Shoot" = "dodgerblue", "Embryo" = "orangered")) +
+  ylim(0, 7) +
+  xlim(0, 1) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_by_tree_dn.df %>%
+  filter(median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, fill = Type)) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  scale_color_manual(values=c("Tree" = "seagreen", "Shoot" = "dodgerblue", "Embryo" = "orangered")) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_by_tree_dn.df %>%
+  filter(Type != "Tree", median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, color = Type)) +
+  geom_density(linewidth = 1.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  scale_color_manual(values=c("Shoot" = "dodgerblue", "Embryo" = "orangered")) +
+  ylim(0, 7) +
+  xlim(0, 1) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_by_tree_dn.df %>%
+  filter(Type != "Shoot", median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, color = Type)) +
+  geom_density(linewidth = 1.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  scale_color_manual(values=c("Tree" = "seagreen", "Embryo" = "orangered")) +
+  ylim(0, 7) +
+  xlim(0, 1) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_by_tree_dn.df %>%
+  filter(Type != "Tree", Type !=  "Shoot", median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, color = Type)) +
+  geom_density(linewidth = 1.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  scale_color_manual(values=c("Embryo" = "orangered")) +
+  ylim(0, 7) +
+  xlim(0, 1) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_by_tree_dn.df %>%
+  filter(median_QUAL >= 30) %>%
+  ggplot(aes(x = norm_DP, y = VAF, color = Type)) +
+  geom_density2d() +
+  labs(x = "Normalized Depth", y = "Variant Allele Frequency") +
+  scale_color_manual(values=c("Tree" = "seagreen", "Shoot" = "dodgerblue", "Embryo" = "orangered")) +
+  facet_grid(~Type) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+```
+
+## Creating quality filter table test and plotting
+```{r}
+# Turn df into a list
+dn_list <- split(all_by_tree_dn.df, f = all_by_tree_dn.df$Source)
+
+quality_table <- data.table()  # Initialize an empty dataframe to store the results
+
+for (i in 20:40) {
+  
+  qual_temp <- qual_filter_test(df = all_by_tree_dn.df, q = i)
+  
+  qual_temp <- qual_temp %>%
+    mutate(q_value = i)
+  
+  quality_table <- rbind(quality_table, qual_temp)  # Append the new data to the existing dataframe
+}
+
+## Setting levels, adding culture type to the data
+quality_table$Source <- factor(quality_table$Source, 
+                                       levels = c("ref_chandler", "tree2", "cr2_hifi", "cr21_1", "cr21_2",
+                                                  "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A",
+                                                  "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A",
+                                                  "cr2_18A1", "cr85", "cr10", "cr13", "cr22"))
+
+quality_table <- quality_table %>%
+  mutate(Type = case_when(
+    Source %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    Source %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "Embryo",
+    Source %in% c("cr85", "cr10", "cr13", "cr22") ~ "Shoot")) %>%
+  mutate(Type = factor(Type, levels = c("HiFi", "Embryo", "Shoot")))
+
+quality_table <- quality_table %>%
+  mutate(Seq = case_when(
+    Source %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    Source %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ "Short")) %>%
+  mutate(Seq = factor(Seq, levels = c("HiFi", "Short")))
+```
+
+## Plotting mutation in embryo cultures
+```{r}
+## Facet Grid by type
+quality_table %>%
+  ggplot(aes(x = Source, y = qual_varnumber, col = q_value)) +
+  geom_point(size = 3) +
+  facet_grid(~Type, scales = "free", space = "free", 
+             labeller = labeller(Type = c(HiFi = "HiFi", Embryo = "Short Read Somatic Embryos", 
+                                          Shoot = "Shoot Culture"))) +
+  scale_color_viridis(name = "Quality\nThreshold", option = "cividis" ) +
+  scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
+                              "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
+                              "cr2_11A" = "11A", "cr2_12A" = "12A", "cr2_13A" = "13A",
+                              "cr2_15A" = "15A", "cr2_15A1" = "15A1", "cr2_16A" = "16A",
+                              "cr2_16A1" = "16A1", "cr2_16A2" = "16A2", "cr2_17A1" = "17A1",
+                              "cr2_17A2" = "17A2", "cr2_18A" = "18A", "cr2_18A1" = "18A1",
+                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
+                              "cr22" = "Chandler '22")) +
+  scale_y_continuous(name = "Mutations", limits = c(0, 15000)) +
+  theme_classic() +
+  theme(legend.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom")
+
+quality_table %>%
+  ggplot(aes(x = Source, y = median_qual_varnumber, col = q_value)) +
+  geom_point(size = 3) +
+  facet_grid(~Type, scales = "free", space = "free", 
+             labeller = labeller(Type = c(HiFi = "HiFi", Embryo = "Short Read Somatic Embryos", 
+                                          Shoot = "Shoot Culture"))) +
+  scale_color_viridis(name = "Median Quality\nThreshold", option = "mako" ) +
+  scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
+                              "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
+                              "cr2_11A" = "11A", "cr2_12A" = "12A", "cr2_13A" = "13A",
+                              "cr2_15A" = "15A", "cr2_15A1" = "15A1", "cr2_16A" = "16A",
+                              "cr2_16A1" = "16A1", "cr2_16A2" = "16A2", "cr2_17A1" = "17A1",
+                              "cr2_17A2" = "17A2", "cr2_18A" = "18A", "cr2_18A1" = "18A1",
+                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
+                              "cr22" = "Chandler '22")) +
+  scale_y_continuous(name = "Mutations", limits = c(0, 15000)) +
+  theme_classic() +
+  theme(legend.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom")
+```
+
+# All by All
+
+## Finding mean DP and median QUAL. Normalizing depth
+```{r}
+# Find mean depths
+mean_depths <- all_by_all_dn.df %>%
+  group_by(Source) %>%
+  summarise(mean_DP = mean(DP))
+
+# Join mean depths
+all_by_all_dn.df <- all_by_all_dn.df %>%
+  left_join(mean_depths, by = "Source")
+
+# Normalize mean DP
+all_by_all_dn.df <- all_by_all_dn.df %>%
+  mutate(norm_DP = DP / mean_DP) %>%
+  select(-mean_DP)
+
+# Find media qual at shared sites
+median_qual <- all_by_all_dn.df %>%
+  group_by(unique) %>%
+  summarise(median_QUAL = median(QUAL))
+
+# Join median qual
+all_by_all_dn.df <- all_by_all_dn.df %>%
+  left_join(median_qual, by = "unique")
+
+all_by_all_dn.df <- all_by_all_dn.df %>%
+  separate(AD, into = c("REF_DP", "ALT_DP"), convert = TRUE)
+```
+
+## Looking at distribution of Depths
+```{r}
+# Depth distribution
+all_by_all_dn.df %>%
+  ggplot(aes(x = DP, color = Type)) +
+  geom_density() +
+  labs(title = "Depth distribution by type") +
+  theme_classic()
+
+#Normalized depth distribution
+all_by_all_dn.df %>%
+  ggplot(aes(x = norm_DP, color = Type)) +
+  geom_density() +
+  labs(title = "Normalized depth distribution by type") +
+  theme_classic()
+
+min(all_by_all_dn.df$ALT_DP)
+
+all_by_all_dn.df %>%
+  ggplot(aes(x = ALT_DP, color = Type)) +
+  geom_density(linewidth = 1) +
+  scale_color_manual(values=c("Tree" = "seagreen", "Shoot" = "dodgerblue", "Embryo" = "orangered")) +
+  labs(title = "Alt depth distribution by type") +
+  theme_classic()
+
+all_by_all_dn.df %>%
+  ggplot(aes(x = ALT_DP, color = Seq_Type)) +
+  geom_density(linewidth = 1)  +
+  labs(title = "Alt depth distribution by sequencing") +
+  theme_classic()
+```
+
+## Looking at distribution of QUAL and VAF
+```{r}
+all_by_all_dn.df %>%
+  filter(Type == "Shoot", median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, y = DP)) +
+  geom_hex() +
+  labs(x = "Variant Allele Frequency", y = "Density", title = "Shoot Culture VAF") +
+  theme_classic() + 
+  theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5, face = "bold"))
+
+all_by_all_dn.df %>%
+  filter(median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, color = Type)) +
+  geom_density(linewidth = 1.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  scale_color_manual(values=c("Tree" = "seagreen", "Shoot" = "dodgerblue", "Embryo" = "orangered")) +
+  ylim(0, 7) +
+  xlim(0, 1) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_by_all_dn.df %>%
+  filter(median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, fill = Type)) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  scale_color_manual(values=c("Tree" = "seagreen", "Shoot" = "dodgerblue", "Embryo" = "orangered")) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_by_all_dn.df %>%
+  filter(Type != "Tree", median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, color = Type)) +
+  geom_density(linewidth = 1.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  scale_color_manual(values=c("Shoot" = "dodgerblue", "Embryo" = "orangered")) +
+  ylim(0, 7) +
+  xlim(0, 1) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_by_all_dn.df %>%
+  filter(Type != "Shoot", median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, color = Type)) +
+  geom_density(linewidth = 1.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  scale_color_manual(values=c("Tree" = "seagreen", "Embryo" = "orangered")) +
+  ylim(0, 7) +
+  xlim(0, 1) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_by_all_dn.df %>%
+  filter(Type != "Tree", Type !=  "Shoot", median_QUAL >= 30) %>%
+  ggplot(aes(x = VAF, color = Type)) +
+  geom_density(linewidth = 1.5) +
+  labs(x = "Variant Allele Frequency", y = "Density") +
+  scale_color_manual(values=c("Embryo" = "orangered")) +
+  ylim(0, 7) +
+  xlim(0, 1) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+
+all_by_all_dn.df %>%
+  filter(median_QUAL >= 30) %>%
+  ggplot(aes(x = norm_DP, y = VAF, color = Type)) +
+  geom_density2d() +
+  labs(x = "Normalized Depth", y = "Variant Allele Frequency") +
+  scale_color_manual(values=c("Tree" = "seagreen", "Shoot" = "dodgerblue", "Embryo" = "orangered")) +
+  facet_grid(~Type) +
+  theme_classic() + 
+  theme(legend.position = "bottom")
+```
+
+## Creating quality filter table test and plotting
+```{r}
+# Turn df into a list
+dn_list <- split(all_by_all_dn.df, f = all_by_all_dn.df$Source)
+
+quality_table <- data.table()  # Initialize an empty dataframe to store the results
+
+for (i in 20:40) {
+  
+  qual_temp <- qual_filter_test(df = all_by_all_dn.df, q = i)
+  
+  qual_temp <- qual_temp %>%
+    mutate(q_value = i)
+  
+  quality_table <- rbind(quality_table, qual_temp)  # Append the new data to the existing dataframe
+}
+
+## Setting levels, adding culture type to the data
+quality_table$Source <- factor(quality_table$Source, 
+                                       levels = c("ref_chandler", "tree2", "cr2_hifi", "cr21_1", "cr21_2",
+                                                  "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A",
+                                                  "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A",
+                                                  "cr2_18A1", "cr85", "cr10", "cr13", "cr22"))
+
+quality_table <- quality_table %>%
+  mutate(Type = case_when(
+    Source %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    Source %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "Embryo",
+    Source %in% c("cr85", "cr10", "cr13", "cr22") ~ "Shoot")) %>%
+  mutate(Type = factor(Type, levels = c("HiFi", "Embryo", "Shoot")))
+
+quality_table <- quality_table %>%
+  mutate(Seq = case_when(
+    Source %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    Source %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ "Short")) %>%
+  mutate(Seq = factor(Seq, levels = c("HiFi", "Short")))
+```
+
+## Plotting mutation in embryo cultures
+```{r}
+## Facet Grid by type
+quality_table %>%
+  ggplot(aes(x = Source, y = qual_varnumber, col = q_value)) +
+  geom_point(size = 3) +
+  facet_grid(~Type, scales = "free", space = "free", 
+             labeller = labeller(Type = c(HiFi = "HiFi", Embryo = "Short Read Somatic Embryos", 
+                                          Shoot = "Shoot Culture"))) +
+  scale_color_viridis(name = "Quality\nThreshold", option = "cividis" ) +
+  scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
+                              "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
+                              "cr2_11A" = "11A", "cr2_12A" = "12A", "cr2_13A" = "13A",
+                              "cr2_15A" = "15A", "cr2_15A1" = "15A1", "cr2_16A" = "16A",
+                              "cr2_16A1" = "16A1", "cr2_16A2" = "16A2", "cr2_17A1" = "17A1",
+                              "cr2_17A2" = "17A2", "cr2_18A" = "18A", "cr2_18A1" = "18A1",
+                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
+                              "cr22" = "Chandler '22")) +
+  scale_y_continuous(name = "Mutations") +
+  theme_classic() +
+  theme(legend.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom")
+
+quality_table %>%
+  ggplot(aes(x = Source, y = median_qual_varnumber, col = q_value)) +
+  geom_point(size = 3) +
+  facet_grid(~Type, scales = "free", space = "free", 
+             labeller = labeller(Type = c(HiFi = "HiFi", Embryo = "Short Read Somatic Embryos", 
+                                          Shoot = "Shoot Culture"))) +
+  scale_color_viridis(name = "Median Quality\nThreshold", option = "mako" ) +
+  scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
+                              "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
+                              "cr2_11A" = "11A", "cr2_12A" = "12A", "cr2_13A" = "13A",
+                              "cr2_15A" = "15A", "cr2_15A1" = "15A1", "cr2_16A" = "16A",
+                              "cr2_16A1" = "16A1", "cr2_16A2" = "16A2", "cr2_17A1" = "17A1",
+                              "cr2_17A2" = "17A2", "cr2_18A" = "18A", "cr2_18A1" = "18A1",
+                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
+                              "cr22" = "Chandler '22")) +
+  theme_classic() +
+  theme(legend.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom")
+```

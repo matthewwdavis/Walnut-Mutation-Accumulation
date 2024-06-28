@@ -1,0 +1,709 @@
+---
+title: "aneuploidy_identification"
+author: "Matthew Davis"
+date: "2023-12-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(data.table)
+library(seqinr)
+library(vcfR)
+```
+
+## Functions
+```{r}
+import_vcf <- function(file){
+  
+  vcf <- read.vcfR(file)
+  fix <- data.table(vcf@fix)
+  gt <- data.table(vcf@gt)
+  all <- cbind(fix, gt)
+  
+  vcf_table <- all[grep("^NC_0499", all$CHROM), ]
+  
+  vcf_table$CHROM <- gsub("NC_0499.*?([0-9]+).*", "\\1", vcf_table$CHROM) # Rename CHROMs to just number
+  vcf_table$CHROM <- str_remove(vcf_table$CHROM, "^0+") # Remove leading zeros
+  vcf_table$CHROM <- as.numeric(vcf_table$CHROM) # Make CHROM numeric. This should allow for proper order plotting
+  
+  return(vcf_table)
+}
+
+split_vcf <- function(vcf){
+  vcf_table <- vcf %>%
+    separate(col=ref_chandler_longread, 
+               into = c("ref_GT","ref_DP","ref_AD","ref_GQ","ref_PL","ref_RNC"), sep=":") %>%
+    separate(col=term_chandler_longread, 
+               into = c("term_GT","term_DP","term_AD","term_GQ","term_PL","term_RNC"), sep=":") %>%
+    separate(col=cr2_longread, 
+               into = c("cr2_GT","cr2_DP","cr2_AD","cr2_GQ","cr2_PL","cr2_RNC"), sep=":")
+       
+       return(vcf_table)
+}
+
+site_filter <- function(split_vcf, qual = 40, gq = 1, depth = 30, site_type = "0/1"){
+  
+  # Ensure site_types are valid
+  valid_types <- c("0/0", "0/1", "1/1")
+  
+  if (!(site_type %in% valid_types)) {
+    stop("Invalid site_type. Choose from '0/1', '0/0', or '1/1'")
+  }
+  
+  # Convert columns to numeric
+  split_vcf$QUAL <- as.numeric(split_vcf$QUAL)
+  
+  #NAs would be generated from periodsin  the data from missing information for that site and individual. They are converted to -1 so that they are filtered out later in the function.
+  split_vcf$ref_GQ[split_vcf$ref_GQ == "."] <- -1
+  split_vcf$term_GQ[split_vcf$term_GQ == "."] <- -1
+  split_vcf$cr2_GQ[split_vcf$cr2_GQ == "."] <- -1
+  
+  split_vcf$ref_DP[split_vcf$ref_DP == "."] <- -1
+  split_vcf$term_DP[split_vcf$term_DP == "."] <- -1
+  split_vcf$cr2_DP[split_vcf$cr2_DP == "."] <- -1
+  
+  # Convert columns to numeric
+  split_vcf$ref_GQ <- as.numeric(split_vcf$ref_GQ)
+  split_vcf$term_GQ <- as.numeric(split_vcf$term_GQ)
+  split_vcf$cr2_GQ <- as.numeric(split_vcf$cr2_GQ)
+  
+  
+  split_vcf$ref_DP <- as.numeric(split_vcf$ref_DP)
+  split_vcf$term_DP <- as.numeric(split_vcf$term_DP)
+  split_vcf$cr2_DP <- as.numeric(split_vcf$cr2_DP)
+  
+  # Run the filter
+  filter_vcf <- split_vcf %>%
+    filter(QUAL >= qual) %>% 
+    filter(ref_GQ >= gq) %>% 
+    filter(term_GQ >= gq) %>%
+    filter(cr2_GQ >= gq) %>%
+    filter(ref_GT == site_type) %>%
+    filter(term_GT == site_type) %>%
+    filter(cr2_GT == site_type) %>%
+    filter(ref_DP >= depth) %>% 
+    filter(term_DP >= depth) %>%
+    filter(cr2_DP >= depth) %>%
+    separate(col=ref_AD, into = c("ref_REF_DP","ref_ALT_DP"), sep=",", convert = TRUE) %>%
+    separate(col=term_AD, into = c("term_REF_DP","term_ALT_DP"), sep=",", convert = TRUE) %>%
+    separate(col=cr2_AD, into = c("cr2_REF_DP","cr2_ALT_DP"), sep=",", convert = TRUE) %>%
+    mutate(ref_DP_DIFF = abs(ref_REF_DP - ref_ALT_DP)) %>%
+    mutate(term_DP_DIFF = abs(term_REF_DP - term_ALT_DP)) %>%
+    mutate(cr2_DP_DIFF = abs(cr2_REF_DP - cr2_ALT_DP)) %>%
+    #mutate(ref_DP = as.numeric(ref_DP)) %>%
+    #mutate(term_DP = as.numeric(term_DP)) %>%
+    #mutate(cr2_DP = as.numeric(cr2_DP)) %>%
+    mutate(ref_Scaled_DP_DIFF = ref_DP_DIFF/mean(ref_DP_DIFF)) %>%
+    mutate(term_Scaled_DP_DIFF = term_DP_DIFF/mean(term_DP_DIFF)) %>%
+    mutate(cr2_Scaled_DP_DIFF = cr2_DP_DIFF/mean(cr2_DP_DIFF)) %>%
+    mutate(ref_Scaled_DP = ref_DP/mean(ref_DP)) %>%
+    mutate(term_Scaled_DP = term_DP/mean(term_DP)) %>%
+    mutate(cr2_Scaled_DP = cr2_DP/mean(cr2_DP)) %>%
+    mutate(ref_Scaled_REF_DP = ref_REF_DP/mean(ref_REF_DP)) %>%
+    mutate(ref_Scaled_ALT_DP = ref_ALT_DP/mean(ref_ALT_DP)) %>%
+    mutate(term_Scaled_REF_DP = term_REF_DP/mean(term_REF_DP)) %>%
+    mutate(term_Scaled_ALT_DP = term_ALT_DP/mean(term_ALT_DP)) %>%
+    mutate(cr2_Scaled_REF_DP = cr2_REF_DP/mean(cr2_REF_DP)) %>%
+    mutate(cr2_Scaled_ALT_DP = cr2_ALT_DP/mean(cr2_ALT_DP))
+
+  return(filter_vcf)
+}
+
+# Diploid simulation for REF and ALT Depth
+simDiploid_REF_ALT_DP <- function(dp){
+  ref_depth <- rbinom(1, dp, 0.5)  # Simulating REF Depth
+  alt_depth <- dp - ref_depth     # Simulating ALT Depth
+  
+  depth_diff <- abs(ref_depth - alt_depth)  # Calculating Depth Difference
+  
+  return(list(ref_depth = ref_depth, alt_depth = alt_depth, depth_diff = depth_diff))
+}
+
+# Triploid simulation for REF and ALT Depth
+simTriploid_REF_ALT_DP <- function(dp){
+  ref_depth <- rbinom(1, dp, 1/3)  # Simulating REF Depth
+  alt_depth <- dp - ref_depth     # Simulating ALT Depth
+  
+  depth_diff <- abs(ref_depth - alt_depth)  # Calculating Depth Difference
+  
+  return(list(ref_depth = ref_depth, alt_depth = alt_depth, depth_diff = depth_diff))
+}
+
+# Asymmetric tetraploid simulation for REF and ALT Depth
+simAsymTetraploid_REF_ALT_DP <- function(dp){
+  ref_depth <- rbinom(1, dp, 1/4)  # Simulating REF Depth
+  alt_depth <- dp - ref_depth     # Simulating ALT Depth
+  
+  depth_diff <- abs(ref_depth - alt_depth)  # Calculating Depth Difference
+  
+  return(list(ref_depth = ref_depth, alt_depth = alt_depth, depth_diff = depth_diff))
+}
+
+# Diploid simulation
+sim_dip <- function(data, seed = 5){
+  set.seed(seed)  # Set the default seed
+  
+  sim_results_dip <- lapply(1:16, function(i) {
+    ref_chrom_data <- data$ref_DP[data$CHROM == i]
+    term_chrom_data <- data$term_DP[data$CHROM == i]
+    cr2_chrom_data <- data$cr2_DP[data$CHROM == i]
+    
+    ref_sim_data <- lapply(ref_chrom_data, function(y) simDiploid_REF_ALT_DP(y))
+    term_sim_data <- lapply(term_chrom_data, function(y) simDiploid_REF_ALT_DP(y))
+    cr2_sim_data <- lapply(cr2_chrom_data, function(y) simDiploid_REF_ALT_DP(y))
+    
+    # Create a data frame for each CHROM with all three columns
+    data.frame(
+      Simulation = rep(i, length(ref_sim_data)), 
+      CHROM = rep(i, length(ref_sim_data)), 
+      REF_Depth_Ref = sapply(ref_sim_data, function(x) x$ref_depth),
+      ALT_Depth_Ref = sapply(ref_sim_data, function(x) x$alt_depth),
+      Depth_Difference_Ref = sapply(ref_sim_data, function(x) x$depth_diff),
+      REF_Depth_Term = sapply(term_sim_data, function(x) x$ref_depth),
+      ALT_Depth_Term = sapply(term_sim_data, function(x) x$alt_depth),
+      Depth_Difference_Term = sapply(term_sim_data, function(x) x$depth_diff),
+      REF_Depth_Cr2 = sapply(cr2_sim_data, function(x) x$ref_depth),
+      ALT_Depth_Cr2 = sapply(cr2_sim_data, function(x) x$alt_depth),
+      Depth_Difference_Cr2 = sapply(cr2_sim_data, function(x) x$depth_diff)
+    )
+  })
+
+  sim_dip_df <- do.call(rbind, sim_results_dip)
+
+  return(sim_dip_df)
+} 
+
+
+# Triploid simulation for REF and ALT Depth
+simTriploid_REF_ALT_DP <- function(dp){
+  ref_depth <- rbinom(1, dp, 1/3)  # Simulating REF Depth
+  alt_depth <- dp - ref_depth     # Simulating ALT Depth
+  
+  depth_diff <- abs(ref_depth - alt_depth)  # Calculating Depth Difference
+  
+  return(list(ref_depth = ref_depth, alt_depth = alt_depth, depth_diff = depth_diff))
+}
+
+# Asymmetric tetraploid simulation for REF and ALT Depth
+simAsymTetraploid_REF_ALT_DP <- function(dp){
+  ref_depth <- rbinom(1, dp, 1/4)  # Simulating REF Depth
+  alt_depth <- dp - ref_depth     # Simulating ALT Depth
+  
+  depth_diff <- abs(ref_depth - alt_depth)  # Calculating Depth Difference
+  
+  return(list(ref_depth = ref_depth, alt_depth = alt_depth, depth_diff = depth_diff))
+}
+
+# Updated sim_tri function to simulate REF and ALT depths
+sim_tri <- function(data, seed = 5){
+  set.seed(seed)  # Set the default seed
+  
+  sim_results_tri <- lapply(1:16, function(i) {
+    ref_chrom_data <- data$ref_DP[data$CHROM == i]
+    term_chrom_data <- data$term_DP[data$CHROM == i]
+    cr2_chrom_data <- data$cr2_DP[data$CHROM == i]
+    
+    ref_sim_data <- lapply(ref_chrom_data, function(y) simTriploid_REF_ALT_DP(y))
+    term_sim_data <- lapply(term_chrom_data, function(y) simTriploid_REF_ALT_DP(y))
+    cr2_sim_data <- lapply(cr2_chrom_data, function(y) simTriploid_REF_ALT_DP(y))
+    
+    # Create a data frame for each CHROM with all three columns
+    data.frame(
+      Simulation = rep(i, length(ref_sim_data)), 
+      CHROM = rep(i, length(ref_sim_data)), 
+      REF_Depth_Ref = sapply(ref_sim_data, function(x) x$ref_depth),
+      ALT_Depth_Ref = sapply(ref_sim_data, function(x) x$alt_depth),
+      Depth_Difference_Ref = sapply(ref_sim_data, function(x) x$depth_diff),
+      REF_Depth_Term = sapply(term_sim_data, function(x) x$ref_depth),
+      ALT_Depth_Term = sapply(term_sim_data, function(x) x$alt_depth),
+      Depth_Difference_Term = sapply(term_sim_data, function(x) x$depth_diff),
+      REF_Depth_Cr2 = sapply(cr2_sim_data, function(x) x$ref_depth),
+      ALT_Depth_Cr2 = sapply(cr2_sim_data, function(x) x$alt_depth),
+      Depth_Difference_Cr2 = sapply(cr2_sim_data, function(x) x$depth_diff)
+    )
+  })
+
+  sim_tri_df <- do.call(rbind, sim_results_tri)
+
+  return(sim_tri_df)
+} 
+
+# Updated sim_tetra function to simulate REF and ALT depths
+sim_tetra <- function(data, seed = 5){
+  set.seed(seed)  # Set the default seed
+  
+  sim_results_tetra <- lapply(1:16, function(i) {
+    ref_chrom_data <- data$ref_DP[data$CHROM == i]
+    term_chrom_data <- data$term_DP[data$CHROM == i]
+    cr2_chrom_data <- data$cr2_DP[data$CHROM == i]
+    
+    ref_sim_data <- lapply(ref_chrom_data, function(y) simAsymTetraploid_REF_ALT_DP(y))
+    term_sim_data <- lapply(term_chrom_data, function(y) simAsymTetraploid_REF_ALT_DP(y))
+    cr2_sim_data <- lapply(cr2_chrom_data, function(y) simAsymTetraploid_REF_ALT_DP(y))
+    
+    # Create a data frame for each CHROM with all three columns
+    data.frame(
+      Simulation = rep(i, length(ref_sim_data)), 
+      CHROM = rep(i, length(ref_sim_data)), 
+      REF_Depth_Ref = sapply(ref_sim_data, function(x) x$ref_depth),
+      ALT_Depth_Ref = sapply(ref_sim_data, function(x) x$alt_depth),
+      Depth_Difference_Ref = sapply(ref_sim_data, function(x) x$depth_diff),
+      REF_Depth_Term = sapply(term_sim_data, function(x) x$ref_depth),
+      ALT_Depth_Term = sapply(term_sim_data, function(x) x$alt_depth),
+      Depth_Difference_Term = sapply(term_sim_data, function(x) x$depth_diff),
+      REF_Depth_Cr2 = sapply(cr2_sim_data, function(x) x$ref_depth),
+      ALT_Depth_Cr2 = sapply(cr2_sim_data, function(x) x$alt_depth),
+      Depth_Difference_Cr2 = sapply(cr2_sim_data, function(x) x$depth_diff)
+    )
+  })
+
+  sim_tetra_df <- do.call(rbind, sim_results_tetra)
+
+  return(sim_tetra_df)
+} 
+
+## Combine
+combine_data <- function(real_data, diploid_sim_data = NULL, 
+                         triploid_sim_data = NULL, tetraploid_sim_data = NULL){
+  
+  real_data$Source <- "Observed"
+  real_df <- real_data %>%
+    select(CHROM, REF_Depth_Ref = ref_REF_DP, ALT_Depth_Ref = ref_ALT_DP, Depth_Difference_Ref = ref_DP_DIFF, 
+           REF_Depth_Term = term_REF_DP, ALT_Depth_Term = term_ALT_DP, Depth_Difference_Term = term_DP_DIFF, 
+           REF_Depth_Cr2 = cr2_REF_DP, ALT_Depth_Cr2 = cr2_ALT_DP, Depth_Difference_Cr2 = cr2_DP_DIFF, 
+           Source = Source)  # Adjust column names accordingly
+  
+  # Combine real and simulated data frames
+  combined_df <- list(real_df = real_df)
+  
+  sim_data_list <- list(diploid_sim_data = diploid_sim_data, 
+                        triploid_sim_data = triploid_sim_data, 
+                        tetraploid_sim_data = tetraploid_sim_data)
+  sim_names <- c("Diploid Simulation", "Triploid Simulation", "Asymmetric Tetraploid Simulation")
+  
+  for (i in seq_along(sim_data_list)) {
+    if (!is.null(sim_data_list[[i]])) {
+      sim_data_list[[i]]$Source <- sim_names[i]
+      sim_df <- sim_data_list[[i]] %>%
+        select(CHROM, REF_Depth_Ref, ALT_Depth_Ref, Depth_Difference_Ref,
+               REF_Depth_Term, ALT_Depth_Term, Depth_Difference_Term,
+               REF_Depth_Cr2, ALT_Depth_Cr2, Depth_Difference_Cr2,
+               Source)  # Adjust column names accordingly
+      
+      combined_df[[paste("sim_", i, "_df", sep = "")]] <- sim_df
+    }
+  }
+  
+  combined_df <- do.call(rbind, combined_df)
+  
+  return(combined_df) 
+}
+
+## Plot
+real_v_sim_plot <- function(combined_df, difference_type = NULL, title = NULL,
+                            x_axis = "Difference in depth", y_axis = "Density",
+                            alpha_value = 0.5, specified_chromosomes = NULL, 
+                            density_plot = TRUE, bin_number = 30) {
+  
+  # Optionally filter for specified chromosomes
+  if (!is.null(specified_chromosomes)) {
+    combined_df <- combined_df %>%
+      filter(CHROM %in% specified_chromosomes)
+  }
+  
+  # Plot
+  if (density_plot) {
+    combined_long <- combined_df %>%
+      pivot_longer(cols = starts_with("Depth_Difference"),
+                   names_to = "Difference_Type", values_to = "Difference_Value")
+    
+    plot <- ggplot(combined_long %>% filter(Difference_Type == !!difference_type), 
+                   aes(x = Difference_Value, fill = forcats::fct_relevel(Source, "Asymmetric Tetraploid Simulation", "Triploid Simulation", "Diploid Simulation", "Observed"))) +
+      geom_density(alpha = alpha_value) +
+      scale_fill_manual(values = c("Observed" = "yellow", 
+                                    "Diploid Simulation" = "red3", 
+                                    "Triploid Simulation" = "slateblue2", 
+                                    "Asymmetric Tetraploid Simulation" = "seagreen2")) +
+      facet_wrap(~ CHROM + Difference_Type, ncol = 4, 
+                 labeller = labeller(Difference_Type = function(labels) "")) +
+      labs(title = title, x = x_axis, y = y_axis) +
+      guides(fill = guide_legend(reverse = TRUE)) +
+      theme_classic() +
+      theme(plot.title = element_text(hjust = 0.5, face = "bold"), legend.position = "bottom",
+            legend.title = element_blank(), strip.text = element_blank(), 
+            strip.text.x = element_text(size = 8, face = "bold"), strip.background = element_blank())
+  } else {
+    combined_long <- combined_df %>%
+      pivot_longer(cols = starts_with("Depth_Difference"),
+                   names_to = "Difference_Type", values_to = "Difference_Value")
+    
+    plot <- ggplot(combined_long %>% filter(Difference_Type == !!difference_type),
+                   aes(x = Difference_Value, fill = forcats::fct_relevel(Source, "Asymmetric Tetraploid Simulation", "Triploid Simulation", "Diploid Simulation", "Observed"))) +
+      geom_histogram(alpha = alpha_value, position = "identity", bins = bin_number) +
+      scale_fill_manual(values = c("Observed" = "yellow", 
+                                    "Diploid Simulation" = "red3", 
+                                    "Triploid Simulation" = "slateblue2", 
+                                    "Asymmetric Tetraploid Simulation" = "seagreen2")) +
+      facet_wrap(~ CHROM + Difference_Type, ncol = 4, 
+                 labeller = labeller(Difference_Type = function(labels) "")) +
+      labs(title = title, x = x_axis, y = y_axis) +
+      guides(fill = guide_legend(reverse = TRUE)) +
+      theme_classic() +
+      theme(plot.title = element_text(hjust = 0.5, face = "bold"), legend.position = "bottom",
+            legend.title = element_blank(), strip.text = element_blank(), 
+            strip.text.x = element_text(size = 8, face = "bold"), strip.background = element_blank())
+  }
+  
+  return(plot)
+}
+
+ref_alt_dp_table <- function(het_table, prefix) {
+  ref_col <- paste0(prefix, "_REF_DP")
+  alt_col <- paste0(prefix, "_ALT_DP")
+  
+  selected_table <- het_table %>%
+    select(CHROM, POS, !!as.name(ref_col), !!as.name(alt_col))
+  
+  return(selected_table)
+}
+
+chi_sq_sites <- function(ref, alt) {
+  observed <- c(ref, alt)
+  expected <- c(0.5, 0.5)
+  chi_sq <- chisq.test(observed, p = expected)
+  return(chi_sq$p.value)
+}
+```
+
+## Looking at new functions
+```{r}
+# read in VCF
+longread_data <- import_vcf("./Data/VCFs/Cohort_VCF/Ref_Primary_Aligned/chandler_longread.vcf.gz")
+# Split VCF
+longread_data <- split_vcf(longread_data)
+# Filter for heterozygous sites, these are all shared
+longread_het_data <- site_filter(longread_data)
+test_dip <- sim_dip(longread_het_data)
+test_tri <- sim_tri(longread_het_data)
+test_tetra <- sim_tetra(longread_het_data)
+test_combined <- combine_data(real_data = longread_het_data, 
+                               diploid_sim_data = test_dip, 
+                               triploid_sim_data = test_tri, 
+                               tetraploid_sim_data = test_tetra)
+
+real_v_sim_plot(test_combined, difference_type = "Depth_Difference_Ref")
+#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/ref_chandler_depth_diff_per_chr.pdf", height = 4, width = 8)
+#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/ref_chandler_depth_diff_per_chr.png", height = 4, width = 8)
+
+real_v_sim_plot(test_combined, difference_type = "Depth_Difference_Term")
+#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/term_chandler_depth_diff_per_chr.pdf", height = 4, width = 8)
+#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/term_chandler_depth_diff_per_chr.png", height = 4, width = 8)
+
+real_v_sim_plot(test_combined, difference_type = "Depth_Difference_Cr2")
+#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/cr2_depth_diff_per_chr.pdf", height = 4, width = 8)
+#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/cr2_depth_diff_per_chr.png", height = 4, width = 8)
+
+real_v_sim_plot(test_combined, difference_type = "Depth_Difference_Cr2", specified_chromosomes = c(1,4,9))
+#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/cr2_depth_diff_chr149.pdf", height = 3, width = 7)
+#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/cr2_depth_diff_chr149.png", height = 3, width = 7)
+
+real_v_sim_plot(test_combined, difference_type = "Depth_Difference_Ref", specified_chromosomes = c(1,4,9))
+#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/ref_depth_diff_chr149.pdf", height = 3, width = 7)
+#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/ref_depth_diff_chr149.png", height = 3, width = 7)
+
+real_v_sim_plot(test_combined, difference_type = "Depth_Difference_Term", specified_chromosomes = c(1,4,9))
+#ggsave("./Figures/Aneuploidy_Identification/term_depth_diff_chr149.pdf", height = 3, width = 7)
+#ggsave("./Figures/Aneuploidy_Identification/term_depth_diff_chr149.png", height = 3, width = 7)
+  
+test_combined$P_Value_Ref <- mapply(chi_sq_sites, test_combined$REF_Depth_Ref, test_combined$ALT_Depth_Ref)
+test_combined$P_Value_Term <- mapply(chi_sq_sites, test_combined$REF_Depth_Term, test_combined$ALT_Depth_Term)
+test_combined$P_Value_Cr2 <- mapply(chi_sq_sites, test_combined$REF_Depth_Cr2, test_combined$ALT_Depth_Cr2)
+
+
+combined_long <- test_combined %>%
+      pivot_longer(cols = starts_with("P_Value"),
+                   names_to = "P_Value_Type", values_to = "P_Value")
+
+    
+ggplot(combined_long %>% filter(P_Value_Type == "P_Value_Ref"), 
+                   aes(x = P_Value_Type, y = P_Value, fill = forcats::fct_relevel(Source, "Asymmetric Tetraploid Simulation", "Triploid Simulation", "Diploid Simulation", "Observed"))) +
+      geom_point(aes(alpha = 0.5)) +
+      scale_fill_manual(values = c("Observed" = "yellow", 
+                                    "Diploid Simulation" = "red3", 
+                                    "Triploid Simulation" = "slateblue2", 
+                                    "Asymmetric Tetraploid Simulation" = "seagreen2")) +
+      facet_wrap(~ CHROM, ncol = 4, 
+                 labeller = labeller(P_Value_Type = function(labels) "")) +
+      labs(title = "title", x = "x_axis", y = "y_axis") +
+      guides(fill = guide_legend(reverse = TRUE)) +
+      theme_classic() +
+      theme(plot.title = element_text(hjust = 0.5, face = "bold"), legend.position = "bottom",
+            legend.title = element_blank(), strip.text = element_blank(), 
+            strip.text.x = element_text(size = 8, face = "bold"), strip.background = element_blank())
+
+
+```
+
+Working on a new plot function
+```{r, eval=FALSE}
+chi_sq_plot <- function(combined_df, difference_type = NULL, title = NULL,
+                            x_axis = "Difference in depth", y_axis = "Density",
+                            alpha_value = 0.5, specified_chromosomes = NULL, 
+                            density_plot = TRUE, bin_number = 30) {
+  
+  # Optionally filter for specified chromosomes
+  if (!is.null(specified_chromosomes)) {
+    combined_df <- combined_df %>%
+      filter(CHROM %in% specified_chromosomes)
+  }
+  
+  # Plot
+  if (density_plot) {
+    combined_long <- combined_df %>%
+      pivot_longer(cols = starts_with("Depth_Difference"),
+                   names_to = "Difference_Type", values_to = "Difference_Value")
+    
+    plot <- ggplot(combined_long %>% filter(Difference_Type == !!difference_type), 
+                   aes(x = Difference_Value, fill = forcats::fct_relevel(Source, "Asymmetric Tetraploid Simulation", "Triploid Simulation", "Diploid Simulation", "Observed"))) +
+      geom_density(alpha = alpha_value) +
+      scale_fill_manual(values = c("Observed" = "yellow", 
+                                    "Diploid Simulation" = "red3", 
+                                    "Triploid Simulation" = "slateblue2", 
+                                    "Asymmetric Tetraploid Simulation" = "seagreen2")) +
+      facet_wrap(~ CHROM + Difference_Type, ncol = 4, 
+                 labeller = labeller(Difference_Type = function(labels) "")) +
+      labs(title = title, x = x_axis, y = y_axis) +
+      guides(fill = guide_legend(reverse = TRUE)) +
+      theme_classic() +
+      theme(plot.title = element_text(hjust = 0.5, face = "bold"), legend.position = "bottom",
+            legend.title = element_blank(), strip.text = element_blank(), 
+            strip.text.x = element_text(size = 8, face = "bold"), strip.background = element_blank())
+  }
+  
+  return(plot)
+}
+```
+
+## Plotting depths
+```{r}
+# Looking at main data
+long_dp <- longread_het_data %>%
+  pivot_longer(cols = ends_with("Scaled_DP"), names_to = "Source_DP", values_to = "Scaled_DP")
+  
+
+long_dp %>%
+  ggplot(aes(x= CHROM, y=Scaled_DP, fill=Source_DP))+
+  geom_boxplot(outlier.size = 0, outlier.color = NA)+
+  theme_classic()+
+  theme(strip.background = element_blank(), legend.position = "bottom",
+        axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+        strip.text.x = element_text(face = "bold"),
+        axis.title = element_text(face = "bold")) +
+  facet_grid(~CHROM, scales = "free_x", space = "free")+
+  scale_x_discrete("Chromosome")+
+  scale_y_continuous(name="Mean scaled depth", limits=c(min(long_dp$Scaled_DP), 2))+
+  scale_fill_brewer(palette = "Dark2", labels = c("Somatic Embryo Culture", "Tree 1", "Tree 2")) +
+  labs(fill = NULL)
+
+# Assigning a haplotype
+linkage.map <- fread("./Data/Linkage_Maps/map_LBF2401_RefChandlerPrimary.csv")
+setnames(linkage.map, old = c("chr", "bp", "hap1", "hap2"), new = c("CHROM", "POS", "Hap1", "Hap2"))
+
+long_dp_haps <- merge(long_dp, linkage.map, by = c("CHROM", "POS"), all = FALSE) %>%
+  pivot_longer(cols = ends_with("Scaled_REF_DP"), names_to = "REF_DP_Source", values_to = "Scaled_REF_DP") %>%
+  pivot_longer(cols = ends_with("Scaled_ALT_DP"), names_to = "ALT_DP_Source", values_to = "Scaled_ALT_DP")
+
+selected_long_haps <- long_dp_haps %>%
+  select(CHROM, POS, REF, ALT, Hap1, Hap2, Scaled_REF_DP, REF_DP_Source, Scaled_ALT_DP, ALT_DP_Source)
+
+trial <- selected_long_haps %>%
+  mutate(Variant_is_hap1 = case_when(ALT == Hap1 ~ TRUE, TRUE ~ FALSE)) %>%
+  mutate(Variant_is_hap2 = case_when(ALT == Hap2 ~ TRUE, TRUE ~ FALSE))
+
+unique_trial <- distinct(trial)
+
+trial_hap1 <- unique_trial %>%
+  select(-c(ALT, ALT_DP_Source, Scaled_ALT_DP)) %>%
+  filter(Variant_is_hap1 == FALSE) %>%
+  mutate(Haplotype = "hap1") 
+
+unique_hap1 <- distinct(trial_hap1)
+
+trial_hap2 <- trial %>%
+  select(-c(REF, REF_DP_Source, Scaled_REF_DP)) %>%
+  filter(Variant_is_hap2 == TRUE) %>%
+  mutate(Haplotype = "hap2")
+
+unique_hap2 <- distinct(trial_hap2)
+
+unique_hap1 %>%
+  ggplot(aes(x = factor(CHROM), y = Scaled_REF_DP, fill = interaction(REF_DP_Source, Haplotype))) +
+  geom_boxplot(outlier.size = 0, outlier.color = NA) +
+  theme_classic() +
+  theme(strip.background = element_blank(), legend.position = "bottom",
+        axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+        strip.text.x = element_text(face = "bold"),
+        axis.title = element_text(face = "bold")) +
+  labs(x = "Chromosome", y = "Scaled Haplotype 1 Depth", fill = "Group") +
+  facet_grid(~CHROM, scales = "free_x", space = "free") +
+  scale_fill_brewer(palette = "Dark2", labels = c("Somatic Embryo Culture\nHaplotype 1", "Tree 1\nHaplotype 1", "Tree 2\nHaplotype 1")) +
+  labs(fill = NULL)
+
+unique_hap2 %>%
+  ggplot(aes(x = factor(CHROM), y = Scaled_ALT_DP, fill = interaction(ALT_DP_Source, Haplotype))) +
+  geom_boxplot(outlier.size = 0, outlier.color = NA) +
+  theme_classic() +
+  theme(strip.background = element_blank(), legend.position = "bottom",
+        axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+        strip.text.x = element_text(face = "bold"),
+        axis.title = element_text(face = "bold")) +
+  labs(x = "Chromosome", y = "Scaled Haplotype 2 Depth", fill = "Group") +
+  facet_grid(~CHROM, scales = "free_x", space = "free") +
+  scale_fill_brewer(palette = "Dark2", labels = c("Somatic Embryo Culture\nHaplotype 2", "Tree 1\nHaplotype 2", "Tree 2\nHaplotype 2")) +
+  labs(fill = NULL)
+
+edit_hap1 <- unique_hap1 %>%
+  mutate(Interaction_Column = interaction(REF_DP_Source, Haplotype)) %>%
+  mutate(ALT = NA) %>%
+  mutate(Scaled_ALT_DP = NA) %>%
+  mutate(ALT_DP_Source = NA)
+
+edit_hap2 <- unique_hap2 %>%
+  mutate(Interaction_Column = interaction(ALT_DP_Source, Haplotype)) %>%
+  mutate(REF = NA) %>%
+  mutate(Scaled_REF_DP = NA) %>%
+  mutate(REF_DP_Source = NA)
+  
+
+combo_haps <- rbind(edit_hap1, edit_hap2)
+
+combo_haps <- combo_haps %>%
+  rowwise() %>%
+  mutate(Combined_Scaled_DP = coalesce(Scaled_REF_DP, Scaled_ALT_DP))
+
+combo_haps %>%
+  ggplot(aes(x = factor(CHROM), y = Combined_Scaled_DP, fill = Interaction_Column)) +
+  geom_boxplot(outlier.size = 0, outlier.color = NA) +
+  theme_classic() +
+  theme(strip.background = element_blank(), legend.position = "bottom",
+        strip.text.x = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  labs(x = "Chromosome", y = "Scaled Depth") +
+  facet_grid(~CHROM + Haplotype, scales = "free_x", space = "free") +
+  scale_fill_manual(values = c("cr2_Scaled_REF_DP.hap1" = "orangered", "ref_Scaled_REF_DP.hap1" = "seagreen",
+                               "term_Scaled_REF_DP.hap1" = "seagreen", "cr2_Scaled_ALT_DP.hap2" = "orangered",
+                               "ref_Scaled_ALT_DP.hap2" = "seagreen", "term_Scaled_ALT_DP.hap2" = "seagreen"),
+                      name = NULL,
+                      breaks = c("cr2_Scaled_REF_DP.hap1", "ref_Scaled_REF_DP.hap1", "term_Scaled_REF_DP.hap1"),
+                      labels = c("HiFi Embryo", "Reference Tree", "Tree 2"))
+
+
+#ggsave("./Figures/Aneuploidy_Identification/depth_boxplots_by_haplotype.pdf", height = 4, width = 12)
+#ggsave("./Figures/Aneuploidy_Identification/depth_boxplots_by_haplotype.png", height = 4, width = 12)
+```
+
+
+
+## TRying new plot function for simulation only plotting
+```{r}
+real_v_sim_plot <- function(combined_df, difference_type = NULL, title = NULL,
+                            x_axis = "Difference in depth", y_axis = "Density",
+                            alpha_value = 0.5, specified_chromosomes = NULL, 
+                            density_plot = TRUE, bin_number = 30, exclude_source = NULL) {
+  
+  # Optionally filter for specified chromosomes
+  if (!is.null(specified_chromosomes)) {
+    combined_df <- combined_df %>%
+      dplyr::filter(CHROM %in% specified_chromosomes)
+  }
+  
+  # Optionally exclude specified sources
+  if (!is.null(exclude_source)) {
+    combined_df <- combined_df %>%
+      dplyr::filter(!Source %in% exclude_source)
+  }
+  
+  # Data transformation for plotting
+  combined_long <- combined_df %>%
+    tidyr::pivot_longer(cols = starts_with("Depth_Difference"),
+                        names_to = "Difference_Type", values_to = "Difference_Value")
+  
+  # Plot setup
+  plot <- ggplot(combined_long %>% dplyr::filter(Difference_Type == !!difference_type), 
+                 aes(x = Difference_Value, fill = forcats::fct_relevel(Source, "Asymmetric Tetraploid Simulation", "Triploid Simulation", "Diploid Simulation", "Observed"))) +
+    {
+      if (density_plot) {
+        geom_density(alpha = alpha_value)
+      } else {
+        geom_histogram(alpha = alpha_value, position = "identity", bins = bin_number)
+      }
+    } +
+    scale_fill_manual(values = c("Observed" = "yellow", 
+                                 "Diploid Simulation" = "red3", 
+                                 "Triploid Simulation" = "slateblue2", 
+                                 "Asymmetric Tetraploid Simulation" = "seagreen2")) +
+    facet_wrap(~ CHROM + Difference_Type, ncol = 4, 
+               labeller = labeller(Difference_Type = function(labels) "")) +
+    labs(title = title, x = x_axis, y = y_axis) +
+    guides(fill = guide_legend(reverse = TRUE)) +
+    theme_classic() +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"), legend.position = "bottom",
+          legend.title = element_blank(), strip.text = element_blank(), 
+          strip.text.x = element_text(size = 8, face = "bold"), strip.background = element_blank())
+  
+  return(plot)
+}
+
+
+real_v_sim_plot(combined_df = test_combined, difference_type = "Depth_Difference_Cr2",
+                specified_chromosomes = c(1, 4, 9), exclude_source = "Observed")
+ggsave("./Figures/Aneuploidy_Identification/cr2_depth_diff_chr149_sim_only.pdf", height = 3, width = 7)
+ggsave("./Figures/Aneuploidy_Identification/cr2_depth_diff_chr149_sim_only.png", height = 3, width = 7)
+
+real_v_sim_plot(combined_df = test_combined, difference_type = "Depth_Difference_Ref",
+                specified_chromosomes = c(1, 4, 9), exclude_source = "Observed")
+ggsave("./Figures/Aneuploidy_Identification/ref_depth_diff_chr149_sim_only.pdf", height = 3, width = 7)
+ggsave("./Figures/Aneuploidy_Identification/ref_depth_diff_chr149_sim_only.png", height = 3, width = 7)
+
+real_v_sim_plot(combined_df = test_combined, difference_type = "Depth_Difference_Term",
+                specified_chromosomes = c(1, 4, 9), exclude_source = "Observed")
+ggsave("./Figures/Aneuploidy_Identification/term_depth_diff_chr149_sim_only.pdf", height = 3, width = 7)
+ggsave("./Figures/Aneuploidy_Identification/term_depth_diff_chr149_sim_only.png", height = 3, width = 7)
+```
+
+## Checking with phased haplotypes and denovo snps
+```{r}
+all_dn_combo.vcf <- fread("./Data/VCFs/Filtered/all_dn_combined_haps.vcf")
+
+mean_dps <- all_dn_combo.vcf %>%
+  group_by(Source) %>%
+  summarise(avg_depth = mean(DP))
+
+test <- left_join(all_dn_combo.vcf, mean_dps)
+
+test <- test %>%
+  mutate(norm_DP = DP/avg_depth)
+
+test %>%
+  filter(Seq_Type == "HiFi") %>%
+  ggplot(aes(x = CHROM, y = norm_DP, fill = Source)) +
+  geom_boxplot(outlier.shape = NA) +
+  theme_classic() +
+  theme(strip.background = element_blank(), legend.position = "bottom",
+        strip.text.x = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  labs(x = "Chromosome", y = "Depth") +
+  ylim(0,2) +
+  facet_grid(~CHROM + Hap, scales = "free_x", space = "free")
+```
+

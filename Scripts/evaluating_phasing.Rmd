@@ -1,0 +1,529 @@
+---
+title: "evaluating_phasing"
+author: "Matthew Davis"
+date: "2024-02-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(data.table)
+```
+
+## Functions
+```{r}
+read_syri <- function(path) {
+  data <- fread(path)
+  
+  data <- data %>%
+      filter(V11 == "SNP") %>%
+      filter(V11 != "NOTAL")
+  
+  data$V1 <- gsub("NC_0499.*?([0-9]+).*", "\\1", data$V1) # Rename CHROMs to just number
+  data$V1 <- str_remove(data$V1, "^0+") # Remove leading zeros
+  data$V1 <- as.numeric(data$V1) # Make CHROM numeric. This should allow for proper order plotting
+  
+  data$V6 <- gsub("NC_0499.*?([0-9]+).*", "\\1", data$V6)
+  data$V6 <- str_remove(data$V6, "^0+")
+  data$V6 <- as.numeric(data$V6)
+  
+  data$V2 <- as.numeric(data$V2)
+
+  
+  return(data)
+}
+
+merge_linkage <- function(syri_data, linkage_map, hap){
+  
+  combined_data <- merge(syri_data, linkage_map, by = c("CHROM_Pri", "POS_Pri"), all = FALSE)
+  combined_data <- combined_data %>%
+    select(c("CHROM_Pri", "Pri_Call", "POS_Pri", hap, "Hap1_Map", "Hap2_Map", "dist"))
+  
+  return(combined_data)
+}
+
+# Function for breakpoints
+breakpoints <- function(path_to_data){
+   
+  # Read in data
+  data <- fread(path_to_data, skip = 2, fill = TRUE)
+  
+  # Remove extraneous contigs/scaffolds
+  data <- data[grepl("NC_04", data$V1),] # Select for chromosomes
+ 
+
+  # Filter for columns by chromosome breaks and select columns
+  data <- data %>% 
+  filter(V5=="W") %>%
+  select(V1,V3)
+  
+  # Rename columns
+  colnames(data) <- c("CHROM_Pri", "end")
+  
+  # Renaming chromosomes
+  data$CHROM_Pri <- gsub("NC_0499.*?([0-9]+).*", "\\1", data$CHROM_Pri) # Rename chromosomes to just number
+  data$CHROM_Pri <- str_remove(data$CHROM_Pri, "^0+") # Remove leading zeros
+  data$CHROM_Pri <- as.numeric(data$CHROM_Pri) # Make CHROM numeric. This should allow for proper order plotting
+  
+  return(data)
+}
+
+plot_linkage <- function(merged_table, breakpoints = NULL, title, 
+                         point_color_true = "navy", point_color_false = "gold2",
+                         vline_color = "black", vline_type = 3, vline_width = 0.75,
+                         plot_values = "both") {
+  
+  filtered_table <- switch(plot_values,
+                           "true" = merged_table %>% filter(Is_hap1 == TRUE),
+                           "false" = merged_table %>% filter(Is_hap1 == FALSE),
+                           "both" = merged_table)
+  
+  plot <- filtered_table %>%
+    ggplot(aes(x = POS_Pri, y = dist, color = Is_hap1)) +
+    geom_point(aes(color = Is_hap1), size = 3, alpha = 0.5) +
+    facet_wrap(~ CHROM_Pri, scales = "free") +
+    labs(color = "Haplotype", x = "Position", y = "Distance (cM)", title = title) +
+    scale_color_manual(values = c("TRUE" = point_color_true, "FALSE" = point_color_false),
+                       labels = c("Haplotype 2", "Haplotype 1")) + 
+    scale_x_continuous(labels = function(x) sprintf("%.1f", x / 1e6)) + 
+    guides(color = guide_legend(reverse = TRUE)) +
+    theme_classic() +
+    theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5, face = "bold"))
+  
+  if (!is.null(breakpoints)) {
+    plot <- plot +
+      geom_vline(data = breakpoints,
+                 aes(xintercept = end),
+                 color = vline_color,
+                 linetype = vline_type, 
+                 linewidth = vline_width)
+  }
+  
+  return(plot)
+}
+```
+
+## Read in data
+```{r}
+#Omni-C assembly syri out files
+hap1_omnic.syri <- read_syri("./Data/Syri_Out/ref_chandler_hap1_to_primary_syri.out") # NAs are not in relevant sites
+colnames(hap1_omnic.syri) <- c("CHROM_Pri", "POS_Pri", "POS_End", "Pri_Call", "Hap1_Call", "CHROM_Hap1", "Hap1_Start", "Hap1_End", "UniqueID", "ParentID", "Anno_Type", "Copy_Status") 
+hap2_omnic.syri <- read_syri("./Data/Syri_Out/ref_chandler_hap2_to_primary_syri.out")
+colnames(hap2_omnic.syri) <- c("CHROM_Pri", "POS_Pri", "POS_End", "Pri_Call", "Hap2_Call", "CHROM_Hap2", "Hap2_Start", "Hap2_End", "UniqueID", "ParentID", "Anno_Type", "Copy_Status") 
+
+#No Omni-C assembly syri out files
+hap1_no_omnic.syri <- read_syri("./Data/Syri_Out/ref_chandler_hap1_to_primary_no_omnic_syri.out") # NAs are not in relevant sites
+colnames(hap1_no_omnic.syri) <- c("CHROM_Pri", "POS_Pri", "POS_End", "Pri_Call", "Hap1_Call", "CHROM_Hap1", "Hap1_Start", "Hap1_End", "UniqueID", "ParentID", "Anno_Type", "Copy_Status") 
+hap2_no_omnic.syri <- read_syri("./Data/Syri_Out/ref_chandler_hap2_to_primary_no_omnic_syri.out")
+colnames(hap2_no_omnic.syri) <- c("CHROM_Pri", "POS_Pri", "POS_End", "Pri_Call", "Hap2_Call", "CHROM_Hap2", "Hap2_Start", "Hap2_End", "UniqueID", "ParentID", "Anno_Type", "Copy_Status") 
+
+# Omni-C linkage map
+linkage_omnic.map <- fread("./Data/Linkage_Maps/map_LBF2402_yesOmniC.csv")
+setnames(linkage_omnic.map, old = c("chr", "bp", "hap1", "hap2"), new = c("CHROM_Pri", "POS_Pri", "Hap1_Map", "Hap2_Map"))
+linkage_omnic.map <- linkage_omnic.map %>%
+  select(c(CHROM_Pri, POS_Pri, Hap1_Map, Hap2_Map, dist))
+
+# No Omni-C linkage map
+linkage_e9.map <- fread("./Data/Linkage_Maps/map_LBF2402_noOmniC_e-9.csv")
+setnames(linkage_e9.map, old = c("chr", "bp", "hap1", "hap2"), new = c("CHROM_Pri", "POS_Pri", "Hap1_Map", "Hap2_Map"))
+linkage_e9.map <- linkage_e9.map %>%
+  select(c(CHROM_Pri, POS_Pri, Hap1_Map, Hap2_Map, dist))
+
+linkage_e10.map <- fread("./Data/Linkage_Maps/map_LBF2402_noOmniC_e-10.csv")
+setnames(linkage_e10.map, old = c("chr", "bp", "hap1", "hap2"), new = c("CHROM_Pri", "POS_Pri", "Hap1_Map", "Hap2_Map"))
+linkage_e10.map <- linkage_e10.map %>%
+  select(c(CHROM_Pri, POS_Pri, Hap1_Map, Hap2_Map, dist))
+
+# Omni-C contig Breakpoints
+ref_h1_omnic.break <- breakpoints(path_to_data = "./Data/AGPs/ref_chandler_hap1_default_scaffold.agp")
+ref_h2_omnic.break <- breakpoints(path_to_data = "./Data/AGPs/ref_chandler_hap2_default_scaffold.agp")
+
+# No Omni-C contig breakpoints
+```
+
+## Look at calls in naming data
+```{r}
+# Omni-C maps
+hap1_omnic_linkage <- merge_linkage(hap1_omnic.syri, linkage_omnic.map, hap = "Hap1_Call")
+hap1_omnic_linkage <- hap1_omnic_linkage %>% 
+  mutate(Is_hap1 = case_when(Hap1_Call == Hap1_Map ~ TRUE, TRUE ~ FALSE)) %>%
+  mutate(Is_hap2 = case_when(Hap1_Call == Hap2_Map ~ TRUE, TRUE ~ FALSE)) %>%
+  mutate(Assembly = "1")
+sum(hap1_omnic_linkage$Is_hap1 == TRUE)
+sum(hap1_omnic_linkage$Is_hap2 == TRUE)
+
+hap2_omnic_linkage <- merge_linkage(hap2_omnic.syri, linkage_omnic.map, hap = "Hap2_Call")
+hap2_omnic_linkage <- hap2_omnic_linkage %>% 
+  mutate(Is_hap1 = case_when(Hap2_Call == Hap1_Map ~ TRUE, TRUE ~ FALSE)) %>%
+  mutate(Is_hap2 = case_when(Hap2_Call == Hap2_Map ~ TRUE, TRUE ~ FALSE)) %>%
+  mutate(Assembly = "2")
+sum(hap2_omnic_linkage$Is_hap1 == TRUE)
+sum(hap2_omnic_linkage$Is_hap2 == TRUE)
+
+# No Omni-C Maps
+hap1_e10_linkage <- merge_linkage(hap1_no_omnic.syri, linkage_e10.map, hap = "Hap1_Call")
+hap1_e10_linkage <- hap1_e10_linkage %>% 
+  mutate(Is_hap1 = case_when(Hap1_Call == Hap1_Map ~ TRUE, TRUE ~ FALSE)) %>%
+  mutate(Is_hap2 = case_when(Hap1_Call == Hap2_Map ~ TRUE, TRUE ~ FALSE))
+sum(hap1_e10_linkage$Is_hap1 == TRUE)
+sum(hap1_e10_linkage$Is_hap2 == TRUE)
+
+hap2_e10_linkage <- merge_linkage(hap2_no_omnic.syri, linkage_e10.map, hap = "Hap2_Call")
+hap2_e10_linkage <- hap2_e10_linkage %>% 
+  mutate(Is_hap1 = case_when(Hap2_Call == Hap1_Map ~ TRUE, TRUE ~ FALSE)) %>%
+  mutate(Is_hap2 = case_when(Hap2_Call == Hap2_Map ~ TRUE, TRUE ~ FALSE))
+sum(hap2_e10_linkage$Is_hap1 == TRUE)
+sum(hap2_e10_linkage$Is_hap2 == TRUE)
+```
+
+## Plotting
+```{r}
+# Omni-C plots
+plot_linkage(hap1_omnic_linkage, ref_h1_omnic.break, title = "Haplotype 1 Assembly")
+#ggsave("./Figures/Phasing/haplotype1_phasing_evaluation_omnic.pdf", height = 6, width = 9)
+#ggsave("./Figures/Phasing/haplotype1_phasing_evaluation_omnic.png", height = 6, width = 9)
+plot_linkage(hap2_omnic_linkage, ref_h2_omnic.break, title = "Haplotype 2 Assembly")
+#ggsave("./Figures/Phasing/haplotype2_phasing_evaluation_omnic.pdf", height = 6, width = 9)
+#ggsave("./Figures/Phasing/haplotype2_phasing_evaluation_omnic.png", height = 6, width = 9)
+plot_linkage(hap1_omnic_linkage, ref_h1_omnic.break, title = "Haplotype 1 Assembly", plot_values = "true")
+# ggsave("./Figures/Phasing/haplotype1_phasing_evaluation_omnic_h1snps.pdf", height = 6, width = 9)
+# ggsave("./Figures/Phasing/haplotype1_phasing_evaluation_omnic_h1snps.png", height = 6, width = 9)
+plot_linkage(hap1_omnic_linkage, ref_h1_omnic.break, title = "Haplotype 1 Assembly", plot_values = "false")
+# ggsave("./Figures/Phasing/haplotype1_phasing_evaluation_omnic_h2snps.pdf", height = 6, width = 9)
+# ggsave("./Figures/Phasing/haplotype1_phasing_evaluation_omnic_h2snps.png", height = 6, width = 9)
+plot_linkage(hap2_omnic_linkage, ref_h2_omnic.break, title = "Haplotype 2 Assembly", plot_values = "true")
+# ggsave("./Figures/Phasing/haplotype2_phasing_evaluation_omnic_h1snps.pdf", height = 6, width = 9)
+# ggsave("./Figures/Phasing/haplotype2_phasing_evaluation_omnic_h1snps.png", height = 6, width = 9)
+plot_linkage(hap2_omnic_linkage, ref_h2_omnic.break, title = "Haplotype 2 Assembly", plot_values = "false")
+# ggsave("./Figures/Phasing/haplotype2_phasing_evaluation_omnic_h2snps.pdf", height = 6, width = 9)
+# ggsave("./Figures/Phasing/haplotype2_phasing_evaluation_omnic_h2snps.png", height = 6, width = 9)
+```
+
+## Plotting as a pseudo-Ideogram
+```{r}
+hap1_omnic_linkage
+hap2_omnic_linkage
+
+combined_hap <- full_join(hap1_omnic_linkage, hap2_omnic_linkage)
+
+combined_hap$CHROM_Pri <- factor(paste("Chr", combined_hap$CHROM_Pri, sep = " "), levels = paste("Chr", 1:16, sep = " "))
+
+combined_hap %>%
+  ggplot(aes(x = Assembly, y = POS_Pri)) +
+  geom_point(aes(color = Is_hap1), size = 3, alpha = 0.5) +
+  facet_grid(~CHROM_Pri, scales = "free_y") +
+  scale_color_manual(values = c("TRUE" = "blue", "FALSE" = "gold"),
+                       labels = c("Haplotype 2", "Haplotype 1")) + 
+  scale_y_continuous(labels = function(x) sprintf("%.1f", x / 1e6)) + 
+  labs(color = "Genetic Map Value", x = "Haplotype", y = " Position (Mb)") +
+  guides(color = guide_legend(reverse = TRUE)) +
+  theme_classic() +
+  theme(legend.position = "bottom", strip.background = element_blank(), strip.text = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"))
+#ggsave("./Figures/Phasing/side_by_side_phasing.pdf", height = 5, width = 10)
+#ggsave("./Figures/Phasing/side_by_side_phasing.png", height = 5, width = 10)
+```
+
+## Keeping SNPs not in genetic map
+```{r}
+table(duplicated(hap1_omnic.syri))
+
+linkage_omnic.map <- fread("./Data/Linkage_Maps/map_LBF2402_yesOmniC.csv")
+setnames(linkage_omnic.map, old = c("chr", "bp", "hap1", "hap2"), new = c("CHROM_Pri", "POS_Pri", "Hap1_Map", "Hap2_Map"))
+linkage_omnic.map <- linkage_omnic.map %>%
+  select(c(CHROM_Pri, POS_Pri, Hap1_Map, Hap2_Map, dist, markers))
+linkage_omnic.map$tf <- duplicated(linkage_omnic.map)
+
+filt_linkage_omnic.map <- linkage_omnic.map %>%
+  filter(tf == FALSE) %>%
+  select(!tf)
+
+combined_data_hap1 <- left_join(hap1_omnic.syri, filt_linkage_omnic.map, by = c("CHROM_Pri", "POS_Pri"))
+combined_data_hap1 <- combined_data_hap1 %>%
+    select(c("CHROM_Pri", "Pri_Call", "POS_Pri", "Hap1_Call", "Hap1_Map", "Hap2_Map", "dist", "markers"))
+
+combined_data_hap1 <- combined_data_hap1 %>% 
+  mutate(Identity = case_when(
+    Hap1_Call == Hap1_Map ~ "hap1",
+    Hap1_Call == Hap2_Map ~ "hap2",
+    TRUE ~ "NA"))  %>%
+  mutate(Assembly = "1")
+
+combined_data_hap2 <- left_join(hap2_omnic.syri, filt_linkage_omnic.map, by = c("CHROM_Pri", "POS_Pri"))
+combined_data_hap2 <- combined_data_hap2 %>%
+    select(c("CHROM_Pri", "Pri_Call", "POS_Pri", "Hap2_Call", "Hap1_Map", "Hap2_Map", "dist", "markers"))
+
+combined_data_hap2 <- combined_data_hap2 %>% 
+  mutate(Identity = case_when(
+    Hap2_Call == Hap2_Map ~ "hap2",
+    Hap2_Call == Hap1_Map ~ "hap1",
+    TRUE ~ "NA"))  %>%
+  mutate(Assembly = "2")
+
+table(combined_data_hap1$Identity)
+table(combined_data_hap2$Identity)
+
+combined_hap <- full_join(combined_data_hap1, combined_data_hap2)
+
+combined_hap$CHROM_Pri <- factor(paste("Chr", combined_hap$CHROM_Pri, sep = " "), levels = paste("Chr", 1:16, sep = " "))
+
+combined_hap %>%
+  ggplot(aes(x = Assembly, y = POS_Pri)) +
+  # Plot grey points first
+  geom_point(data = subset(combined_hap, Identity == "NA"),
+             aes(color = factor(Identity, levels = c("hap1", "hap2", "NA"))),
+             size = 3, alpha = 0.5) +
+  # Plot blue and gold points on top of grey points
+  geom_point(data = subset(combined_hap, Identity %in% c("hap1", "hap2")),
+             aes(color = factor(Identity, levels = c("hap1", "hap2", "NA"))),
+             size = 3, alpha = 0.5) +
+  facet_grid(~CHROM_Pri, scales = "free_y") +
+  scale_color_manual(values = c("hap1" = "blue", "hap2" = "gold", "NA" = "grey"),
+                     labels = c("NA", "Haplotype 1", "Haplotype 2")) + 
+  scale_y_continuous(labels = function(x) sprintf("%.1f", x / 1e6)) + 
+  labs(color = "Genetic Map Value", x = "Haplotype", y = " Position (Mb)") +
+  theme_classic() +
+  theme(legend.position = "bottom", strip.background = element_blank(), strip.text = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"))
+#ggsave("./Figures/Phasing/side_by_side_phasing_with_na.pdf", height = 5, width = 10)
+#ggsave("./Figures/Phasing/side_by_side_phasing_with_na.png", height = 5, width = 10)
+```
+
+## Percentages Per chromosome Per Haplotype
+```{r}
+str(combined_hap)
+
+filt_test <- combined_hap[Identity != "NA"]
+
+# Calculate the percentage for each combination of CHROM_Pri and Identity
+result <- filt_test[, .(hap1_percent = sum(Identity == "hap1") / .N * 100,
+                        hap2_percent = sum(Identity == "hap2") / .N * 100,
+                        number_hap1 = sum(Identity == "hap1"),
+                        number_hap2 = sum(Identity == "hap2"),
+                        total_occurrences = .N),  # Add this line to calculate total occurrences
+                    by = .(Chr = CHROM_Pri, Assembly)]
+
+# Table of potential poor mapping
+chr1_h1 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 1" & Assembly == 1, Identity == "hap1")
+chr1_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 1" & Assembly == 2, Identity == "hap2")
+chr2_h1 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 2" & Assembly == 1, Identity == "hap2")
+chr2_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 2" & Assembly == 2, Identity == "hap1")
+chr3_h1 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 3" & Assembly == 1, Identity == "hap2")
+chr3_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 3" & Assembly == 2, Identity == "hap1")
+chr4_h1 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 4" & Assembly == 1, Identity == "hap1")
+chr4_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 4" & Assembly == 2, Identity == "hap2")
+chr5_h1 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 5" & Assembly == 1, Identity == "hap1")
+chr5_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 5" & Assembly == 2, Identity == "hap2")
+chr6_h1 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 6" & Assembly == 1, Identity == "hap1")
+chr6_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 6" & Assembly == 2, Identity == "hap2")
+chr7_h1 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 7" & Assembly == 1, Identity == "hap1")
+chr7_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 7" & Assembly == 2, Identity == "hap2")
+chr8_h1 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 8" & Assembly == 1, Identity == "hap1")
+chr8_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 8" & Assembly == 2, Identity == "hap2")
+chr9_h1 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 9" & Assembly == 1, Identity == "hap2")
+chr9_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 9" & Assembly == 2, Identity == "hap1")
+chr10_h1 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 10" & Assembly == 1, Identity == "hap1")
+chr10_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 10" & Assembly == 2, Identity == "hap2")
+chr11_h1 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 11" & Assembly == 1, Identity == "hap1")
+chr11_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 11" & Assembly == 2, Identity == "hap2")
+chr12_h1 <- filt_test %>%  
+  filter(CHROM_Pri =="Chr 12" & Assembly == 1, Identity == "hap2")
+chr12_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 12" & Assembly == 2, Identity == "hap1")
+chr13_h1 <- filt_test %>%  
+  filter(CHROM_Pri =="Chr 13" & Assembly == 1, Identity == "hap2")
+chr13_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 13" & Assembly == 2, Identity == "hap1")
+chr14_h1 <- filt_test %>%  
+  filter(CHROM_Pri =="Chr 14" & Assembly == 1, Identity == "hap2")
+chr14_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 14" & Assembly == 2, Identity == "hap1")
+chr15_h1 <- filt_test %>%  
+  filter(CHROM_Pri =="Chr 15" & Assembly == 1, Identity == "hap1")
+chr15_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 15" & Assembly == 2, Identity == "hap2")
+chr16_h1 <- filt_test %>%  
+  filter(CHROM_Pri =="Chr 16" & Assembly == 1, Identity == "hap2")
+chr16_h2 <- filt_test %>%
+  filter(CHROM_Pri =="Chr 16" & Assembly == 2, Identity == "hap1")
+
+potential_mismaps <- rbind(chr1_h1, chr1_h2, chr2_h1, chr2_h2, chr3_h1, chr3_h2, chr4_h1, chr4_h2, chr5_h1, chr5_h2, 
+                           chr6_h1, chr6_h2, chr7_h1, chr7_h2, chr8_h1, chr8_h2, chr9_h1, chr9_h2, chr10_h1,
+                           chr10_h2, chr11_h1, chr11_h2, chr12_h1, chr12_h2, chr13_h1, chr13_h2, chr14_h1, chr14_h2,
+                           chr15_h1, chr15_h2, chr16_h1, chr16_h2)
+
+counts <- result %>%
+  select(number_hap1, number_hap2)
+
+# Function to print the lowest value in each row as a vector
+print_lowest <- function(row) {
+  c(min(row))
+}
+
+# Apply the function to each row
+sum(apply(counts, 1, print_lowest)) # matches number of rows in potential mishaps. 
+
+
+mismap.table <- potential_mismaps %>%
+  select(markers, CHROM_Pri, dist, POS_Pri, Hap1_Map, Hap2_Map)
+
+mismap.table 
+
+colnames(mismap.table) <- c("markers", "chr", "dist", "bp", "hap1", "hap2")
+
+#write.table(mismap.table, "~/Desktop/potential_linkage_mismap.tsv", sep = "\t", col.names = TRUE, row.names = FALSE)
+```
+
+## Trying to plot all sites
+```{r}
+filt_test
+
+# For Hap1_Call
+filt_test$Hap1_Call <- if_else(
+  is.na(filt_test$Hap1_Call),
+  ifelse(filt_test$Identity == "hap1", filt_test$Hap2_Map, filt_test$Hap1_Map),
+  filt_test$Hap1_Call
+)
+
+# For Hap2_Call
+filt_test$Hap2_Call <- if_else(
+  is.na(filt_test$Hap2_Call),
+  ifelse(filt_test$Identity == "hap2", filt_test$Hap1_Map, filt_test$Hap2_Map),
+  filt_test$Hap2_Call
+)
+
+reshaped_data <- filt_test %>%
+  gather(key = "Hap_Call", value = "Call", Hap1_Call, Hap2_Call) %>%
+  mutate(Hap_Call = gsub("Hap(\\d+)_Call", "\\1", Hap_Call))
+
+reshaped_data %>%
+  ggplot(aes(x = Hap_Call, y = POS_Pri, color = Assembly)) +
+  geom_point() +
+  facet_grid(~ CHROM_Pri)
+
+str(reshaped_data)
+```
+
+## try this
+```{r}
+g_table <- filt_test %>%
+  select(CHROM_Pri, POS_Pri, Pri_Call, Hap1_Map, Hap2_Map, Hap1_Call, Hap2_Call)
+
+colnames(g_table) <- c("Chr", "Pos", "Pri", "Hap1_LM", "Hap2_LM", "Hap1_Hifi", "Hap2_Hifi")
+
+# Create new columns
+# Create new columns
+g_table[, c("Hap1_HiFi_LM", "Hap2_HiFi_LM") := {
+  Hap1_HiFi_LM <- ifelse(Hap1_LM == Hap1_Hifi, "Hap1_LM", 
+                        ifelse(Hap1_LM == Hap2_Hifi, "Hap2_LM", NA))
+  
+  Hap2_HiFi_LM <- ifelse(Hap2_LM == Hap2_Hifi, "Hap2_LM", 
+                        ifelse(Hap2_LM == Hap1_Hifi, "Hap1_LM", NA))
+  
+  # Return the resulting vectors
+  list(Hap1_HiFi_LM, Hap2_HiFi_LM)
+}]
+
+g_table_long <- g_table %>%
+  gather(key = "Hap", value = "Hap_LM", Hap1_HiFi_LM, Hap2_HiFi_LM) %>%
+  filter(Hap %in% c("Hap1_HiFi_LM", "Hap2_HiFi_LM")) %>%
+  mutate(Hap = str_extract(Hap, "\\d+")) %>%
+  select(Chr, Pos, Pri, Hap1_LM, Hap2_LM, Hap1_Hifi, Hap2_Hifi, Hap, Hap_LM)
+
+g_table_long %>%
+  ggplot(aes(x = Hap, y = Pos, color = Hap_LM)) +
+  geom_point(size = 3, alpha = 0.5) +
+  facet_grid(~Chr) +
+ scale_color_manual(values = c("Hap1_LM" = "blue", "Hap2_LM" = "gold"),
+                     labels = c("Haplotype 1", "Haplotype 2")) + 
+  scale_y_continuous(labels = function(x) sprintf("%.1f", x / 1e6)) + 
+  labs(color = "Genetic Map Haplotype", x = "Haplotype", y = " Position (Mb)") +
+  theme_classic() +
+  theme(legend.position = "bottom", strip.background = element_blank(), strip.text = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"))
+#ggsave("./Figures/Phasing/side_by_side_phasing_full_chr.pdf", height = 5, width = 10)
+#ggsave("./Figures/Phasing/side_by_side_phasing_full_chr.png", height = 5, width = 10)
+
+test <- g_table_long %>%
+filter(Chr == "Chr 1", 900000 < Pos & Pos < 11000000)
+
+```
+
+## Get phasing accuracy table
+```{r}
+pct_proper_phase.table <- g_table_long %>%
+  group_by(Chr, Hap) %>%
+  summarise(
+    Hap1_LM_count = sum(Hap_LM == "Hap1_LM", na.rm = TRUE),
+    Hap2_LM_count = sum(Hap_LM == "Hap2_LM", na.rm = TRUE),
+    Total_count = n(),
+    Hap1_LM_percentage = (Hap1_LM_count / Total_count) * 100,
+    Hap2_LM_percentage = (Hap2_LM_count / Total_count) * 100
+  ) %>%
+  ungroup()
+
+str(pct_proper_phase.table)
+
+plotting_pct_phase.table <- pct_proper_phase.table %>%
+  group_by(Chr) %>%
+  mutate(Max_Percentage = max(Hap1_LM_percentage, Hap2_LM_percentage, na.rm = TRUE)) %>%
+   mutate(Max_Count = max(Hap1_LM_count, Hap2_LM_count, na.rm = TRUE)) %>%
+  filter(Hap == 1) %>%
+  ungroup()
+
+plotting_pct_phase.table
+
+genome_wide_proper_phase.pct <- 
+  sum(plotting_pct_phase.table$Max_Count) / sum(plotting_pct_phase.table$Total_count) * 100
+
+genome_wide_proper_phase.pct
+```
+
+
+
+## Pull out syn sites
+```{r}
+data <- fread("./Data/Syri_Out/ref_chandler_hap1_to_primary_syri.out")
+  
+  data <- data %>%
+      filter(V11 == "SYN") %>%
+      filter(V11 != "NOTAL")
+  
+  data$V1 <- gsub("NC_0499.*?([0-9]+).*", "\\1", data$V1) # Rename CHROMs to just number
+  data$V1 <- str_remove(data$V1, "^0+") # Remove leading zeros
+  data$V1 <- as.numeric(data$V1) # Make CHROM numeric. This should allow for proper order plotting
+  
+  data$V6 <- gsub("NC_0499.*?([0-9]+).*", "\\1", data$V6)
+  data$V6 <- str_remove(data$V6, "^0+")
+  data$V6 <- as.numeric(data$V6)
+  
+  data$V2 <- as.numeric(data$V2)
+```
+

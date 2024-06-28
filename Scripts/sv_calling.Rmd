@@ -1,0 +1,456 @@
+---
+title: "sv_calling"
+author: "Matthew Davis"
+date: "2024-01-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+```{r, message=FALSE}
+library(data.table)
+library(seqinr)
+library(ggplot2)
+library(tidyverse)
+library(BioCircos)
+library(polymorphology)
+library(htmlwidgets)
+```
+
+## Functions
+```{r}
+parse_pbsv<-function(file){
+  vcf<-read.vcfR(file)
+  data<-cbind(data.table(vcf@fix), data.table(vcf@gt))
+  data$call<-substr(data$UnnamedSample, 1,3)
+  data$zyg<-ifelse(data$call=="0/1","het","hom")
+  data$file<-file
+
+  gtsplit<-data %>% separate(col=UnnamedSample, into=c("GT","AD","DP","SAC"), sep=":")
+  gtsplit<-gtsplit %>% separate(col=AD, into=c("REFDEPTH","ALTDEPTH"), sep=",")
+  gtsplit$length<-as.numeric(gsub(".+;SVLEN=(.+)","\\1", gtsplit$INFO))
+  gtsplit$unique<-paste(gtsplit$CHROM, gtsplit$POS)
+  gtsplit<-data.table(gtsplit)
+
+  return(gtsplit)
+}
+
+filter_pbsv<-function(vcf, hom=T){
+  if(hom){
+  vcf[zyg=="hom" & FILTER=="PASS" & grepl("RagTag",CHROM) & REFDEPTH==0]
+  }
+  else {vcf[FILTER=="PASS" & grepl("RagTag",CHROM)]}
+}
+
+fasta_from_table <- function(input_table) {
+  # Create a character vector to store the sequences
+  fasta_sequences <- character(nrow(input_table))
+
+  # Loop through each row to generate the FASTA sequences
+  for (i in 1:nrow(input_table)) {
+    # Construct the FASTA header
+    header <- paste(">", input_table$ID[i], sep = " ")
+
+    # Append the header and ALT sequence to the sequences vector
+    fasta_sequences[i] <- paste(header, input_table$ALT[i], sep = "\n")
+  }
+return(fasta_sequences)
+}
+
+top_blast <- function(blast.table){
+  
+  filtered_blast <- blast.table %>%
+  group_by(V1) %>%
+  filter(V12 == max(V12))
+  
+  filtered_blast$V2 <- gsub("NC_0499(0*)([1-9]\\d*).*_(.*)$", "\\2_\\3", 
+                               filtered_blast$V2)
+  
+  return(filtered_blast)
+}
+
+## Functions for plotting
+# Extract chromosome lengths
+chr_lengths <- function(genome.fasta) {
+ # Read in fasta
+  genome <- read.fasta(genome.fasta)
+
+  # Select only chromosome scaffolds by their names
+  genome_names <- names(genome)
+  selected_chromosomes <- genome_names[grep("NC_0499", genome_names)]
+  selected_genome <- genome[selected_chromosomes]
+
+  # Rename chromosomes directly in the selected genome
+  new_chr_names <- gsub("NC_0499(0*)([1-9]\\d*).*_(.*)$", 
+                        "\\2_\\3", selected_chromosomes)
+  new_chr_names <- gsub("^([0-9]+)_hap([0-9]+)$", 
+                   "Chr\\1 Hap\\2", new_chr_names)
+  names(selected_genome) <- new_chr_names
+
+  # Create a vector of chromosome lengths
+  chr_lengths <- sapply(selected_genome, length)
+  chr_lengths_list <- as.list(chr_lengths)
+
+  # Set names for the lengths of the genome
+  names(chr_lengths_list) <- new_chr_names
+
+  return(chr_lengths_list)
+}
+
+# Extract TE information
+create_TE_links <- function(TE.tsv, filtered_blast.tsv) {
+  # Rename and Extract Chromosomes
+  TE.tsv$CHROM <- gsub("NC_0499(0*)([1-9]\\d*).*_(.*)$", 
+                       "\\2_\\3", TE.tsv$CHROM)
+  TE.tsv$CHROM <- gsub("^([0-9]+)_hap([0-9]+)$", 
+                   "Chr\\1 Hap\\2", TE.tsv$CHROM)
+
+  
+  TE_chr_name_trans <- TE.tsv %>% 
+    pull(CHROM)
+  
+  TE_trans_start <- TE.tsv %>%
+    pull(POS) %>%
+    as.numeric()
+
+  TE_origin_chr <- filtered_blast.tsv %>%
+    pull(V2) %>%
+    gsub("NC_0499(..).1_RagTag_(.*)", "\\1\\2", .) %>%
+    gsub("^([0-9]+)_hap([0-9]+)$", "Chr\\1 Hap\\2", .)
+  
+  TE_origin_pos <- filtered_blast.tsv %>%
+    select(V9, V10)
+  
+  TE_origin_start_pos <- TE_origin_pos %>%
+    pull(V9) %>%
+    as.numeric()
+  
+  TE_origin_end_pos <- TE_origin_pos %>%
+    pull(V10) %>%
+    as.numeric()
+  
+  links_origin_chr <- TE_origin_chr
+  links_trans_chr <- TE_chr_name_trans
+  
+  links_origin_start_pos <- TE_origin_start_pos
+  links_origin_end_pos <- TE_origin_end_pos
+  
+  links_trans_start_pos <- TE_trans_start
+  links_trans_end_pos <- TE_trans_start + 5453
+  
+  sv_name <- filtered_blast.tsv %>%
+    pull(V1)
+  
+  link_labels <- gsub("(.*)\\.(.*)\\.(.*)", "\\2\\3", sv_name)
+  
+  return(list(
+    links_origin_chr = links_origin_chr,
+    links_trans_chr = links_trans_chr,
+    links_origin_start_pos = links_origin_start_pos,
+    links_origin_end_pos = links_origin_end_pos,
+    links_trans_start_pos = links_trans_start_pos,
+    links_trans_end_pos = links_trans_end_pos,
+    link_labels = link_labels
+  ))
+}
+
+# Creating a gene heatmap file
+genes_heatmap <- function(gff, interval = 1000000){
+  # Read in gffs
+  gff.table <- fread(gff, header = FALSE)
+
+  #Filter for chromosomes, then genes
+  gff.chr <- gff.table[grep("NC_0499", gff.table$V1), ]
+
+  # Filter for genes and select necessary columns
+  genes <- gff.chr %>%
+    filter(V3 == "gene") %>%
+    select(V1, V4, V5)
+
+  # Rename chromosomes in the gffs
+  genes$V1 <- gsub("NC_0499(0*)([1-9]\\d*).*_(.*)$", "\\2_\\3", genes$V1)
+  genes$V1 <- gsub("^([0-9]+)_hap([0-9]+)$", "Chr\\1 Hap\\2", genes$V1)
+
+  # Calculate gene count every 1,000,000 basepairs
+  basepair_interval <- interval
+
+  # Function to calculate gene count in each interval
+  calculate_gene_count <- function(chromosome_data, interval_size) {
+    max_position <- max(chromosome_data$V5)
+    intervals <- seq(0, max_position, by = interval_size)
+    gene_count <- sapply(intervals, function(start) {
+      sum(chromosome_data$V4 <= (start + interval_size) & chromosome_data$V5 >= start)
+    })
+
+    return(data.frame(V2 = intervals, V3 = intervals + interval_size, V4 = gene_count))
+  }
+
+  # Calculate gene count for each chromosome separately
+  chromosomes <- unique(genes$V1)
+  gene_count_data <- lapply(chromosomes, function(chromosome) {
+    calculate_gene_count(genes[genes$V1 == chromosome, ], basepair_interval)
+  })
+
+  # Combine the results into a single data frame
+  gene_windows <- do.call(rbind, gene_count_data)
+  gene_windows$V1 <- rep(chromosomes, sapply(gene_count_data, nrow))
+  new_col_names <- c(V1 = "Chromosome", V2 = "Start", V3 = "End", V4 = "Gene_Count")
+  colnames(gene_windows) <- new_col_names[match(names(gene_windows), names(new_col_names))]
+
+  # Return the results
+  return(gene_windows)
+}
+
+cat_gff_heatmap <- function(hap1_gff, hap2_gff, interval = 1e6){
+  # Read in gffs
+  gff1 <- read.delim(hap1_gff, comment.char = "#", header = FALSE)
+  gff2 <-read.delim(hap2_gff, comment.char = "#", header = FALSE)
+
+  #Filter for chromosomes, then genes
+  gff1_chr <- gff1[grep("NC_0499", gff1$V1), ]
+  gff2_chr <- gff2[grep("NC_0499", gff2$V1), ]
+  
+  # Filter for genes and select necessary columns
+  hap1_genes <- gff1_chr %>%
+    filter(V3 =="gene") %>%
+    select(V1, V4, V5)
+
+  hap2_genes <- gff2_chr %>%
+    filter(V3 =="gene") %>%
+    select(V1, V4, V5)
+
+  # Rename chromosomes in the gffs
+  hap1_genes$V1 <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1", hap1_genes$V1))
+  hap1_genes$V1 <- gsub("^([0-9]+)$", "Chr\\1", hap1_genes$V1)
+
+  hap2_genes$V1 <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1", hap2_genes$V1))
+  hap2_genes$V1 <- gsub("^([0-9]+)$", "Chr\\1", hap2_genes$V1)
+
+  # Add haplotype information to file
+  hap1_genes$V1 <- paste(hap1_genes$V1, "Hap1")
+  hap2_genes$V1 <- paste(hap2_genes$V1, "Hap2")
+
+  # Combine the two gffs
+  cat_genes <- rbind(hap1_genes, hap2_genes)
+  
+   # Calculate gene count every 1,000,000 basepairs
+  basepair_interval <- interval
+
+  # Function to calculate gene count in each interval
+  calculate_gene_count <- function(chromosome_data, interval_size) {
+    max_position <- max(chromosome_data$V5)
+    intervals <- seq(0, max_position, by = interval_size)
+    gene_count <- sapply(intervals, function(start) {
+      sum(chromosome_data$V4 <= (start + interval_size) & chromosome_data$V5 >= start)
+    })
+
+    return(data.frame(V2 = intervals, V3 = intervals + interval_size, V4 = gene_count))
+  }
+
+  # Calculate gene count for each chromosome separately
+  chromosomes <- unique(cat_genes$V1)
+  gene_count_data <- lapply(chromosomes, function(chromosome) {
+    calculate_gene_count(cat_genes[cat_genes$V1 == chromosome, ], basepair_interval)
+  })
+
+  # Combine the results into a single data frame
+  gene_windows <- do.call(rbind, gene_count_data)
+  gene_windows$V1 <- rep(chromosomes, sapply(gene_count_data, nrow))
+  new_col_names <- c(V1 = "Chromosome", V2 = "Start", V3 = "End", V4 = "Gene_Count")
+  colnames(gene_windows) <- new_col_names[match(names(gene_windows), names(new_col_names))]
+
+  # Return the results
+  return(gene_windows)
+
+}
+```
+
+## Read in and filter sv.vcfs from pbsv
+```{r}
+ref.sv <- parse_pbsv("./Data/VCFs/SV_VCF/ref_chandler_combohap.sv.vcf")
+ref_filt.sv <- filter_pbsv(ref.sv)
+term.sv <- parse_pbsv("./Data/VCFs/SV_VCF/term_chandler_combohap.sv.vcf")
+term_filt.sv <- filter_pbsv(term.sv)
+cr2.sv <- parse_pbsv("./Data/VCFs/SV_VCF/cr2_combohap.sv.vcf") # All the NAs not in QUAL are removed after filtering
+cr2_filt.sv <- filter_pbsv(cr2.sv)
+```
+
+# Filter for unique sites
+```{r}
+cr2_filt.sv$denovo<-!cr2_filt.sv$unique %in% c(term_filt.sv$unique, ref_filt.sv$unique)
+term_filt.sv$denovo<-!term_filt.sv$unique %in% c(cr2_filt.sv$unique, ref_filt.sv$unique)
+ref_filt.sv$denovo<-!ref_filt.sv$unique %in% c(term_filt.sv$unique, cr2_filt.sv$unique)
+
+cr2_denovo.sv <- cr2_filt.sv[denovo==T]
+term_denovo.sv <- term_filt.sv[denovo==T]
+ref_denovo.sv <- ref_filt.sv[denovo==T]
+```
+
+# Histogram and possible TEs
+```{r}
+hist(cr2_denovo.sv$length, breaks=100)
+sort(cr2_denovo.sv$length)
+counts<-data.table(table(length=cr2_denovo.sv$length))
+counts$length<-as.numeric(counts$length)
+counts[order(-N)]
+
+cr2_5453sv.tsv<-cr2_denovo.sv[length=="5453"]
+cr2_5454sv.tsv<-cr2_denovo.sv[length=="5454"]
+cr2_5455sv.tsv<-cr2_denovo.sv[length=="5455"]
+cr2_899sv.tsv<-cr2_denovo.sv[length=="899"]
+```
+
+## Plotting insertions histogram
+```{r}
+ref_denovo.sv %>%
+  filter(length > 0) %>%
+  ggplot(aes(x = length)) +
+  geom_histogram(bins = 30) +
+  scale_x_continuous(breaks = seq(min(0), max(cr2_denovo.sv$length), by = 10)) +
+  scale_fill_manual(values = c("grey50")) +
+  labs(x = "Length of insertion", y = "Number of insertions") +
+  guides(fill = "none") +
+  theme_classic()
+ggsave("./Figures/SV_Calling/reference_chandler_denovo_sv_histogram.pdf", height = 3, width = 8)
+ggsave("./Figures/SV_Calling/reference_chandler_denovo_sv_histogram.png", height = 3, width = 8)
+
+term_denovo.sv %>%
+  filter(length > 0) %>%
+  ggplot(aes(x = length)) +
+  geom_histogram(bins = 30) +
+  scale_x_continuous(breaks = seq(min(0), max(cr2_denovo.sv$length), by = 10)) +
+  scale_y_continuous(limits = c(0, 110), breaks = seq(0, 90, by = 30)) +
+  scale_fill_manual(values = c("grey50")) +
+  labs(x = "Length of insertion", y = "Number of insertions") +
+  guides(fill = "none") +
+  theme_classic()
+ggsave("./Figures/SV_Calling/terminal_chandler_denovo_sv_histogram.pdf", height = 3, width = 8)
+ggsave("./Figures/SV_Calling/terminal_chandler_denovo_sv_histogram.png", height = 3, width = 8)
+
+cr2_denovo.sv %>%
+  filter(length > 0) %>%
+  ggplot(aes(x = length, fill = cut(length, breaks = c(800, 1000, 5200, 5600, Inf)))) +
+  geom_histogram(bins = 30) +
+  scale_x_continuous(breaks = seq(min(0), max(cr2_denovo.sv$length), by = 500)) +
+  scale_fill_manual(values = c("red", "grey50", "red", "gray50")) +
+  labs(x = "Length of insertion", y = "Number of insertions") +
+  guides(fill = "none") +
+  theme_classic()
+ggsave("./Figures/SV_Calling/cr2_denovo_sv_histogram.pdf", height = 3, width = 8)
+ggsave("./Figures/SV_Calling/cr2_denovo_sv_histogram.png", height = 3, width = 8)
+
+cr2_denovo.sv %>%
+  filter(length > 0) %>%
+  ggplot(aes(x = length, fill = cut(length, breaks = c(800, 1000)))) +
+  geom_histogram(bins = 30) +
+  scale_x_continuous(breaks = seq(min(0), max(cr2_denovo.sv$length), by = 500)) +
+  scale_fill_manual(values = c("red")) +
+  labs(x = "Length of insertion", y = "Number of insertions") +
+  guides(fill = "none") +
+  theme_classic()
+ggsave("./Figures/SV_Calling/cr2_899denovo_sv_histogram.pdf", height = 3, width = 8)
+ggsave("./Figures/SV_Calling/cr2_899denovo_sv_histogram.png", height = 3, width = 8)
+
+cr2_denovo.sv %>%
+  filter(length > 0) %>%
+  ggplot(aes(x = length, fill = cut(length, breaks = c(5200, 5600)))) +
+  geom_histogram(bins = 30) +
+  scale_x_continuous(breaks = seq(min(0), max(cr2_denovo.sv$length), by = 500)) +
+  scale_fill_manual(values = c("red")) +
+  labs(x = "Length of insertion", y = "Number of insertions") +
+  guides(fill = "none") +
+  theme_classic()
+ggsave("./Figures/SV_Calling/cr2_5453denovo_sv_histogram.pdf", height = 3, width = 8)
+ggsave("./Figures/SV_Calling/cr2_5453denovo_sv_histogram.png", height = 3, width = 8)
+```
+
+
+## Create fasta files
+```{r}
+cr2_5453sv.fasta <- fasta_from_table(cr2_5453sv.tsv)
+cr2_5454sv.fasta <- fasta_from_table(cr2_5454sv.tsv)
+cr2_5455sv.fasta <- fasta_from_table(cr2_5455sv.tsv)
+cr2_899sv.fasta <- fasta_from_table(cr2_899sv.tsv)
+```
+
+## Write out the  tables and the fastas
+```{r, eval=FALSE}
+#write.table(cr2_5453sv.txsv, file = "~/Desktop/cr2_5453sv.tsv", 
+            sep = "\t", quote = FALSE, row.names = FALSE)
+#write.table(cr2_5454sv.tsv, file = "~/Desktop/cr2_5454sv.tsv", 
+            sep = "\t", quote = FALSE, row.names = FALSE)
+#write.table(cr2_5455sv.tsv, file = "~/Desktop/cr2_5455sv.tsv", 
+            sep = "\t", quote = FALSE, row.names = FALSE)
+#write.table(cr2_899sv.tsv, file = "~/Desktop/cr2_899sv.tsv", 
+            sep = "\t", quote = FALSE, row.names = FALSE)
+
+#writeLines(cr2_5453sv.fasta, "~/Desktop/cr2_5453sv.fasta")
+#writeLines(cr2_5454sv.fasta, "~/Desktop/cr2_5454sv.fasta")
+#writeLines(cr2_5455sv.fasta, "~/Desktop/cr2_5455sv.fasta")
+#writeLines(cr2_899sv.fasta, "~/Desktop/cr2_899sv.fasta")
+```
+
+## Read in the blast results
+```{r}
+cr2_5453.blast <- fread("./Data/Blast_Tables/cr2_5453sv_topmatch_blastout.txt")
+cr2_899.blast <- fread("./Data/Blast_Tables/cr2_899sv_topmatch_blastout.txt")
+```
+
+## Filtering for the top hits in the blast output
+```{r}
+cr2_5453_filt.blast <- top_blast(cr2_5453.blast)
+cr2_899_filt.blast <- top_blast(cr2_899.blast)
+```
+
+## Creating lists for plotting
+```{r}
+genome_sizes <- chr_lengths("./Data/Fastas/ref_chandler_combohap_default_scaffold.fasta")
+genes_1mb <- cat_gff_heatmap(
+  "./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_hap1_default_scaffold_chr_only_liftoff_a99s99.gff",
+  "./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_hap2_default_scaffold_chr_only_liftoff_a99s99.gff") # The separate liftoff calls seem more accurate than the combined haplotype calls.
+TE_5453_links <- create_TE_links(cr2_5453sv.tsv, cr2_5453_filt.blast)
+TE_899_links <- create_TE_links(cr2_899sv.tsv, cr2_899_filt.blast)
+color_vector_hap1 <- rep("firebrick4", times = 16)
+color_vector_hap2 <- rep("firebrick3", times = 16)
+color_vector <- c(color_vector_hap1, color_vector_hap2)
+```
+
+## Creating tracklists and plotting 5453
+```{r}
+tracklist_TE5453 <- BioCircosLinkTrack('TELinkTrack', gene1Chromosomes = TE_5453_links$links_origin_chr, gene1Starts = TE_5453_links$links_origin_start_pos , gene1Ends = TE_5453_links$links_origin_end_pos, gene2Chromosomes = TE_5453_links$links_trans_chr, gene2Starts = TE_5453_links$links_trans_start_pos, gene2Ends = TE_5453_links$links_trans_end_pos, color = "grey", labels = TE_5453_links$link_labels, labelSize = 5, labelPadding = -16, labelColor = "black", displayAxis = FALSE, maxRadius = .85, width = 2, )
+
+tracklist_TE5453_nolabel <- BioCircosLinkTrack('TELinkTrack', gene1Chromosomes = TE_5453_links$links_origin_chr, gene1Starts = TE_5453_links$links_origin_start_pos , gene1Ends = TE_5453_links$links_origin_end_pos, gene2Chromosomes = TE_5453_links$links_trans_chr, gene2Starts = TE_5453_links$links_trans_start_pos, gene2Ends = TE_5453_links$links_trans_end_pos, color = "grey", displayAxis = FALSE, maxRadius = .85, width = 2, )
+
+tracklist_TE5453 <- tracklist_TE5453 + BioCircosHeatmapTrack("GeneHeatmap", chromosomes = genes_1mb$Chromosome, starts = genes_1mb$Start, ends = genes_1mb$End, values = genes_1mb$Gene_Count,
+                                                             color = c("white", "dodgerblue"), minRadius = .85, maxRadius = 1)
+
+tracklist_TE5453_nolabel <- tracklist_TE5453_nolabel + BioCircosHeatmapTrack("GeneHeatmap", chromosomes = genes_1mb$Chromosome, starts = genes_1mb$Start, ends = genes_1mb$End, values = genes_1mb$Gene_Count,
+                                                             color = c("white", "dodgerblue"), minRadius = .85, maxRadius = 1)
+
+biocircos_te5453_labels <- BioCircos(tracklist_TE5453, genome = genome_sizes, chrPad = 0.015, genomeFillColor = color_vector, displayGenomeBorder = FALSE, genomeTicksDisplay = TRUE, genomeTicksScale = 15e6, genomeLabelDy = 40, genomeLabelOrientation = 270)
+biocircos_te5453_nolabels <- BioCircos(tracklist_TE5453_nolabel, genome = genome_sizes, chrPad = 0.015, genomeFillColor = color_vector, displayGenomeBorder = FALSE, genomeTicksDisplay = TRUE, genomeTicksScale = 15e6, genomeLabelDy = 40, genomeLabelOrientation = 270)
+
+saveWidget(widget = biocircos_te5453_labels, file = "./Figures/SV_Calling/biocircos_te5453_labels.html")
+saveWidget(widget = biocircos_te5453_nolabels, file = "./Figures/SV_Calling/biocircos_te5453_nolabels.html")
+```
+
+## Creating tracklists and plotting 899
+```{r}
+tracklist_TE899 <- BioCircosLinkTrack('TELinkTrack', gene1Chromosomes = TE_899_links$links_origin_chr, gene1Starts = TE_899_links$links_origin_start_pos , gene1Ends = TE_899_links$links_origin_end_pos, gene2Chromosomes = TE_899_links$links_trans_chr, gene2Starts = TE_899_links$links_trans_start_pos, gene2Ends = TE_899_links$links_trans_end_pos, color = "grey", labels = TE_899_links$link_labels, labelSize = 5, labelPadding = -16, labelColor = "black", displayAxis = FALSE, maxRadius = .85, width = 2)
+
+tracklist_TE899_nolabel <- BioCircosLinkTrack('TELinkTrack', gene1Chromosomes = TE_899_links$links_origin_chr, gene1Starts = TE_899_links$links_origin_start_pos , gene1Ends = TE_899_links$links_origin_end_pos, gene2Chromosomes = TE_899_links$links_trans_chr, gene2Starts = TE_899_links$links_trans_start_pos, gene2Ends = TE_899_links$links_trans_end_pos, color = "grey", displayAxis = FALSE, maxRadius = .85, width = 2)
+
+tracklist_TE899 <- tracklist_TE899 + BioCircosHeatmapTrack("GeneHeatmap", chromosomes = genes_1mb$Chromosome, starts = genes_1mb$Start, ends = genes_1mb$End, values = genes_1mb$Gene_Count,
+                                                             color = c("white", "dodgerblue"), minRadius = .85, maxRadius = 1)
+tracklist_TE899_nolabel <- tracklist_TE899_nolabel + BioCircosHeatmapTrack("GeneHeatmap", chromosomes = genes_1mb$Chromosome, starts = genes_1mb$Start, ends = genes_1mb$End, values = genes_1mb$Gene_Count,
+                                                             color = c("white", "dodgerblue"), minRadius = .85, maxRadius = 1)
+
+biocircos_te899_labels <- BioCircos(tracklist_TE899, genome = genome_sizes, chrPad = 0.015, genomeFillColor = color_vector, displayGenomeBorder = FALSE, genomeTicksScale = 15e6, genomeLabelDy = 40, genomeLabelOrientation = 270)
+biocircos_te899_nolabels <- BioCircos(tracklist_TE899_nolabel, genome = genome_sizes, chrPad = 0.015, genomeFillColor = color_vector, displayGenomeBorder = FALSE, genomeTicksScale = 15e6, genomeLabelDy = 40, genomeLabelOrientation = 270)
+
+saveWidget(widget = biocircos_te899_labels, file = "./Figures/SV_Calling/biocircos_te899_labels.html")
+saveWidget(widget = biocircos_te899_nolabels, file = "./Figures/SV_Calling/biocircos_te899_nolabels.html")
+```

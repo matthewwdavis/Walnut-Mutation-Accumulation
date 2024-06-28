@@ -1,0 +1,331 @@
+---
+title: "coverage_analysis"
+author: "Matthew Davis"
+date: "2023-12-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(data.table)
+library(viridis)
+library(patchwork)
+```
+
+## Functions
+```{r}
+# Read in coverage
+coverage <- function(path_to_data, window_size = 10000, max_coverage = 100) {
+  # read in data
+  data <- fread(path_to_data)
+
+  # Rename columns
+  colnames(data) <- c("chromosome", "start", "end", "value")
+
+  # Remove extraneous scaffolds
+  data <- data[grepl("NC_04", data$chromosome),] # Keep chromosomes
+
+  # Create coverage column by dividing by window size
+  data <- data %>%
+    mutate(coverage = value/window_size)
+
+  # Filter maximum coverage
+  data <- data %>%
+    filter(coverage < max_coverage)
+
+  # Renaming chromosomes
+  data$chromosome <- gsub("NC_0499.*?([0-9]+).*", "\\1", data$chromosome) # Rename chromosomes to just number
+  data$chromosome <- str_remove(data$chromosome, "^0+") # Remove leading zeros
+  data$chromosome <- as.numeric(data$chromosome) # Make CHROM numeric. This should allow for proper order plotting
+  
+  return(data)
+}
+
+# Function for breakpoints
+breakpoints <- function(path_to_data) {
+   
+  # Read in data
+  data <- fread(path_to_data, skip = 2, fill = TRUE)
+  
+  # Remove extraneous contigs/scaffolds
+  data <- data[grepl("NC_04", data$V1),] # Keep chromosomes
+
+  # Filter for columns by chromosome breaks and select columns
+  data <- data %>% 
+    filter(V5=="W") %>%
+    select(V1, V3)
+  
+  # Rename columns
+  colnames(data) <- c("chromosome", "end")
+  
+  # Renaming chromosomes
+  data$chromosome <- gsub("NC_0499.*?([0-9]+).*", "\\1", data$chromosome) # Rename chromosomes to just number
+  data$chromosome <- str_remove(data$chromosome, "^0+") # Remove leading zeros
+  data$chromosome <- as.numeric(data$chromosome) # Make CHROM numeric. This should allow for proper order plotting
+  
+  return(data)
+}
+
+# Function for plotting
+# Function for plotting
+cov_plot <- function(coverage, breakpoints = NULL, title = NULL, ncol = 4, vcolor = "red", vlinetype = 3, vlinewidth = 0.75, yint = 40, hcolor = "black", hlinetype = 3, hlinewidth = 0.75, base_size = 6, x_min = NULL, x_max = NULL, x_label = "Position (1Mb)", y_label = "Coverage", legend_label = "Coverage", selected_chromosomes = NULL, legend = TRUE) {
+  
+  # Filter data based on selected chromosomes
+  if (!is.null(selected_chromosomes)) {
+    coverage <- coverage %>%
+      filter(chromosome %in% selected_chromosomes)
+    breakpoints <- breakpoints %>%
+      filter(chromosome %in% selected_chromosomes)
+  }
+  
+  x_label <- ifelse(is.null(x_label), "", x_label)
+  
+  plot <- ggplot(coverage, aes(x = end, y = coverage, color = coverage)) +
+    facet_wrap(~chromosome, scales = "free_x", ncol = ncol) +
+    geom_line() +
+    scale_color_viridis() +
+    scale_x_continuous(labels = function(x) sprintf("%.1f", x / 1e6)) +
+    theme_classic() +
+    labs(title = title, x = x_label, y = y_label, color = legend_label) +
+    coord_cartesian(xlim = c(x_min, x_max)) +
+    theme(legend.position = ifelse(legend, "bottom", "none"), strip.background = element_blank(), 
+          plot.title = element_text(hjust = 0.5, face = "bold"))
+
+  
+  if (!is.null(breakpoints)) {
+    plot <- plot +
+      geom_vline(data = breakpoints, aes(xintercept = end), color = vcolor, linetype = vlinetype, linewidth = vlinewidth)
+  }
+  
+  plot <- plot +
+    geom_hline(yintercept = yint, linetype = hlinetype, linewidth = hlinewidth, color = hcolor)
+  
+  return(plot)
+}
+```
+
+## Read in coverage data
+```{r}
+# Long Read Data
+ref_pri_10kb.cov <- coverage(path_to_data = "./Data/Coverage/Longread_Coverage/ref_chandler_primary_default_scaffold_10kb.cov")
+ref_h1_10kb.cov <- coverage(path_to_data = "./Data/Coverage/Longread_Coverage/ref_chandler_hap1_default_scaffold_10kb.cov")
+ref_h2_10kb.cov <- coverage(path_to_data = "./Data/Coverage/Longread_Coverage/ref_chandler_hap2_default_scaffold_10kb.cov")
+
+term_pri_10kb.cov <- coverage(path_to_data = "./Data/Coverage/Longread_Coverage/term_chandler_primary_default_scaffold_10kb.cov", max_coverage = 150)
+term_h1_10kb.cov <- coverage(path_to_data = "./Data/Coverage/Longread_Coverage/term_chandler_hap1_default_scaffold_10kb.cov", max_coverage = 150)
+term_h2_10kb.cov <- coverage(path_to_data = "./Data/Coverage/Longread_Coverage/term_chandler_hap2_default_scaffold_10kb.cov", max_coverage = 150)
+
+cr2_pri_10kb.cov <- coverage(path_to_data = "./Data/Coverage/Longread_Coverage/cr2_primary_default_scaffold_10kb.cov")
+cr2_h1_10kb.cov <- coverage(path_to_data = "./Data/Coverage/Longread_Coverage/cr2_hap1_default_scaffold_10kb.cov")
+cr2_h2_10kb.cov <- coverage(path_to_data = "./Data/Coverage/Longread_Coverage/cr2_hap2_default_scaffold_10kb.cov")
+
+cr2_pri_to_ref_chandler <- coverage(path_to_data = "./Data/Coverage/Longread_Coverage/cr2_aligned_ref_chandler_primary_default_scaffold_10kb.cov")
+
+# Short read original
+cr11_1 <- coverage(path_to_data = "./Data/Coverage/CR2_Original_Short/CR11-1_10kb.cov")
+cr11_2 <- coverage(path_to_data = "./Data/Coverage/CR2_Original_Short/CR11-2_10kb.cov")
+
+cr21_1 <- coverage(path_to_data = "./Data/Coverage/CR2_Original_Short/CR21-1_10kb.cov")
+cr21_2 <- coverage(path_to_data = "./Data/Coverage/CR2_Original_Short/CR21-2_10kb.cov")
+
+# Short Read CR2 Stacks
+c11A_10kb.cov <- coverage(path_to_data = "./Data/Coverage/CR2_Stacks/11A_10kb.cov", max_coverage = 80)
+c12A_10kb.cov <- coverage(path_to_data = "./Data/Coverage/CR2_Stacks/12A_10kb.cov", max_coverage = 80)
+c13A_10kb.cov <- coverage(path_to_data = "./Data/Coverage/CR2_Stacks/13A_10kb.cov", max_coverage = 100)
+c15A_10kb.cov <- coverage(path_to_data = "./Data/Coverage/CR2_Stacks/15A_10kb.cov", max_coverage = 100)
+c15A1_10kb.cov <- coverage(path_to_data = "./Data/Coverage/CR2_Stacks/15A1_10kb.cov", max_coverage = 80)
+c16A_10kb.cov <- coverage(path_to_data = "./Data/Coverage/CR2_Stacks/16A_10kb.cov", max_coverage = 100)
+c16A1_10kb.cov <- coverage(path_to_data = "./Data/Coverage/CR2_Stacks/16A1_10kb.cov", max_coverage = 100)
+c16A2_10kb.cov <- coverage(path_to_data = "./Data/Coverage/CR2_Stacks/16A2_10kb.cov", max_coverage = 80)
+c17A1_10kb.cov <- coverage(path_to_data = "./Data/Coverage/CR2_Stacks/17A1_10kb.cov", max_coverage = 100)
+c17A2_10kb.cov <- coverage(path_to_data = "./Data/Coverage/CR2_Stacks/17A2_10kb.cov", max_coverage = 40)
+c18A_10kb.cov <- coverage(path_to_data = "./Data/Coverage/CR2_Stacks/18A_10kb.cov", max_coverage = 100)
+c18A1_10kb.cov <- coverage(path_to_data = "./Data/Coverage/CR2_Stacks/18A1_10kb.cov", max_coverage = 120)
+```
+
+## Read in the agp files for the information on contig breaks
+```{r}
+ref_pri.break <- breakpoints(path_to_data = "./Data/AGPs/ref_chandler_primary_default_scaffold.agp")
+ref_h2.break <- breakpoints(path_to_data = "./Data/AGPs/ref_chandler_hap2_default_scaffold.agp")
+ref_h1.break <- breakpoints(path_to_data = "./Data/AGPs/ref_chandler_hap1_default_scaffold.agp")
+
+term_pri.break <- breakpoints(path_to_data = "./Data/AGPs/term_chandler_primary_default_scaffold.agp")
+term_h2.break <- breakpoints(path_to_data = "./Data/AGPs/term_chandler_hap2_default_scaffold.agp")
+term_h1.break <- breakpoints(path_to_data = "./Data/AGPs/term_chandler_hap1_default_scaffold.agp")
+
+cr2_pri.break <- breakpoints(path_to_data = "./Data/AGPs/cr2_primary_default_scaffold.agp")
+cr2_h2.break <- breakpoints(path_to_data = "./Data/AGPs/cr2_hap2_default_scaffold.agp")
+cr2_h1.break <- breakpoints(path_to_data = "./Data/AGPs/cr2_hap1_default_scaffold.agp")
+```
+
+## Plot coverages
+```{r}
+## Plot long reads
+cov_plot(coverage = ref_pri_10kb.cov, breakpoints = ref_pri.break)
+#ggsave("./Figures/Coverage_Analysis/ref_chandler_primary_covplot.pdf", height = 6, width = 12)
+#ggsave("./Figures/Coverage_Analysis/ref_chandler_primary_covplot.png", height = 6, width = 12)
+cov_plot(coverage = ref_h1_10kb.cov, breakpoints = ref_h1.break)
+#ggsave("./Figures/Coverage_Analysis/ref_chandler_hap1_covplot.pdf", height = 6, width = 12)
+#ggsave("./Figures/Coverage_Analysis/ref_chandler_hap1_covplot.png", height = 6, width = 12)
+cov_plot(coverage = ref_h2_10kb.cov, breakpoints = ref_h2.break)
+#ggsave("./Figures/Coverage_Analysis/ref_chandler_hap2_covplot.pdf", height = 6, width = 12)
+#ggsave("./Figures/Coverage_Analysis/ref_chandler_hap2_covplot.png", height = 6, width = 12)
+
+cov_plot(coverage = term_pri_10kb.cov, breakpoints = term_pri.break, yint = 65)
+#ggsave("./Figures/Coverage_Analysis/term_chandler_primary_covplot.pdf", height = 6, width = 12)
+#ggsave("./Figures/Coverage_Analysis/term_chandler_primary_covplot.png", height = 6, width = 12)
+cov_plot(coverage = term_h1_10kb.cov, breakpoints = term_h1.break, yint = 65)
+#ggsave("./Figures/Coverage_Analysis/term_chandler_hap1_covplot.pdf", height = 6, width = 12)
+#ggsave("./Figures/Coverage_Analysis/term_chandler_hap1_covplot.png", height = 6, width = 12)
+cov_plot(coverage = term_h2_10kb.cov, breakpoints = term_h2.break, yint = 65)
+#ggsave("./Figures/Coverage_Analysis/term_chandler_hap2_covplot.pdf", height = 6, width = 12)
+#ggsave("./Figures/Coverage_Analysis/term_chandler_hap2_covplot.png", height = 6, width = 12)
+
+cov_plot(coverage = cr2_pri_10kb.cov, breakpoints = cr2_pri.break)
+#ggsave("./Figures/Coverage_Analysis/cr2_primary_covplot.pdf", height = 6, width = 12)
+#ggsave("./Figures/Coverage_Analysis/cr2_primary_covplot.png", height = 6, width = 12)
+cov_plot(coverage = cr2_h1_10kb.cov, breakpoints = cr2_h1.break)
+#ggsave("./Figures/Coverage_Analysis/cr2_hap1_covplot.pdf", height = 6, width = 12)
+#ggsave("./Figures/Coverage_Analysis/cr2_hap1_covplot.png", height = 6, width = 12)
+cov_plot(coverage = cr2_h2_10kb.cov, breakpoints = cr2_h2.break)
+#ggsave("./Figures/Coverage_Analysis/cr2_hap2_covplot.pdf", height = 6, width = 12)
+#ggsave("./Figures/Coverage_Analysis/cr2_hap2_covplot.png", height = 6, width = 12)
+cov_plot(coverage = cr2_pri_to_ref_chandler, breakpoints = ref_pri.break)
+#ggsave("./Figures/Coverage_Analysis/cr2_primary_to_ref_assembly_covplot.pdf", height = 6, width = 12)
+#ggsave("./Figures/Coverage_Analysis/cr2_primary_to_ref_assembly_covplot.png", height = 6, width = 12)
+
+## Plot short reads
+# Original CR2 and CR1 sequencing
+cov_plot(coverage = cr11_1, breakpoints = ref_pri.break, title = "CR11-1", 
+         selected_chromosomes = c(1,4,9), yint = 26, legend = FALSE)
+cov_plot(coverage = cr11_2, breakpoints = ref_pri.break, title = "CR11-2",
+         selected_chromosomes = c(1,4,9), yint = 27, legend = FALSE)
+cov_plot(coverage = cr21_1, breakpoints = ref_pri.break, title = "CR21-1",
+         selected_chromosomes = c(1,4,9), yint = 31, legend = FALSE)
+cov_plot(coverage = cr21_2, breakpoints = ref_pri.break, title = "CR21-2",
+         selected_chromosomes = c(1,4,9), yint = 28, legend = FALSE)
+
+# Stacks
+cov_plot(coverage = c11A_10kb.cov, breakpoints = ref_pri.break, title = "11A", yint = 36)
+cov_plot(coverage = c12A_10kb.cov, breakpoints = ref_pri.break, title = "12A", yint = 38)
+cov_plot(coverage = c13A_10kb.cov, breakpoints = ref_pri.break, title = "13A", yint = 52)
+cov_plot(coverage = c15A_10kb.cov, breakpoints = ref_pri.break, title = "15A", yint = 45)
+cov_plot(coverage = c15A1_10kb.cov, breakpoints = ref_pri.break, title = "15A1", yint = 37)
+cov_plot(coverage = c16A_10kb.cov, breakpoints = ref_pri.break, title = "16A", yint = 50)
+cov_plot(coverage = c16A1_10kb.cov, breakpoints = ref_pri.break, title = "16A1", yint = 43)
+cov_plot(coverage = c16A2_10kb.cov, breakpoints = ref_pri.break, title = "16A2", yint = 36)
+cov_plot(coverage = c17A1_10kb.cov, breakpoints = ref_pri.break, title = "17A1", yint = 56)
+cov_plot(coverage = c17A2_10kb.cov, breakpoints = ref_pri.break, title = "17A2", yint = 19)
+cov_plot(coverage = c18A_10kb.cov, breakpoints = ref_pri.break, title = "18A", yint = 48)
+cov_plot(coverage = c18A1_10kb.cov, breakpoints = ref_pri.break, title = "18A1", yint = 61)
+```
+
+## Combining plots
+```{r}
+# Individual plots for chromosomes 1, 4, 9, 12
+plot_11A <- cov_plot(coverage = c11A_10kb.cov, breakpoints = ref_pri.break, title = "11A", yint = 36,
+                      selected_chromosomes = c(1,4,9,12), legend = FALSE)
+plot_12A <- cov_plot(coverage = c12A_10kb.cov, breakpoints = ref_pri.break, title = "12A", yint = 38,
+                      selected_chromosomes = c(1,4,9,12), legend = FALSE)
+plot_13A <- cov_plot(coverage = c13A_10kb.cov, breakpoints = ref_pri.break, title = "13A", yint = 52,
+                      selected_chromosomes = c(1,4,9,12), legend = FALSE)
+plot_15A <- cov_plot(coverage = c15A_10kb.cov, breakpoints = ref_pri.break, title = "15A", yint = 45,
+                      selected_chromosomes = c(1,4,9,12), legend = FALSE)
+plot_15A1 <- cov_plot(coverage = c15A1_10kb.cov, breakpoints = ref_pri.break, title = "15A1", yint = 37,
+                      selected_chromosomes = c(1,4,9,12), legend = FALSE)
+plot_16A <- cov_plot(coverage = c16A_10kb.cov, breakpoints = ref_pri.break, title = "16A", yint = 50,
+                      selected_chromosomes = c(1,4,9,12), legend = FALSE)
+plot_16A1 <- cov_plot(coverage = c16A1_10kb.cov, breakpoints = ref_pri.break, title = "16A1", yint = 43,
+                      selected_chromosomes = c(1,4,9,12), legend = FALSE)
+plot_16A2 <- cov_plot(coverage = c16A2_10kb.cov, breakpoints = ref_pri.break, title = "16A2", yint = 36,
+                      selected_chromosomes = c(1,4,9,12), legend = FALSE)
+plot_17A1 <- cov_plot(coverage = c17A1_10kb.cov, breakpoints = ref_pri.break, title = "17A1", yint = 56,
+                      selected_chromosomes = c(1,4,9,12), legend = FALSE)
+plot_17A2 <- cov_plot(coverage = c17A2_10kb.cov, breakpoints = ref_pri.break, title = "17A2", yint = 19,
+                      selected_chromosomes = c(1,4,9,12), legend = FALSE)
+plot_18A <- cov_plot(coverage = c18A_10kb.cov, breakpoints = ref_pri.break, title = "18A", yint = 48,
+                      selected_chromosomes = c(1,4,9,12), legend = FALSE)
+plot_18A1 <- cov_plot(coverage = c18A1_10kb.cov, breakpoints = ref_pri.break, title = "18A1", yint = 61,
+                      selected_chromosomes = c(1,4,9,12), legend = FALSE)
+
+combined_plots <- plot_11A + plot_12A + plot_13A + plot_15A +
+                  plot_15A1 + plot_16A + plot_16A1 + plot_16A2 +
+                  plot_17A1 + plot_17A2 + plot_18A + plot_18A1
+
+print(combined_plots)
+ggsave("./Figures/Coverage_Analysis/cr2_stacks_combined_plots.pdf", combined_plots, height = 8, width = 16)
+ggsave("./Figures/Coverage_Analysis/cr2_stacks_combined_plots.png", combined_plots, height = 8, width = 16)
+
+## Looking at Chromosomes 12
+plot_15A_chr12 <- cov_plot(coverage = c15A_10kb.cov, breakpoints = ref_pri.break, title = "15A", yint = 45,
+                      selected_chromosomes = c(1,12), legend = FALSE)
+plot_15A1_chr12 <- cov_plot(coverage = c15A1_10kb.cov, breakpoints = ref_pri.break, title = "15A1", yint = 37,
+                      selected_chromosomes = c(1,12), legend = FALSE)
+
+combined_15_plots <- plot_15A_chr12 + plot_15A1_chr12
+
+print(combined_15_plots)
+ggsave("./Figures/Coverage_Analysis/cr2_stack_15_chr12_combined_plots.pdf", combined_15_plots, height = 6, width = 14)
+```
+
+## Only Chromosomes 1, 4 ,9
+```{r}
+cov_plot(coverage = ref_pri_10kb.cov, breakpoints = ref_pri.break, selected_chromosomes = c(1,4,9))
+cov_plot(coverage = term_pri_10kb.cov, breakpoints = term_pri.break, yint = 65, selected_chromosomes = c(1,4,9))
+cov_plot(coverage = cr2_pri_10kb.cov, breakpoints = cr2_pri.break, selected_chromosomes = c(1,4,9))
+#ggsave("./Figures/Coverage_Analysis/cr2_primary_coverage_chr149.pdf", height = 3, width = 7)
+#ggsave("./Figures/Coverage_Analysis/cr2_primary_coverage_chr149.png", height = 3, width = 7)
+
+cov_plot(coverage = cr2_pri_to_ref_chandler, breakpoints = ref_pri.break, selected_chromosomes = c(1,4,9))
+#ggsave("./Figures/Coverage_Analysis/cr2_to_ref_assembly_coverage_chr149.pdf", height = 3, width = 7)
+#ggsave("./Figures/Coverage_Analysis/cr2_to_ref_assembly_coverage_chr149.png", height = 3, width = 7)
+```
+
+## Plot for presentation
+```{r}
+# Individual plots for chromosomes 1, 4, 9, 12
+plot_11A <- cov_plot(coverage = c11A_10kb.cov, breakpoints = ref_pri.break, title = "11A", yint = 36,
+                      selected_chromosomes = c(1,4,9), legend = FALSE)
+plot_12A <- cov_plot(coverage = c12A_10kb.cov, breakpoints = ref_pri.break, title = "12A", yint = 38,
+                      selected_chromosomes = c(1,4,9), legend = FALSE)
+plot_13A <- cov_plot(coverage = c13A_10kb.cov, breakpoints = ref_pri.break, title = "13A", yint = 52,
+                      selected_chromosomes = c(1,4,9), legend = FALSE)
+plot_15A <- cov_plot(coverage = c15A_10kb.cov, breakpoints = ref_pri.break, title = "15A", yint = 45,
+                      selected_chromosomes = c(1,4,9), legend = FALSE)
+plot_15A1 <- cov_plot(coverage = c15A1_10kb.cov, breakpoints = ref_pri.break, title = "15A1", yint = 37,
+                      selected_chromosomes = c(1,4,9), legend = FALSE)
+plot_16A <- cov_plot(coverage = c16A_10kb.cov, breakpoints = ref_pri.break, title = "16A", yint = 50,
+                      selected_chromosomes = c(1,4,9), legend = FALSE)
+plot_16A1 <- cov_plot(coverage = c16A1_10kb.cov, breakpoints = ref_pri.break, title = "16A1", yint = 43,
+                      selected_chromosomes = c(1,4,9), legend = FALSE)
+plot_16A2 <- cov_plot(coverage = c16A2_10kb.cov, breakpoints = ref_pri.break, title = "16A2", yint = 36,
+                      selected_chromosomes = c(1,4,9), legend = FALSE)
+plot_17A1 <- cov_plot(coverage = c17A1_10kb.cov, breakpoints = ref_pri.break, title = "17A1", yint = 56,
+                      selected_chromosomes = c(1,4,9), legend = FALSE)
+plot_17A2 <- cov_plot(coverage = c17A2_10kb.cov, breakpoints = ref_pri.break, title = "17A2", yint = 19,
+                      selected_chromosomes = c(1,4,9), legend = FALSE)
+plot_18A <- cov_plot(coverage = c18A_10kb.cov, breakpoints = ref_pri.break, title = "18A", yint = 48,
+                      selected_chromosomes = c(1,4,9), legend = FALSE)
+plot_18A1 <- cov_plot(coverage = c18A1_10kb.cov, breakpoints = ref_pri.break, title = "18A1", yint = 61,
+                      selected_chromosomes = c(1,4,9), legend = FALSE)
+
+hifi <- cov_plot(coverage = cr2_pri_to_ref_chandler, breakpoints = ref_pri.break, title = "Embryo HiFi", selected_chromosomes = c(1,4,9))
+
+combined_plots <- plot_11A + plot_12A + plot_13A + plot_15A +
+                  plot_15A1 + plot_16A1 + plot_16A2 +
+                  plot_17A1 + plot_17A2 + plot_18A + hifi
+
+plot(combined_plots)
+#ggsave("~/Desktop/cr2_chr_4_9_dup_combined_plots.pdf", combined_plots, height = 10, width = 20)
+
+combined_no4dup_plots <- plot_16A + plot_18A1
+
+print(combined_no4dup_plots)
+ggsave("~/Desktop/cr2_stack_nodup4_combined_plots.pdf", combined_no4dup_plots, height = 4, width = 10)
+```
+

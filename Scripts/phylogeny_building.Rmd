@@ -1,0 +1,61 @@
+---
+title: "phylogeny_building"
+author: "Matthew Davis"
+date: "2024-02-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+```{r, message = FALSE}
+library(tidyverse)
+library(ggtree)
+```
+
+## Read in data
+```{r}
+cr2_stacks_q20.gtrasc <- read.tree("./Data/Iqtree/cr2_stacks_q20_gtr_asc.contree")
+cr2_stacks_q20dp10.gtr <- read.tree("./Data/Iqtree/cr2_stacks_q20dp10.contree")
+cr2_stacks_q20dp10.gtrasc <- read.tree("./Data/Iqtree/cr2_stacks_q20dp10_gtr_asc.contree")
+cr2_stacks_q30.gtrasc <- read.tree("./Data/Iqtree/cr2_stacks_q30_gtr_asc.contree")
+```
+
+## Modify tip labels
+```{r}
+cr2_stacks_q20.gtrasc$tip.label <- sub("_.*$", "", cr2_stacks_q20.gtrasc$tip.label)
+cr2_stacks_q20dp10.gtr$tip.label <- sub("_.*$", "", cr2_stacks_q20dp10.gtr$tip.label)
+cr2_stacks_q20dp10.gtrasc$tip.label <- sub("_.*$", "", cr2_stacks_q20dp10.gtrasc$tip.label)
+cr2_stacks_q30.gtrasc$tip.label <- sub("_.*$", "", cr2_stacks_q30.gtrasc$tip.label)
+```
+
+
+## Plot
+```{r}
+cr2_stacks_q20.gtrasc %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab() +
+  geom_rootedge() +
+  theme_tree2()
+
+cr2_stacks_q20dp10.gtr %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab() +
+  geom_rootedge() +
+  theme_tree2()
+
+cr2_stacks_q20dp10.gtrasc %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab() +
+  geom_rootedge() +
+  theme_tree2()
+
+cr2_stacks_q30.gtrasc %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge()
+ggsave("./Figures/Phylogeny/cr2_stacks_phylogeny_q30.pdf", height = 6, width = 12)
+ggsave("./Figures/Phylogeny/cr2_stacks_phylogeny_q30.png", height = 6, width = 12)
+```
