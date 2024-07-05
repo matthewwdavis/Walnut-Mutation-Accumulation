@@ -439,7 +439,7 @@ combo.table <- rbind(ref_pri.table, term_pri.table, cr2_pri.table)
 plotting.table <- combo.table %>%
   group_by(Chromosome, Source) %>%
   summarize(total_bp = sum(total_telo_bp)) %>%
-  mutate(total_normalized_size = )
+  mutate(total_normalized_size = ) %>%
   ungroup()
 
 plotting.table %>%
@@ -538,14 +538,21 @@ read_telomeres_cor_long_bp <- rbind(cor_ref_long, cor_term_long, cor_cr2_long)
 # On its side
 ggplot(data = read_telomeres_cor_long_bp, aes(x = ID, fill = ID, y = Corrected_Count)) +
   geom_bar(stat = "identity") +
-  scale_fill_brewer(palette = "Dark2") +
-  geom_text(aes(label = Scientific_Notation), vjust = -0.7, angle = 270) +
-  labs(y = "Number of 21-mer telomere sequences in nuclear long reads\n(corrected with total bp/21)", x = "") +
+  scale_fill_manual(values = c("CR2" = "orangered",
+                               "Reference Chandler" = "seagreen", 
+                               "Terminal Chandler" = "seagreen")) +
+  scale_x_discrete(labels = c("CR2" = "HiFi Embryo", "Reference Chandler" = "Reference Tree", "Terminal Chandler" = "Tree 2")) +
+  #geom_text(aes(label = Scientific_Notation), vjust = -0.7, angle = 270) +
+  labs(y = "Number of 21-mer telomere sequences in nuclear long reads\n(corrected with total bp/21)") +
   coord_flip() +
-  theme_classic() + 
-  theme(plot.title = element_text(hjust = 0.5), legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
-#ggsave("~/Projects/Walnut/Longterm_Tissue_Culture/Figures/Bar_Charts/Telomeres/long_read_telomere_counts_nuclear_reads_long.png", height = 3, width = 6)
-#ggsave("~/Projects/Walnut/Longterm_Tissue_Culture/Figures/Bar_Charts/Telomeres/long_read_telomere_counts_nuclear_reads_long.pdf", height = 3, width = 6)
+  theme_classic(base_size = 6) + 
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_blank())
+ggsave("./Figures/Telomere_Identification/long_read_telomere_counts_nuclear_reads_long.png", height = 2, width = 5)
+ggsave("./Figures/Telomere_Identification/long_read_telomere_counts_nuclear_reads_long.pdf", height = 2, width = 5)
 
 # Right side up
 ggplot(data = read_telomeres_cor_long_bp, aes(x = ID, fill = ID, y = Corrected_Count)) +
@@ -556,7 +563,7 @@ ggplot(data = read_telomeres_cor_long_bp, aes(x = ID, fill = ID, y = Corrected_C
                                "Terminal Chandler" = "seagreen")) +
   labs(y = "Number of 21-mer telomere sequences in nuclear long reads\n(corrected with total bp/21)",
        x = "", fill = "") +
-  theme_classic() + 
+  theme_classic(base_size = 6) + 
   theme(plot.title = element_text(hjust = 0.5), legend.position = "none")
 #ggsave("~/Desktop/long_read_telomere_counts_nuclear_reads_tall.png", height = 6, width = 5)
 #ggsave("~/Desktop/long_read_telomere_counts_nuclear_reads_tall.pdf", height = 6, width = 5)

@@ -396,15 +396,34 @@ embryos_snps_unique <- unique(bind_rows(cr2_hifi_unique, cr21_1_unique, cr21_2_u
 
 ## Making the Venn Diagram
 ```{r}
-library(venn)
 library(ggVennDiagram)
-unique_snps.list <- list(trees_snps_unique, shoots_snps_unique, embryos_snps_unique)
+unique_snps.list <- list("embryo" = embryos_snps_unique$unique,
+                         "shoot" = shoots_snps_unique$unique,
+                         "tree" = trees_snps_unique$unique)
 
-venn_obj <- venn(unique_snps.list)
+# 
+# trees_snps_unique <- trees_snps_unique %>%
+#   mutate(id = "tree")
+# 
+# shoots_snps_unique <- shoots_snps_unique %>%
+#   mutate(id = "shoot")
+# 
+# embryos_snps_unique <- embryos_snps_unique %>%
+#   mutate(id = "embryo")
 
-plot(venn_obj)
+# unique_snps.df <- rbind(trees_snps_unique, shoots_snps_unique, embryos_snps_unique)
 
-ggVennDiagram(unique_snps.list)
+ggVennDiagram(x = unique_snps.list,
+              category.names = c("Embryos","Shoots","Trees"),
+              set_color = c("orangered","dodgerblue","seagreen"),
+              edge_size = 2,
+              label = "percent",
+              label_percent_digit = 1,
+              label_alpha = 0,
+              label_color = "black") +
+  scale_fill_distiller(palette = "Greys", direction = 1)
+ggsave("~/Desktop/venndiagram_all_snps.pdf", height = 5, width = 7)
+ggsave("~/Desktop/venndiagram_all_snps.png", height = 5, width = 7)
 ```
 
 ## Identifying snps in the intersections of the venn diagram
@@ -417,15 +436,178 @@ tree_shoot_embryo_snps <- tree_shoot_snps %>%
   inner_join(shoots_snps_unique) %>%
   inner_join(embryos_snps_unique)
 
+# combining all to identify all ancestral snps
 all_anc_snps <- unique(bind_rows(tree_shoot_snps, tree_embryo_snps, shoot_embryo_snps, tree_shoot_embryo_snps))
+```
 
-ref_chandler %>%
+## Filtering all for denovo snps
+```{r}
+# Hifi
+ref_chandler_dn <- ref_chandler %>%
   anti_join(all_anc_snps)
 
-tree2 %>%
+tree2_dn <- tree2 %>%
   anti_join(all_anc_snps)
 
-cr85 %>%
+cr2_hifi_dn <- cr2_hifi %>%
   anti_join(all_anc_snps)
-``` 
 
+# Short read shoots
+cr85_dn <- cr85 %>%
+  anti_join(all_anc_snps)
+
+cr10_dn <- cr10 %>%
+  anti_join(all_anc_snps)
+
+cr13_dn <- cr13 %>%
+  anti_join(all_anc_snps)
+
+cr22_dn <- cr22 %>%
+  anti_join(all_anc_snps)
+
+# Original embryo cultures
+cr21_1_dn <- cr21_1 %>%
+  anti_join(all_anc_snps)
+
+cr21_2_dn <- cr21_2 %>%
+  anti_join(all_anc_snps)
+
+# Embryo stacks
+cr2_11A_dn <- cr2_11A %>%
+  anti_join(all_anc_snps)
+
+cr2_12A_dn <- cr2_12A %>%
+  anti_join(all_anc_snps)
+
+cr2_13A_dn <- cr2_13A %>%
+  anti_join(all_anc_snps)
+
+cr2_15A_dn <- cr2_15A %>%
+  anti_join(all_anc_snps)
+
+cr2_15A1_dn <- cr2_15A1 %>%
+  anti_join(all_anc_snps)
+
+cr2_16A_dn <- cr2_16A %>%
+  anti_join(all_anc_snps)
+
+cr2_16A1_dn <- cr2_16A1 %>%
+  anti_join(all_anc_snps)
+
+cr2_16A2_dn <- cr2_16A2 %>%
+  anti_join(all_anc_snps)
+
+cr2_17A1_dn <- cr2_17A1 %>%
+  anti_join(all_anc_snps)
+
+cr2_17A2_dn <- cr2_17A2 %>%
+  anti_join(all_anc_snps)
+
+cr2_18A_dn <- cr2_18A %>%
+  anti_join(all_anc_snps)
+
+cr2_18A1_dn <- cr2_18A1 %>%
+  anti_join(all_anc_snps)
+
+all_dn_snps <- bind_rows(ref_chandler_dn, tree2_dn, cr2_hifi_dn,
+                         cr85_dn, cr10_dn, cr13_dn, cr22_dn,
+                         cr21_1_dn, cr21_2_dn, cr2_11A_dn, cr2_12A_dn,
+                         cr2_13A_dn, cr2_15A_dn, cr2_15A1_dn, cr2_16A_dn,
+                         cr2_16A1_dn, cr2_16A2_dn, cr2_17A1_dn, cr2_17A2_dn,
+                         cr2_18A_dn, cr2_18A1_dn)
+```
+
+## Filtering for all ancestral snps
+```{r}
+# Hifi
+ref_chandler_an <- ref_chandler %>%
+  inner_join(all_anc_snps)
+
+tree2_an <- tree2 %>%
+  inner_join(all_anc_snps)
+
+cr2_hifi_an <- cr2_hifi %>%
+  inner_join(all_anc_snps)
+
+# Short read shoots
+cr85_an <- cr85 %>%
+  inner_join(all_anc_snps)
+
+cr10_an <- cr10 %>%
+  inner_join(all_anc_snps)
+
+cr13_an <- cr13 %>%
+  inner_join(all_anc_snps)
+
+cr22_an <- cr22 %>%
+  inner_join(all_anc_snps)
+
+# Original embryo cultures
+cr21_1_an <- cr21_1 %>%
+  inner_join(all_anc_snps)
+
+cr21_2_an <- cr21_2 %>%
+  inner_join(all_anc_snps)
+
+# Embryo stacks
+cr2_11A_an <- cr2_11A %>%
+  inner_join(all_anc_snps)
+
+cr2_12A_an <- cr2_12A %>%
+  inner_join(all_anc_snps)
+
+cr2_13A_an <- cr2_13A %>%
+  inner_join(all_anc_snps)
+
+cr2_15A_an <- cr2_15A %>%
+  inner_join(all_anc_snps)
+
+cr2_15A1_an <- cr2_15A1 %>%
+  inner_join(all_anc_snps)
+
+cr2_16A_an <- cr2_16A %>%
+  inner_join(all_anc_snps)
+
+cr2_16A1_an <- cr2_16A1 %>%
+  inner_join(all_anc_snps)
+
+cr2_16A2_an <- cr2_16A2 %>%
+  inner_join(all_anc_snps)
+
+cr2_17A1_an <- cr2_17A1 %>%
+  inner_join(all_anc_snps)
+
+cr2_17A2_an <- cr2_17A2 %>%
+  inner_join(all_anc_snps)
+
+cr2_18A_an <- cr2_18A %>%
+  inner_join(all_anc_snps)
+
+cr2_18A1_an <- cr2_18A1 %>%
+  inner_join(all_anc_snps)
+
+all_an_snps <- list(ref_chandler_an, tree2_an, cr2_hifi_an,
+                         cr85_an, cr10_an, cr13_an, cr22_an,
+                         cr21_1_an, cr21_2_an, cr2_11A_an, cr2_12A_an,
+                         cr2_13A_an, cr2_15A_an, cr2_15A1_an, cr2_16A_an,
+                         cr2_16A1_an, cr2_16A2_an, cr2_17A1_an, cr2_17A2_an,
+                         cr2_18A_an, cr2_18A1_an)
+
+
+# Function to filter data tables
+filter_unique <- function(dt) {
+  dt[!duplicated(unique), ]
+}
+
+# Apply the function to each data table in the list
+filtered_list <- lapply(all_an_snps, filter_unique)
+```
+
+## Write out vcfs
+```{r}
+#all_dn_snps
+#write_tsv(x = all_dn_snps, file = "./Data/VCFs/Filtered/all_dn_snps.vcf")
+
+#all_an_snps
+#write_tsv(x = all_an_snps, file = "./Data/VCFs/Filtered/all_an_snps_list.vcf")
+```

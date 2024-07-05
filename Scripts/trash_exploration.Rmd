@@ -1,0 +1,217 @@
+---
+title: "trash_exploration"
+author: "Matthew Davis"
+date: "2024-07-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(tidyverse)
+```
+
+## Read in data
+```{r}
+ref_pri <- read_csv("./Data/Trash/all.repeats.from.ref_chandler_primary_default_scaffold_chr_only.fasta.csv")
+ref_pri_summary <- read_csv("./Data/Trash/Summary.of.repetitive.regions.ref_chandler_primary_default_scaffold_chr_only.fasta.csv")
+```
+
+# What repeats are present?
+## Look at distribution of repeats
+```{r}
+## All repeats
+ref_pri %>% 
+  ggplot(aes(x = width)) +
+  geom_histogram() +
+  facet_wrap(~ seq.name, scales = "free") + 
+  theme_classic() 
+
+## Trying to remove telomeric repeats
+ref_pri %>% 
+  filter(width >= 25) %>%
+  ggplot(aes(x = width)) +
+  geom_histogram() +
+  facet_wrap(~ seq.name, scales = "free") + 
+  theme_classic() 
+
+ref_pri %>% 
+  ggplot(aes(x = width)) +
+  geom_histogram(binwidth = 1, boundary = 0) + 
+  scale_y_continuous(trans = "log10") +
+  scale_x_continuous(breaks = seq(min(ref_pri$width), max(ref_pri$width), by = 50)) +
+  theme_classic() 
+
+ref_pri %>% 
+  ggplot(aes(x = width)) +
+  geom_histogram(binwidth = 50, boundary = 0) + 
+  scale_y_continuous(trans = "log10") +
+  scale_x_continuous(breaks = seq(min(ref_pri$width), max(ref_pri$width), by = 50)) +
+  facet_wrap(~ seq.name, scales = "free") +
+  theme_classic() 
+```
+## Making 10 kb windows
+```{r}
+# Define window size
+window_size <- 1000000
+
+# Create a new column window indicating the window each 'end' value belongs to
+ref_pri <- ref_pri %>%
+  group_by(seq.name) %>%
+  mutate(window = (end %/% window_size) + 1) %>%
+  mutate(position = start+end/2) %>%
+  ungroup()
+
+# Count the number of rows in each window
+all_window_counts <- ref_pri %>%
+  mutate(window = as.factor(window)) %>%
+  count(seq.name, window, .drop = FALSE, name = "count") %>%
+  mutate(window = as.numeric(window)) %>%
+  mutate(pos = (window - 1) * window_size + window_size / 2)
+
+window_counts10 <- ref_pri %>%
+  filter(width > 10) %>%
+  mutate(window = as.factor(window)) %>%
+  count(seq.name, window, .drop = FALSE, name = "count") %>%
+  mutate(window = as.numeric(window)) %>%
+  mutate(pos = (window - 1) * window_size + window_size / 2)
+
+window_counts7 <- ref_pri %>%
+  filter(width == 7) %>%
+ mutate(window = as.factor(window)) %>%
+  count(seq.name, window, .drop = FALSE, name = "count") %>%
+  mutate(window = as.numeric(window)) %>%
+  mutate(pos = (window - 1) * window_size + window_size / 2)
+
+window_counts100_200 <- ref_pri %>%
+  filter(between(width, 100, 200)) %>%
+  mutate(window = as.factor(window)) %>%
+  count(seq.name, window, .drop = FALSE, name = "count") %>%
+  mutate(window = as.numeric(window)) %>%
+  mutate(pos = (window - 1) * window_size + window_size / 2)
+```
+
+## Look to plot density of repeats by position
+```{r}
+all_window_counts %>%
+  ggplot(aes(x = pos, y = count)) +
+  geom_line() +
+  facet_wrap(~seq.name, scales = "free") +
+  theme_classic()
+
+window_counts10 %>%
+   ggplot(aes(x = pos, y = count)) +
+  geom_line() +
+  facet_wrap(~seq.name, scales = "free") +
+  theme_classic()
+
+window_counts7 %>%
+   ggplot(aes(x = pos, y = count)) +
+  geom_line() +
+  facet_wrap(~seq.name, scales = "free") +
+  theme_classic()
+
+window_counts100_200 %>%
+   ggplot(aes(x = pos, y = count)) +
+  geom_line() +
+  facet_wrap(~seq.name, scales = "free") +
+  theme_classic()
+
+window_counts100_200 %>%
+  ggplot(aes(x = pos, y = count)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~seq.name, scales = "free") +
+  theme_classic()
+```
+# Look to define common repeats
+## Looking for the centromere
+```{r}
+ref_pri %>%
+  count(width, sort = TRUE)
+
+# Looking at weird 308 repeat location
+ref_pri %>%
+  filter(width == 308) %>%
+  mutate(window = as.factor(window)) %>%
+  count(seq.name, window, .drop = FALSE, name = "count") %>%
+  mutate(window = as.numeric(window)) %>%
+  mutate(pos = (window - 1) * window_size + window_size / 2) %>%
+  ggplot(aes(x = pos, y = count)) +
+  geom_line() +
+  facet_wrap(~seq.name, scales = "free") +
+  theme_classic()
+
+## Looking at potential centromere
+ref_pri %>%
+  filter(between(width, 150, 160)) %>%
+  mutate(window = as.factor(window)) %>%
+  count(seq.name, window, .drop = FALSE, name = "count") %>%
+  mutate(window = as.numeric(window)) %>%
+  mutate(pos = (window - 1) * window_size + window_size / 2) %>%
+  ggplot(aes(x = pos, y = count)) +
+  geom_line() +
+  facet_wrap(~seq.name, scales = "free") +
+  theme_classic()
+```
+
+## Look for centromeres in the summary file
+```{r}
+ref_pri_summary %>%
+  arrange(desc(repeats.identified)) %>%
+  filter(most.freq.value.N > 100) %>%
+  select(name, most.freq.value.N, ave.score, repeats.identified, everything(), -...1)
+
+# Does chromosome 7 have 4 centromeres?
+ref_pri %>%
+  filter(width == 154) %>%
+  mutate(window = as.factor(window)) %>%
+  count(seq.name, window, .drop = FALSE, name = "count") %>%
+  mutate(window = as.numeric(window)) %>%
+  mutate(pos = (window - 1) * window_size + window_size / 2) %>%
+  ggplot(aes(x = pos, y = count)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~seq.name, scales = "free") +
+  theme_classic()
+# Thinking this repeat is not the centromere
+
+ref_pri %>%
+  filter(width == 186) %>%
+  mutate(window = as.factor(window)) %>%
+  count(seq.name, window, .drop = FALSE, name = "count") %>%
+  mutate(window = as.numeric(window)) %>%
+  mutate(pos = (window - 1) * window_size + window_size / 2) %>%
+  ggplot(aes(x = pos, y = count)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~seq.name, scales = "free") +
+  theme_classic()
+```
+
+## Previous assembly defines centromere as 154 and 308 bp repeats
+```{r}
+ref_pri %>%
+  filter(between(width, 150, 160)) %>%
+  mutate(window = as.factor(window)) %>%
+  count(seq.name, window, .drop = FALSE, name = "count") %>%
+  mutate(window = as.numeric(window)) %>%
+  mutate(pos = (window - 1) * window_size + window_size / 2) %>%
+  ggplot(aes(x = pos, y = count)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~seq.name, scales = "free") +
+  theme_classic()
+
+ref_pri %>%
+  filter(between(width, 300, 310)) %>%
+  mutate(window = as.factor(window)) %>%
+  count(seq.name, window, .drop = FALSE, name = "count") %>%
+  mutate(window = as.numeric(window)) %>%
+  mutate(pos = (window - 1) * window_size + window_size / 2) %>%
+  ggplot(aes(x = pos, y = count)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~seq.name, scales = "free") +
+  theme_classic()
+```
+

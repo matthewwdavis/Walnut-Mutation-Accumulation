@@ -1,0 +1,167 @@
+---
+title: "circos_plots"
+author: "Matthew Davis"
+date: "2024-07-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Setup
+## Library
+```{r, message=FALSE}
+library(tidyverse)
+library(circlize)
+library(migest)
+library(Biostrings)
+library(data.table)
+```
+
+## Functions
+```{r}
+# Extract chromosome lengths
+read_fasta <- function(file){
+  
+  genome_fasta <- readDNAStringSet(file)
+  
+  # Filter the DNAStringSet object to keep only chromosomes
+chromosome_pattern <- "NC_04"  # Modify this pattern based on your data
+chromosome_indices <- grepl(chromosome_pattern, names(genome_fasta))
+genome_fasta <- genome_fasta[chromosome_indices]
+
+
+  # Original names in the genome FASTA file
+  original_names <- names(genome_fasta)
+
+  # Create a function to map original names to the GFF naming convention
+  rename_function <- function(name) {
+    # Extract the necessary part and format it
+    # This example assumes a specific format - modify as needed for your data
+    chr_num <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", name))
+    return(chr_num)
+    }
+
+  # Apply the renaming function to all sequence names
+  new_names <- sapply(original_names, rename_function)
+
+  # Assign the new names to the genome FASTA object
+  names(genome_fasta) <- new_names
+
+  return(genome_fasta)
+  
+}
+
+chr_lengths <- function(fasta){
+  
+  data <- data.table(Chr = names(fasta), End = width(fasta))
+  data <- data %>%
+    mutate(Start = 1)
+  data <- data[grepl("NC_04", data$Chr),] # select chromosomes
+  
+  # Extract the chromosome number 
+  data$Chr <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", data$Chr))
+  
+  data <- data %>%
+    select(c("Chr", "Start", "End"))
+  
+  return(data)
+}
+
+read_gff <- function(gff_file) {
+  # Read in data
+gff <- fread(gff_file, sep = "\t", header = FALSE, stringsAsFactors = FALSE)
+
+# Extract chromosomes
+gff <- gff[grepl("NC_04", gff$V1),]
+
+# Extract the chromosome number
+gff$Chr <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", gff$V1))
+
+# Select and rename columns
+gff <- gff %>%
+  select(Chr, V3, V4, V5)
+
+colnames(gff) <- c("Chr", "Feature", "Start", "End")
+
+return(gff)
+}
+
+```
+
+## Read in data
+```{r}
+# Fasta assembly
+ref_pri.fasta <- readDNAStringSet("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+test <- read_fasta("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+gff <- read_gff("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
+```
+
+## Filtering data frames 
+```{r}
+ref_pri.lengths <- chr_lengths(ref_pri.fasta)
+
+genes <- gff %>%
+  filter(Feature == "gene") %>%
+  select(-Feature)
+
+genes.mat <- as.matrix(genes)
+```
+
+# Plotting
+## Plot genome
+```{r}
+circos.genomicInitialize(ref_pri.lengths)
+#circos.genomicHeatmap(genes, col = col_fun, side = "inside", border = "white")
+```
+
+## Tutorial
+```{r}
+set.seed(999)
+n = 1000
+df = data.frame(sectors = sample(letters[1:8], n, replace = TRUE),
+    x = rnorm(n), y = runif(n))
+
+circos.par("track.height" = 0.1)
+circos.initialize(df$sectors, x = df$x)
+```
+## Trying genomic ranges
+```{r}
+library(GenomicRanges)
+# Create a Seqinfo object
+seqinfo <- Seqinfo(names(test), seqlengths = width(test))
+
+# Step 2: Read the BED file
+bed_df <- genes
+colnames(bed_df) <- c("chr", "start", "end")
+
+# Step 3: Divide the genome into bins
+bin_size <- 1e6
+bins <- tileGenome(seqinfo, tilewidth = bin_size, cut.last.tile.in.chrom = TRUE)
+
+# Step 4: Count the number of genes in each bin
+genes2 <- GRanges(seqnames = genes$chr, ranges = IRanges(start = bed_df$start, end = bed_df$end))
+gene_counts <- countOverlaps(bins, genes2)
+bins$gene_density <- gene_counts
+
+# Step 5: Visualize gene density using circlize
+heatmap_data <- data.frame(
+  chr = as.character(seqnames(bins)),
+  start = start(bins),
+  end = end(bins),
+  value = bins$gene_density
+)
+```
+
+## Try to plot
+```{r}
+circos.genomicInitialize(ref_pri.lengths)
+circos.genomicHeatmap(heatmap_data, col = colorRamp2(c(min(heatmap_data$value), max(heatmap_data$value)), c("white", "red")), heatmap_height = 0.075, connection_height = NULL, side = "inside")
+circos.track(ylim = c(0, 1), track.height = 0.1)
+circos.track(track.index = get.current.track.index(), panel.fun = function(x, y) {
+    circos.genomicAxis(h = "bottom", direction = "inside")
+})
+```
+```
+

@@ -295,7 +295,7 @@ convertSVG(svg = "./Figures/Ideograms/ref_chandler_primary_ideogram.svg", file =
 convertSVG(svg = "./Figures/Ideograms/ref_chandler_primary_ideogram.svg", file = "./Figures/Ideograms/ref_chandler_primary_ideogram",  device = "png")
 
 ideogram(karyotype = ref_pri.lengths, overlaid = gene_density, label = recom_marker.table, label_type = "marker",
-         width = 150, Lx = 20, Ly = 25, output = "./Figures/Ideograms/ref_chandler_primary_ideogram_recomb.svg")
+         width = 100, Lx = 10, Ly = 30, output = "./Figures/Ideograms/ref_chandler_primary_ideogram_recomb.svg")
 convertSVG(svg = "./Figures/Ideograms/ref_chandler_primary_ideogram_recomb.svg", file = "./Figures/Ideograms/ref_chandler_primary_ideogram_recomb",  device = "pdf")
 convertSVG(svg = "./Figures/Ideograms/ref_chandler_primary_ideogram_recomb.svg", file = "./Figures/Ideograms/ref_chandler_primary_ideogram_recomb",  device = "png")
 ```
