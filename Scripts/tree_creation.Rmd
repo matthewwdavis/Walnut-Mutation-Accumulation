@@ -1,0 +1,23 @@
+---
+title: "tree_creation"
+author: "Matthew Davis"
+date: "2024-07-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(data.table)
+```
+
+## Read in files
+```{r}
+dn_snps <- fread("./Data/VCFs/Filtered/all_dn_snps.vcf")
+```
+

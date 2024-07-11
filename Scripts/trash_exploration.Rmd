@@ -93,6 +93,20 @@ window_counts100_200 <- ref_pri %>%
   count(seq.name, window, .drop = FALSE, name = "count") %>%
   mutate(window = as.numeric(window)) %>%
   mutate(pos = (window - 1) * window_size + window_size / 2)
+
+window_counts150_160 <- ref_pri %>%
+  filter(between(width, 150, 160)) %>%
+  mutate(window = as.factor(window)) %>%
+  count(seq.name, window, .drop = FALSE, name = "count") %>%
+  mutate(window = as.numeric(window)) %>%
+  mutate(pos = (window - 1) * window_size + window_size / 2)
+
+window_counts302_312 <- ref_pri %>%
+  filter(between(width, 302, 312)) %>%
+  mutate(window = as.factor(window)) %>%
+  count(seq.name, window, .drop = FALSE, name = "count") %>%
+  mutate(window = as.numeric(window)) %>%
+  mutate(pos = (window - 1) * window_size + window_size / 2)
 ```
 
 ## Look to plot density of repeats by position
@@ -126,6 +140,18 @@ window_counts100_200 %>%
   geom_bar(stat = "identity") +
   facet_wrap(~seq.name, scales = "free") +
   theme_classic()
+
+window_counts150_160 %>%
+   ggplot(aes(x = pos, y = count)) +
+  geom_line() +
+  facet_wrap(~seq.name, scales = "free") +
+  theme_classic()
+
+window_counts302_312 %>%
+   ggplot(aes(x = pos, y = count)) +
+  geom_line() +
+  facet_wrap(~seq.name, scales = "free") +
+  theme_classic()
 ```
 # Look to define common repeats
 ## Looking for the centromere
@@ -133,9 +159,17 @@ window_counts100_200 %>%
 ref_pri %>%
   count(width, sort = TRUE)
 
-# Looking at weird 308 repeat location
 ref_pri %>%
-  filter(width == 308) %>%
+  group_by(seq.name, width, window) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count)) %>%
+  filter(width > 100) %>%
+  ungroup()
+# Could chromosome 7 be a fusion? There was an ancient whole genome duplication
+
+# Looking at 308 repeat location
+ref_pri %>%
+  filter(between(width, 305, 315)) %>%
   mutate(window = as.factor(window)) %>%
   count(seq.name, window, .drop = FALSE, name = "count") %>%
   mutate(window = as.numeric(window)) %>%
