@@ -14,10 +14,142 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r, message=FALSE}
 library(tidyverse)
 library(data.table)
+library(janitor)
+library(ggdendro)
+library(Biostrings)
+library(DECIPHER)
 ```
 
 ## Read in files
 ```{r}
 dn_snps <- fread("./Data/VCFs/Filtered/all_dn_snps.vcf")
+```
+
+# Making a SNP tree
+## Make matrix
+```{r}
+# Create matrix
+snp.matrix <- dn_snps %>%
+  select(Source, unique) %>%
+  mutate(present = 1) %>%
+  pivot_wider(names_from = unique, values_from = present, values_fill = list(present = 0))
+
+## Make the source column row names
+snp.matrix <- snp.matrix %>%
+  column_to_rownames(var = "Source")
+
+# Check for duplicate columns
+## get the column names
+column_names <- colnames(snp.matrix)
+
+## find duplicates
+duplicate_columns <- column_names[duplicated(column_names)]
+
+## print duplicate column names, if any
+if (length(duplicate_columns) > 0) {
+  print(duplicate_columns)
+} else {
+  print("No duplicate column names found.")
+}
+```
+
+## Calculate the bindary distance between samples and cluster the matrix
+```{r}
+## distacnce
+dist.matrix <- dist(snp.matrix, method = "binary")
+
+## cluster
+clust_avg <- hclust(dist.matrix, method = "average")
+
+clusters <- cutree(clust_avg, k = 3)  # Adjust 'k' as needed
+```
+
+## Plot the tree
+```{r}
+## Base R
+plot(clust_avg, main = "Hierarchical Clustering Dendrogram", xlab = "Sources", sub = "", cex = 0.6)
+rect.hclust(clust_avg , k = 3, border = 2:6)
+abline(h = 3, col = 'red')
+
+## GG Dendro
+dendro <- as.dendrogram(clust_avg)
+dendro_dn_snps <- dendro_data(dendro)
+
+## Cluster test
+# Convert dendrogram labels to data frame for ggplot
+# Convert dendrogram to dendro_data
+dendro <- as.dendrogram(clust_avg)
+dendro_dn_snps <- dendro_data(dendro)
+
+# Convert dendrogram labels to data frame for ggplot
+label_data <- dendro_dn_snps$labels %>%
+  as.data.frame() %>%
+  mutate(cluster = clusters[match(label, names(clusters))])
+
+# Calculate x positions for segments based on dendrogram structure
+segment_data <- dendro_dn_snps$segments %>%
+  as.data.frame()
+
+# Define colors for each cluster
+cluster_colors <- c("red", "blue", "green")  # Add more colors as needed
+
+ggplot(segment_data) +
+  geom_segment(aes(x = x, y = y, xend = xend, yend = yend, color = label_data$cluster), size = 1) +
+  coord_flip() + 
+  scale_color_manual(values = cluster_colors) +
+  geom_text(aes(x = x, y = y, label = label, hjust = 0), data = label_data) +
+  scale_y_reverse(expand = c(0.2, 0)) +
+  theme_dendro()
+```
+
+# Making a TE tree
+## Read in data with BioStrings and Decipher
+```{r}
+te_5453 <- readDNAStringSet("./Data/SV_Outputs/cr2_5453sv.fasta", format = "fasta")
+te_5454 <- readDNAStringSet("./Data/SV_Outputs/cr2_5454sv.fasta", format = "fasta")
+te_5455 <- readDNAStringSet("./Data/SV_Outputs/cr2_5455sv.fasta", format = "fasta")
+te_899 <- readDNAStringSet("./Data/SV_Outputs/cr2_899sv.fasta", format = "fasta")
+
+# All fastas
+te <- c(te_899, te_5453, te_5454, te_5455)
+```
+
+## Make matrix and cluster
+```{r}
+# Make distance matrix
+dist_matrix_5453 <- DistanceMatrix(te_5453)
+dist_matrix_5454 <- DistanceMatrix(te_5454)
+dist_matrix_5455 <- DistanceMatrix(te_5455)
+dist_matrix_899 <- DistanceMatrix(te_899)
+
+dist_matrix_te <- DistanceMatrix(te)
+
+# Make the matrix a dist object
+dist_matrix_5453 <- as.dist(dist_matrix_5453)
+dist_matrix_5454 <- as.dist(dist_matrix_5454)
+dist_matrix_5455 <- as.dist(dist_matrix_5455)
+dist_matrix_899 <- as.dist(dist_matrix_899)
+
+dist_matrix_te <- as.dist(dist_matrix_te)
+
+# Cluster
+clust_5453 <- hclust(dist_matrix_5453, method = "average")
+clust_5454 <- hclust(dist_matrix_5454, method = "average")
+clust_5455 <- hclust(dist_matrix_5455, method = "average")
+clust_899 <- hclust(dist_matrix_899, method = "average")
+
+clust_te <- hclust(dist_matrix_te, method = "average")
+```
+
+## Plot
+```{r}
+plot(clust_5453)
+plot(clust_5454)
+plot(clust_5455)
+plot(clust_899)
+
+plot(clust_te)
+rect.hclust(clust_te , k = 4, border = 2:6)
+abline(h = 3, col = 'red')
 ```
 
