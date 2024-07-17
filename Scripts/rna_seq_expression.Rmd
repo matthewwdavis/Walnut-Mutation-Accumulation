@@ -1,0 +1,39 @@
+---
+title: "rna_seq_expression"
+author: "Matthew Davis"
+date: "2024-07-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r, message=FALSE}
+library(data.table)
+library(tidyverse)
+```
+
+## Functions
+```{r}
+
+```
+
+## Read in data
+```{r}
+cr2_11A <- fread("./Data/RNASeq_Counts/11A_I2_S29_counts.txt")
+cr2_12A <- fread("./Data/RNASeq_Counts/12A_I2_S30_counts.txt")
+cr2_13A <- fread("./Data/RNASeq_Counts/13A_I1_S31_counts.txt")
+cr2_15A <- fread("./Data/RNASeq_Counts/15A_I1_S32_counts.txt")
+cr2_15A1 <- fread("./Data/RNASeq_Counts/15A1_I1_S40_counts.txt")
+cr2_16A <- fread("./Data/RNASeq_Counts/16A_I2_S33_counts.txt")
+cr2_16A1 <- fread("./Data/RNASeq_Counts/16A1_I1_S34_counts.txt")
+cr2_16A2 <- fread("./Data/RNASeq_Counts/16A2_I2_S35_counts.txt")
+cr2_17A1 <- fread("./Data/RNASeq_Counts/17A1_I2_S36_counts.txt")
+cr2_17A2 <- fread("./Data/RNASeq_Counts/17A2_I2_S37_counts.txt")
+cr2_18A <- fread("./Data/RNASeq_Counts/18A_I2_S38_counts.txt")
+cr2_18A1 <- fread("./Data/RNASeq_Counts/18A1_I1_S39_counts.txt")
+```
+
