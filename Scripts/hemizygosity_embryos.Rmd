@@ -1,0 +1,255 @@
+---
+title: "hemizygosity_embryos"
+author: "Matthew Davis"
+date: "2024-07-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+
+## Libraries
+
+```{r, message=FALSE}
+library(tidyverse)
+library(data.table)
+```
+
+## Functions
+
+```{r}
+
+```
+
+## Read in data
+
+```{r}
+chr16_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_16.vcf")
+```
+
+# Brief data check
+
+## Checking distribution of quality scores
+
+```{r}
+chr16_an %>%
+  ggplot(aes(x = QUAL)) +
+  geom_histogram() +
+  geom_vline(aes(xintercept = mean(QUAL))) + 
+  theme_classic()
+
+chr16_an %>%
+  filter(QUAL > 5) %>%
+  ggplot(aes(x = QUAL)) +
+  geom_histogram() +
+  geom_vline(aes(xintercept = mean(QUAL))) +
+  theme_classic()
+```
+
+# Looking at position by depth by GT
+
+## Filter for only homozygous and het sites
+
+```{r}
+chr16_filt <- chr16_an %>%
+  filter(GT %in% c("0/1", "1/1"))
+```
+
+## Plot
+
+```{r}
+test_plot <- chr16_filt %>%
+  ggplot(aes(x = POS, y = log10(DP), col = GT)) +
+  geom_point() +
+  geom_hline(aes(yintercept = mean(log10(DP)))) +
+  facet_wrap(~ Source) +
+  theme_classic()
+
+test_plot2 <- chr16_filt %>%
+  ggplot(aes(x = POS, y = log10(DP), col = GT)) +
+  geom_line() +
+  geom_hline(aes(yintercept = mean(log10(DP)))) +
+  facet_wrap(~ Source) +
+  theme_classic()
+
+# ggsave("~/Desktop/test.png", height = 20, width = 6)
+# ggsave("~/Desktop/test2.png", height = 20, width = 6)
+```
+
+# Work on creating a smooth line graph
+
+## Create homozygous and heterozyogus files
+
+```{r}
+# chr16_hom <- chr16_filt %>%
+#   filter(GT %in% "1/1")
+```
+
+## Take the average depth in the window of hets and homs
+
+```{r}
+# # Function to calculate average depth starting from position 1
+# avg_depth_window <- function(data, window_size = 10000, genotype) {
+#   # Filter data based on genotype
+#   filtered_data <- data[GT == genotype]
+#   
+#   # Initialize an empty list to store results
+#   result_list <- list()
+#   
+#   # Determine the maximum POS value
+#   max_pos <- max(filtered_data$POS)
+#   
+#   # Loop through the POS values in steps of window_size, starting from 1
+#   for (start in seq(1, max_pos, by = window_size)) {
+#     end <- start + window_size - 1
+#     
+#     # Subset data for the current window
+#     window_data <- filtered_data[POS >= start & POS <= end]
+#     
+#     # Calculate the average depth (DP)
+#     if (nrow(window_data) > 0) {
+#       avg_depth <- mean(window_data$DP, na.rm = TRUE)
+#     } else {
+#       avg_depth <- NA
+#     }
+#     
+#     # Store the results
+#     result_list[[length(result_list) + 1]] <- data.table(
+#       start = start,
+#       end = end,
+#       avg_depth = avg_depth
+#     )
+#   }
+#   
+#   # Combine all results into a data table
+#   result <- rbindlist(result_list)
+#   return(result)
+# }
+# 
+# chr16_avg_het <- avg_depth_window(data = chr16_an, genotype = "0/1")
+# chr16_avg_hom <- avg_depth_window(data = chr16_an, genotype = "1/1")
+```
+
+## Try something new
+```{r}
+# Define window size
+window_size <- 1000000
+
+# Create a column for window number
+chr16_an <- chr16_an %>%
+  mutate(Window = floor((POS - 1) / window_size) + 1)
+
+ het <- chr16_an %>%
+   group_by(Source, Window) %>%
+   filter(GT == "0/1") %>%
+   summarize(het_avg_dp = mean(DP, na.rm = TRUE), .groups = 'drop')
+ 
+ hom <- chr16_an %>%
+   group_by(Source, Window) %>%
+   filter(GT == "1/1") %>%
+   summarize(hom_avg_dp = mean(DP, na.rm = TRUE), .groups = 'drop')
+ 
+ # Combine both data frames into one
+ combined_df <- left_join(het, hom, by = c("Source", "Window"))
+ 
+ # combined_df <- combined_df %>%
+ #  replace_na(list(het_avg_dp = 0, hom_avg_dp = 0))
+```
+
+## Plot the thing
+
+```{r}
+# Reshape data from wide to long format
+long_df <- combined_df %>%
+  pivot_longer(cols = c(het_avg_dp, hom_avg_dp), 
+               names_to = "type", 
+               values_to = "average_depth")
+
+# Scale 
+# Calculate the min and max of depth_count for each Source and type
+min_max_counts <- long_df %>%
+  group_by(Source, type) %>%
+  summarise(
+    min_depth = min(average_depth, na.rm = TRUE),
+    max_depth = max(average_depth, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Join the min_max_counts back to the original data frame and normalize the depth_count
+long_df_scaled <- long_df %>%
+  left_join(min_max_counts, by = c("Source", "type")) %>%
+  mutate(
+    scaled_depth_count = 2 * ((average_depth - min_depth) / (max_depth - min_depth)) - 1
+  ) %>%
+  select(-min_depth, -max_depth) %>%
+  mutate(Position = (Window*window_size) / 2)# Remove the min and max columns if not needed
+
+# Plot the data
+ggplot(long_df_scaled, aes(x = Position, y = scaled_depth_count, color = type)) +
+  geom_line() +
+  facet_wrap(~ Source) +
+  labs(x = "Window",
+       y = "Average Depth",
+       color = "Genotype Type") +
+  theme_classic()
+```
+
+## Stuff
+```{r}
+# Define window size
+window_size <- 1000000
+
+ het2 <- chr16_an %>%
+   group_by(Source, Window) %>%
+   filter(GT == "0/1") %>%
+   summarize(het_dp_count = sum(DP, na.rm = TRUE), .groups = 'drop')
+ 
+ hom2 <- chr16_an %>%
+   group_by(Source, Window) %>%
+   filter(GT == "1/1") %>%
+   summarize(hom_dp_count = sum(DP, na.rm = TRUE), .groups = 'drop')
+ 
+ # Combine both data frames into one
+ combined_df2 <- left_join(het2, hom2, by = c("Source", "Window"))
+```
+
+## Plot 2
+```{r}
+# Reshape data from wide to long format
+long_df2 <- combined_df2 %>%
+  pivot_longer(cols = c(het_dp_count, hom_dp_count), 
+               names_to = "type", 
+               values_to = "depth_count")
+
+# Scale 
+# Calculate the min and max of depth_count for each Source and type
+min_max_counts <- long_df2 %>%
+  group_by(Source, type) %>%
+  summarise(
+    min_depth = min(depth_count, na.rm = TRUE),
+    max_depth = max(depth_count, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Join the min_max_counts back to the original data frame and normalize the depth_count
+long_df2_scaled <- long_df2 %>%
+  left_join(min_max_counts, by = c("Source", "type")) %>%
+  mutate(
+    scaled_depth_count = 2 * ((depth_count - min_depth) / (max_depth - min_depth)) - 1
+  ) %>%
+  select(-min_depth, -max_depth) %>%
+  mutate(Position = (Window*window_size) / 2)# Remove the min and max columns if not needed
+
+long_df2_scaled %>%
+ggplot(aes(x = Position, y = scaled_depth_count, color = type)) +
+  geom_line() +
+  facet_wrap(~ Source) +
+  labs(x = "Position",
+       y = "Scaled Number of Variants",
+       color = "Genotype Type") +
+  theme_classic()
+```
+

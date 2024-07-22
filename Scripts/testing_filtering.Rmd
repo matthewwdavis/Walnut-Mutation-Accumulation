@@ -308,49 +308,49 @@ setnames(cr2_hifi, "UnnamedSample", "default")
 ## Combine vcfs by "type" 
 the types are embryo, shoot, tree
 ```{r}
-tree_list <- list(ref_chandler, tree2)
-#rm(ref_chandler, tree2) # remove from environment to save memory
-
-shoot_list <- list(cr85, cr10, cr13, cr22)
-#rm(cr85, cr10, cr13, cr22)
-
-embryo_list <- list(cr2_hifi, cr21_1, cr21_2, cr2_11A, cr2_12A, cr2_13A, cr2_15A, cr2_15A1, cr2_16A, cr2_16A1, cr2_16A2, cr2_17A1, cr2_17A2, cr2_18A, cr2_18A1) # trying a list to reduce memory
-#rm(cr2_hifi, cr21_1, cr21_2, cr2_11A, cr2_12A, cr2_13A, cr2_15A, cr2_15A1, cr2_16A, cr2_16A1, cr2_16A2, cr2_17A1, 
+# tree_list <- list(ref_chandler, tree2)
+# #rm(ref_chandler, tree2) # remove from environment to save memory
+# 
+# shoot_list <- list(cr85, cr10, cr13, cr22)
+# #rm(cr85, cr10, cr13, cr22)
+# 
+# embryo_list <- list(cr2_hifi, cr21_1, cr21_2, cr2_11A, cr2_12A, cr2_13A, cr2_15A, cr2_15A1, cr2_16A, cr2_16A1, cr2_16A2, cr2_17A1, cr2_17A2, cr2_18A, cr2_18A1) # trying a list to reduce memory
+# #rm(cr2_hifi, cr21_1, cr21_2, cr2_11A, cr2_12A, cr2_13A, cr2_15A, cr2_15A1, cr2_16A, cr2_16A1, cr2_16A2, cr2_17A1, 
 ```
 
 ## Find the intersections within the lists
 ```{r}
-# Function to get all unique values in a list of dataframes, ignoring duplicates within each dataframe
-get_all_unique_values <- function(df_list) {
-  unique(unlist(lapply(df_list, function(df) unique(df$unique))))
-}
-
-# Get all unique values for each list
-tree_unique_values <- get_all_unique_values(tree_list)
-shoot_unique_values <- get_all_unique_values(shoot_list)
-embryo_unique_values <- get_all_unique_values(embryo_list)
-
-# Find any common 'unique' values between the lists
-common_tree_shoot <- intersect(tree_unique_values, shoot_unique_values)
-common_tree_embryo <- intersect(tree_unique_values, embryo_unique_values)
-common_shoot_embryo <- intersect(shoot_unique_values, embryo_unique_values)
-
-# Combine all common values
-all_common_values <- unique(c(common_tree_shoot, common_tree_embryo, common_shoot_embryo))
+# # Function to get all unique values in a list of dataframes, ignoring duplicates within each dataframe
+# get_all_unique_values <- function(df_list) {
+#   unique(unlist(lapply(df_list, function(df) unique(df$unique))))
+# }
+# 
+# # Get all unique values for each list
+# tree_unique_values <- get_all_unique_values(tree_list)
+# shoot_unique_values <- get_all_unique_values(shoot_list)
+# embryo_unique_values <- get_all_unique_values(embryo_list)
+# 
+# # Find any common 'unique' values between the lists
+# common_tree_shoot <- intersect(tree_unique_values, shoot_unique_values)
+# common_tree_embryo <- intersect(tree_unique_values, embryo_unique_values)
+# common_shoot_embryo <- intersect(shoot_unique_values, embryo_unique_values)
+# 
+# # Combine all common values
+# all_common_values <- unique(c(common_tree_shoot, common_tree_embryo, common_shoot_embryo))
 ```
 
 ## Filter out these values from dataframes
 ```{r}
-# Function to filter out multiple sets of common values from a list of dataframes
-filter_out_common_values <- function(df_list, common_values_list) {
-  combined_common_values <- unique(unlist(common_values_list))
-  lapply(df_list, function(df) df[!df$unique %in% combined_common_values, ])
-}
-
-# Filter each list to remove the common 'unique' values
-filtered_tree_list <- filter_out_common_values(tree_list, list(all_common_values, common_tree_shoot, common_tree_embryo))
-filtered_shoot_list <- filter_out_common_values(shoot_list, list(all_common_values, common_tree_shoot, common_shoot_embryo))
-filtered_embryo_list <- filter_out_common_values(embryo_list, list(all_common_values, common_tree_embryo, common_shoot_embryo))
+# # Function to filter out multiple sets of common values from a list of dataframes
+# filter_out_common_values <- function(df_list, common_values_list) {
+#   combined_common_values <- unique(unlist(common_values_list))
+#   lapply(df_list, function(df) df[!df$unique %in% combined_common_values, ])
+# }
+# 
+# # Filter each list to remove the common 'unique' values
+# filtered_tree_list <- filter_out_common_values(tree_list, list(all_common_values, common_tree_shoot, common_tree_embryo))
+# filtered_shoot_list <- filter_out_common_values(shoot_list, list(all_common_values, common_tree_shoot, common_shoot_embryo))
+# filtered_embryo_list <- filter_out_common_values(embryo_list, list(all_common_values, common_tree_embryo, common_shoot_embryo))
 
 ```
 
@@ -422,8 +422,8 @@ ggVennDiagram(x = unique_snps.list,
               label_alpha = 0,
               label_color = "black") +
   scale_fill_distiller(palette = "Greys", direction = 1)
-ggsave("~/Desktop/venndiagram_all_snps.pdf", height = 5, width = 7)
-ggsave("~/Desktop/venndiagram_all_snps.png", height = 5, width = 7)
+#ggsave("~/Desktop/venndiagram_all_snps.pdf", height = 5, width = 7)
+#ggsave("~/Desktop/venndiagram_all_snps.png", height = 5, width = 7)
 ```
 
 ## Identifying snps in the intersections of the venn diagram
@@ -438,6 +438,14 @@ tree_shoot_embryo_snps <- tree_shoot_snps %>%
 
 # combining all to identify all ancestral snps
 all_anc_snps <- unique(bind_rows(tree_shoot_snps, tree_embryo_snps, shoot_embryo_snps, tree_shoot_embryo_snps))
+
+rm(embryos_snps_unique)
+rm(trees_snps_unique)
+rm(shoots_snps_unique)
+rm(tree_shoot_snps)
+rm(tree_embryo_snps)
+rm(shoot_embryo_snps)
+rm(tree_shoot_embryo_snps)
 ```
 
 ## Filtering all for denovo snps
@@ -522,69 +530,111 @@ all_dn_snps <- bind_rows(ref_chandler_dn, tree2_dn, cr2_hifi_dn,
 # Hifi
 ref_chandler_an <- ref_chandler %>%
   inner_join(all_anc_snps)
+rm(ref_chandler)
+rm(ref_chandler_unique)
 
 tree2_an <- tree2 %>%
   inner_join(all_anc_snps)
+rm(tree2)
+rm(tree2_unique)
 
 cr2_hifi_an <- cr2_hifi %>%
   inner_join(all_anc_snps)
+rm(cr2_hifi)
+rm(cr2_hifi_unique)
 
 # Short read shoots
 cr85_an <- cr85 %>%
   inner_join(all_anc_snps)
+rm(cr85)
+rm(cr85_unique)
 
 cr10_an <- cr10 %>%
   inner_join(all_anc_snps)
+rm(cr10)
+rm(cr10_unique)
 
 cr13_an <- cr13 %>%
   inner_join(all_anc_snps)
+rm(cr13)
+rm(cr13_unique)
 
 cr22_an <- cr22 %>%
   inner_join(all_anc_snps)
+rm(cr22)
+rm(cr22_unique)
 
 # Original embryo cultures
 cr21_1_an <- cr21_1 %>%
   inner_join(all_anc_snps)
+rm(cr21_1)
+rm(cr21_1_unique)
 
 cr21_2_an <- cr21_2 %>%
   inner_join(all_anc_snps)
+rm(cr21_2)
+rm(cr21_2_unique)
 
 # Embryo stacks
 cr2_11A_an <- cr2_11A %>%
   inner_join(all_anc_snps)
+rm(cr2_11A)
+rm(cr2_11A_unique)
 
 cr2_12A_an <- cr2_12A %>%
   inner_join(all_anc_snps)
+rm(cr2_12A)
+rm(cr2_12A_unique)
 
 cr2_13A_an <- cr2_13A %>%
   inner_join(all_anc_snps)
+rm(cr2_13A)
+rm(cr2_13A_unique)
 
 cr2_15A_an <- cr2_15A %>%
   inner_join(all_anc_snps)
+rm(cr2_15A)
+rm(cr2_15A_unique)
 
 cr2_15A1_an <- cr2_15A1 %>%
   inner_join(all_anc_snps)
+rm(cr2_15A1)
+rm(cr2_15A1_unique)
 
 cr2_16A_an <- cr2_16A %>%
   inner_join(all_anc_snps)
+rm(cr2_16A)
+rm(cr2_16A_unique)
 
 cr2_16A1_an <- cr2_16A1 %>%
   inner_join(all_anc_snps)
+rm(cr2_16A1)
+rm(cr2_16A1_unique)
 
 cr2_16A2_an <- cr2_16A2 %>%
   inner_join(all_anc_snps)
+rm(cr2_16A2)
+rm(cr2_16A2_unique)
 
 cr2_17A1_an <- cr2_17A1 %>%
   inner_join(all_anc_snps)
+rm(cr2_17A1)
+rm(cr2_17A1_unique)
 
 cr2_17A2_an <- cr2_17A2 %>%
   inner_join(all_anc_snps)
+rm(cr2_17A2)
+rm(cr2_17A2_unique)
 
 cr2_18A_an <- cr2_18A %>%
   inner_join(all_anc_snps)
+rm(cr2_18A)
+rm(cr2_18A_unique)
 
 cr2_18A1_an <- cr2_18A1 %>%
   inner_join(all_anc_snps)
+rm(cr2_18A1)
+rm(cr2_18A1_unique)
 
 all_an_snps <- list(ref_chandler_an, tree2_an, cr2_hifi_an,
                          cr85_an, cr10_an, cr13_an, cr22_an,
@@ -594,13 +644,39 @@ all_an_snps <- list(ref_chandler_an, tree2_an, cr2_hifi_an,
                          cr2_18A_an, cr2_18A1_an)
 
 
-# Function to filter data tables
-filter_unique <- function(dt) {
-  dt[!duplicated(unique), ]
+# # Function to filter data tables
+# filter_unique <- function(dt) {
+#   dt[!duplicated(unique), ]
+# }
+# 
+# # Apply the function to each data table in the list
+# filtered_list <- lapply(all_an_snps, filter_unique)
+```
+## Separate the ancestral snps by chromosome
+```{r}
+# Create separate files for each CHROM value and write the header
+chrom_values <- 1:16
+file_paths <- paste0("./Data/VCFs/Filtered/all_an_snps_chr_", chrom_values, ".vcf")
+
+# Initialize empty files with header
+initialize_files_with_header <- function(df_list, file_paths) {
+  header <- colnames(df_list[[1]])
+  lapply(file_paths, function(fp) write.table(t(header), fp, col.names = FALSE, row.names = FALSE, sep = "\t", quote = FALSE))
 }
 
-# Apply the function to each data table in the list
-filtered_list <- lapply(all_an_snps, filter_unique)
+initialize_files_with_header(all_an_snps, file_paths)
+
+# Function to append data to the corresponding file based on CHROM value
+append_to_file <- function(df) {
+  split_dfs <- split(df, df$CHROM)
+  for (chrom in names(split_dfs)) {
+    file_path <- paste0("./Data/VCFs/Filtered/all_an_snps_chr_", chrom, ".vcf")
+    write.table(split_dfs[[chrom]], file_path, append = TRUE, col.names = FALSE, row.names = FALSE, sep = "\t", quote = FALSE)
+  }
+}
+
+# Process each data frame and append to the appropriate files
+lapply(all_an_snps, append_to_file)
 ```
 
 ## Write out vcfs
