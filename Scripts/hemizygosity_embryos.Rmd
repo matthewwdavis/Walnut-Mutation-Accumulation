@@ -10,86 +10,112 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Setup
-
 ## Libraries
-
 ```{r, message=FALSE}
 library(tidyverse)
 library(data.table)
+library(gridExtra)
 ```
 
 ## Functions
-
 ```{r}
+quick_qual_dist <- function(vcf){
+  
+  all <- vcf %>%
+  ggplot(aes(x = QUAL)) +
+  geom_histogram() +
+  geom_vline(aes(xintercept = mean(QUAL))) + 
+  labs(title = "All QUAL") +
+  theme_classic()
 
+qual_5 <- vcf %>%
+  filter(QUAL >= 5) %>%
+  ggplot(aes(x = QUAL)) +
+  geom_histogram() +
+  geom_vline(aes(xintercept = mean(QUAL))) +
+  labs(title = "QUAL >= 5") +
+  theme_classic()
+
+grid.arrange(all, qual_5, ncol = 2)
+
+}
+
+point_plot <- function(vcf, het_color = "deepskyblue4", hom_color = "darksalmon",
+                       quality = 0, col_num = 1, samples = c("ref_chandler", "tree2", "cr2_hifi", "cr85", "cr10",
+                                                              "cr13", "cr22", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A",
+                                                              "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                                                              "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1")) {
+  
+  # Select which sources to plot, heterozygous and homozygous sites, quality threshold
+  vcf_filt <- vcf %>%
+    filter(Source %in% samples) %>%
+    filter(GT %in% c("0/1", "1/1")) %>%
+    filter(QUAL >= quality)
+  
+  # Get log depth by Source
+  vcf_tran <- vcf_filt %>%
+    group_by(Source) %>%
+    mutate(DP_log = log(DP)) %>%
+    mutate(DP_log_mean = mean(DP_log)) %>%
+    ungroup()
+
+  #Plot the data
+  plot <- vcf_tran %>%
+    ggplot(aes(x = POS/1000000, y = DP_log, col = GT)) +
+    geom_point() +
+    geom_hline(aes(yintercept = DP_log_mean)) +
+    scale_color_manual(values=c("0/1" = het_color, "1/1" = hom_color)) +
+    facet_wrap(~ Source, ncol = col_num) +
+    labs(x = "Position (Mb)",
+         y = "Depth (natural log)",
+         color = "Genotype") +
+    theme_classic() +
+    theme(legend.position = "bottom",
+          axis.title.x = element_text(face = "bold"),
+          axis.title.y = element_text(face = "bold"))
+
+  return(plot)
+}
 ```
 
 ## Read in data
-
 ```{r}
+chr11_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_11.vcf")
+chr12_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_12.vcf")
 chr16_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_16.vcf")
 ```
 
 # Brief data check
-
 ## Checking distribution of quality scores
-
 ```{r}
-chr16_an %>%
-  ggplot(aes(x = QUAL)) +
-  geom_histogram() +
-  geom_vline(aes(xintercept = mean(QUAL))) + 
-  theme_classic()
-
-chr16_an %>%
-  filter(QUAL > 5) %>%
-  ggplot(aes(x = QUAL)) +
-  geom_histogram() +
-  geom_vline(aes(xintercept = mean(QUAL))) +
-  theme_classic()
+quick_qual_dist(chr11_an)
+quick_qual_dist(chr12_an)
+quick_qual_dist(chr16_an)
 ```
 
-# Looking at position by depth by GT
-
-## Filter for only homozygous and het sites
-
+# Looking at position by depth by genotype
+## Plot SNPs by position and depth, colored by genotype
 ```{r}
-chr16_filt <- chr16_an %>%
-  filter(GT %in% c("0/1", "1/1"))
-```
+point_plot(chr11_an, col_num = 2, samples = c("cr2_hifi", "cr2_16A", "cr2_16A1", "cr2_16A2",
+                                              "cr2_17A1", "cr2_17A2", "cr2_18A1"))
+#ggsave("./Figures/Hemizygosity/chr11_position_depth_genotype.png", height = 5, width = 7)
 
-## Plot
+point_plot(chr12_an, samples = c("cr2_15A", "cr2_15A1"))
+#ggsave("./Figures/Hemizygosity/chr12_position_depth_genotype.png", height = 3, width = 4)
 
-```{r}
-test_plot <- chr16_filt %>%
-  ggplot(aes(x = POS, y = log10(DP), col = GT)) +
-  geom_point() +
-  geom_hline(aes(yintercept = mean(log10(DP)))) +
-  facet_wrap(~ Source) +
-  theme_classic()
-
-test_plot2 <- chr16_filt %>%
-  ggplot(aes(x = POS, y = log10(DP), col = GT)) +
-  geom_line() +
-  geom_hline(aes(yintercept = mean(log10(DP)))) +
-  facet_wrap(~ Source) +
-  theme_classic()
-
-# ggsave("~/Desktop/test.png", height = 20, width = 6)
-# ggsave("~/Desktop/test2.png", height = 20, width = 6)
+point_plot(chr16_an, col_num = 2, samples = c("cr2_hifi", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                                 "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1"))
+#ggsave("./Figures/Hemizygosity/chr16_position_depth_genotype.png", height = 5, width = 7)
 ```
 
 # Work on creating a smooth line graph
-
 ## Create homozygous and heterozyogus files
-
 ```{r}
 # chr16_hom <- chr16_filt %>%
 #   filter(GT %in% "1/1")
 ```
 
 ## Take the average depth in the window of hets and homs
-
 ```{r}
 # # Function to calculate average depth starting from position 1
 # avg_depth_window <- function(data, window_size = 10000, genotype) {
@@ -160,7 +186,6 @@ chr16_an <- chr16_an %>%
 ```
 
 ## Plot the thing
-
 ```{r}
 # Reshape data from wide to long format
 long_df <- combined_df %>%
@@ -250,6 +275,26 @@ ggplot(aes(x = Position, y = scaled_depth_count, color = type)) +
   labs(x = "Position",
        y = "Scaled Number of Variants",
        color = "Genotype Type") +
+  theme_classic()
+```
+
+## Try the counts, but using log
+```{r}
+long_df2_log <- long_df2 %>%
+  group_by(Source) %>%
+  mutate(depth_count_log = log(depth_count)) %>%
+  mutate(depth_count_mean = mean(depth_count_log)) %>%
+  mutate(POS = ((Window*window_size)/2)/1e6) %>%
+  ungroup()
+    
+long_df2_log %>%
+ggplot(aes(x = POS, y = depth_count_log, color = type)) +
+  geom_line() +
+  geom_hline(aes(yintercept = depth_count_mean)) +
+  facet_wrap(~ Source) +
+  labs(x = "Position (Mb)",
+       y = "Depth per Window (natural log)",
+       color = "Genotype") +
   theme_classic()
 ```
 

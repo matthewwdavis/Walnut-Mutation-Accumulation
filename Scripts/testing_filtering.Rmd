@@ -683,7 +683,30 @@ lapply(all_an_snps, append_to_file)
 ```{r}
 #all_dn_snps
 #write_tsv(x = all_dn_snps, file = "./Data/VCFs/Filtered/all_dn_snps.vcf")
-
-#all_an_snps
-#write_tsv(x = all_an_snps, file = "./Data/VCFs/Filtered/all_an_snps_list.vcf")
 ```
+
+## Write out ancestral snps
+```{r}
+# chr1_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_1.vcf")
+# chr2_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_2.vcf")
+# chr3_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_3.vcf") 
+# chr4_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_4.vcf") #
+# chr5_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_5.vcf")
+# chr6_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_6.vcf")
+# chr7_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_7.vcf")
+# chr8_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_8.vcf")
+# chr9_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_9.vcf") #
+# chr10_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_10.vcf")
+# chr11_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_11.vcf") #
+# chr12_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_12.vcf") #
+# chr13_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_13.vcf")
+# chr14_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_14.vcf")
+# chr15_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_15.vcf")
+# chr16_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_16.vcf") #
+# 
+# all_an_snps <- rbind(chr1_an, chr2_an, chr3_an, chr4_an, chr5_an, chr6_an,
+#       chr7_an, chr8_an, chr9_an, chr10_an, chr11_an, chr12_an,
+#       chr13_an, chr14_an, chr15_an, chr16_an)
+# Not enough memory
+```
+
