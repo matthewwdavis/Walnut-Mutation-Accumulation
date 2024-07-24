@@ -172,7 +172,7 @@ all_rna_rel_chr %>%
   geom_bar(stat = "identity") +
   facet_wrap(~Source) +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
-  labs(x = "Chromosome", y = "Relative RNA Count") +
+  labs(x = "Chromosome", y = "RNA Count per Gene") +
   theme_classic() +
   theme(legend.position = "none")
 
@@ -181,7 +181,7 @@ all_rna_rel_chr %>%
   geom_bar(stat = "identity") +
   facet_wrap(~Source) +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
-  labs(x = "Chromosome", y = "Relative RNA Count") +
+  labs(x = "Chromosome", y = "RNA Count per Exon Length") +
   theme_classic() +
   theme(legend.position = "none")
 
@@ -190,7 +190,7 @@ all_rna_rel_site %>%
   geom_boxplot() +
   facet_wrap(~Source) +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
-  labs(x = "Chromosome", y = "Relative per gene RNA Count)") +
+  labs(x = "Chromosome", y = "Relative per gene RNA Count") +
   theme_classic() +
   theme(legend.position = "none")
 
@@ -208,7 +208,7 @@ all_rna_rel_site %>%
   geom_boxplot() +
   facet_wrap(~Source) +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
-  labs(x = "Chromosome", y = "Per gene RNA Count") +
+  labs(x = "Chromosome", y = "RNA Count") +
   theme_classic() +
   theme(legend.position = "none")
 
@@ -217,7 +217,161 @@ all_rna_rel_site %>%
   geom_boxplot() +
   facet_wrap(~Source) +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
-  labs(x = "Chromosome", y = "Per gene RNA Count") +
+  labs(x = "Chromosome", y = "RNA Count") +
   theme_classic() +
   theme(legend.position = "none")
 ```
+# Working with the Kallisto Counts
+## Functions
+```{r}
+parse_columns <- function(table, sample){
+  
+  # Parse the columns
+  parse.table <- table %>%
+    mutate(rna = sub("rna-([^=]+).*", "\\1", target_id),
+           gene = sub(".*gene=([^=]+).*", "\\1", target_id),
+           name = sub(".*name=([^=]+).*", "\\1", target_id),
+           seq_id = sub(".*seq_id=([^=]+).*", "\\1", target_id),
+           type = sub(".*type=([^=]+)", "\\1", target_id)) %>%
+    select(-target_id) %>%
+    select(seq_id, everything()) %>%
+    mutate(Source = sample)
+  
+  # Make the chromosome column numeric
+  parse.table$seq_id <- as.numeric(gsub("NC_0499.*?([0-9]+).*", "\\1", parse.table$seq_id))
+
+  # Add groups for later coloring
+  final.table <- parse.table %>%
+    mutate(Group = case_when(
+      seq_id == 4 ~ "chr_4",
+      seq_id == 9 ~ "chr_9",
+      TRUE ~ "Other"))
+  
+  return(final.table)
+}
+
+chr_summary <- function(){
+  
+}
+```
+
+## Read in data
+```{r}
+cr11a <- fread("./Data/Kallisto/11A_abundance.tsv")
+cr12a <- fread("./Data/Kallisto/12A_abundance.tsv")
+cr13a <- fread("./Data/Kallisto/13A_abundance.tsv")
+cr15a <- fread("./Data/Kallisto/15A_abundance.tsv")
+cr15a1 <- fread("./Data/Kallisto/15A1_abundance.tsv")
+cr16a <- fread("./Data/Kallisto/16A_abundance.tsv")
+cr16a1 <- fread("./Data/Kallisto/16A1_abundance.tsv")
+cr16a2 <- fread("./Data/Kallisto/16A2_abundance.tsv")
+cr17a1 <- fread("./Data/Kallisto/17A1_abundance.tsv")
+cr17a2 <- fread("./Data/Kallisto/17A2_abundance.tsv")
+cr18a <- fread("./Data/Kallisto/18A_abundance.tsv")
+cr18a1 <- fread("./Data/Kallisto/18A1_abundance.tsv")
+```
+
+## Parse column information and create large data frame
+```{r}
+cr11a <- parse_columns(cr11a, "cr2_11a")
+cr12a <- parse_columns(cr12a, "cr2_12a")
+cr13a <- parse_columns(cr13a, "cr2_13a")
+cr15a <- parse_columns(cr15a, "cr2_15a")
+cr15a1 <- parse_columns(cr15a1, "cr2_15a1")
+cr16a <- parse_columns(cr16a, "cr2_16a")
+cr16a1 <- parse_columns(cr16a1, "cr2_16a1")
+cr16a2 <- parse_columns(cr16a2, "cr2_16a2")
+cr17a1 <- parse_columns(cr17a1, "cr2_17a1")
+cr17a2 <- parse_columns(cr17a2, "cr2_17a2")
+cr18a <- parse_columns(cr18a, "cr2_18a")
+cr18a1 <- parse_columns(cr18a1, "cr2_18a1")
+
+all_counts <- rbind(cr11a, cr12a, cr13a, cr15a, cr15a1, cr16a, cr16a1, cr16a2, cr17a1, cr17a2, cr18a, cr18a1)
+```
+
+## Calculate the counts per chromsome
+```{r}
+chr.table <- all_counts %>%
+  filter(est_counts > 0) %>%
+  group_by(Source, seq_id) %>%
+  summarise(counts_by_length = sum(est_counts)/sum(length), 
+            counts_by_efflength = sum(est_counts)/sum(eff_length), 
+            tpm_by_length = sum(tpm)/sum(length),
+            tpm_by_efflength = sum(tpm)/sum(eff_length),
+            mean_counts = mean(est_counts),
+            mean_tpm = mean(tpm), 
+            mean_length = mean(length)) %>%
+  ungroup() %>%
+  mutate(Group = case_when(
+    seq_id == 4 ~ "chr_4",
+    seq_id == 9 ~ "chr_9",
+    TRUE ~ "Other"))
+```
+
+## Plot
+```{r}
+chr.table %>%
+  ggplot(aes(x = as.factor(seq_id), y = counts_by_length, fill = Group)) + 
+  geom_bar(stat = "identity") +
+  facet_wrap(~ Source) +
+  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+  labs(x = "Chromosome", y = "Gene transcripts / total exon length") +
+  theme_classic() +
+  theme(legend.position = "none")
+
+chr.table %>%
+  ggplot(aes(x = as.factor(seq_id), y = counts_by_efflength, fill = Group)) + 
+  geom_bar(stat = "identity") +
+  facet_wrap(~ Source) +
+  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+  labs(x = "Chromosome", y = "Gene transcripts / total exon length") +
+  theme_classic() +
+  theme(legend.position = "none")
+
+chr.table %>%
+  ggplot(aes(x = as.factor(seq_id), y = tpm_by_length, fill = Group)) + 
+  geom_bar(stat = "identity") +
+  facet_wrap(~ Source) +
+  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+  labs(x = "Chromosome", y = "Gene transcripts / total exon length") +
+  theme_classic() +
+  theme(legend.position = "none")
+
+chr.table %>%
+  ggplot(aes(x = as.factor(seq_id), y = mean_counts, fill = Group)) + 
+  geom_bar(stat = "identity") +
+  facet_wrap(~ Source) +
+  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+  labs(x = "Chromosome", y = "Mean Counts") +
+  theme_classic() +
+  theme(legend.position = "none")
+
+chr.table %>%
+  ggplot(aes(x = as.factor(seq_id), y = mean_tpm, fill = Group)) + 
+  geom_bar(stat = "identity") +
+  facet_wrap(~ Source) +
+  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+  labs(x = "Chromosome", y = "Mean TPM") +
+  theme_classic() +
+  theme(legend.position = "none")
+
+chr.table %>%
+  ggplot(aes(x = as.factor(seq_id), y = mean_length, fill = Group)) + 
+  geom_bar(stat = "identity") +
+  facet_wrap(~ Source) +
+  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+  labs(x = "Chromosome", y = "Mean Length") +
+  theme_classic() +
+  theme(legend.position = "none")
+
+all_counts %>%
+  filter(est_counts > 0) %>%
+  ggplot(aes(x = as.factor(seq_id), y = log(est_counts) , fill = Group)) + 
+  geom_boxplot() +
+  facet_wrap(~ Source) +
+  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+  labs(x = "Chromosome", y = "Estimated Counts") +
+  theme_classic() +
+  theme(legend.position = "none")
+```
+

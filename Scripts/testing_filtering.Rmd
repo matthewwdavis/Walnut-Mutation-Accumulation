@@ -140,129 +140,129 @@ ancestral_snps <- function(vcf.table){
 # Read in data
 ## VCFs
 ```{r}
-# HiFi reads
-ref_chandler <- import_vcf("./Data/VCFs/Longread_VCF/Ref_Primary_Aligned/ref_chandler_primary_deepvariant.vcf.gz", name = "ref_chandler")
-tree2 <- import_vcf("./Data/VCFs/Longread_VCF/Ref_Primary_Aligned/term_chandler_primary_deepvariant.vcf.gz", name = "tree2")
-cr2_hifi <- import_vcf("./Data/VCFs/Longread_VCF/Ref_Primary_Aligned/cr2_primary_deepvariant.vcf.gz", name = "cr2_hifi")
-
-# Chandler shoots short reads
-cr85 <- import_vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR85_S28_deepvariant.vcf.gz", "default", name = "cr85")
-cr10 <- import_vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR10_S29_deepvariant.vcf.gz", "default", name = "cr10")
-cr13 <- import_vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR13_S30_deepvariant.vcf.gz", "default", name = "cr13")
-cr22 <- import_vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR22_S31_deepvariant.vcf.gz", "default", name = "cr22")
-
-# CR2 original short reads
-cr21_1 <- import_vcf("./Data/VCFs/Original_CR2/Ref_Primary_Aligned/CR21-1_S7_deepvariant.vcf.gz", "default", name = "cr21_1")
-cr21_2 <- import_vcf("./Data/VCFs/Original_CR2/Ref_Primary_Aligned/CR21-2_S8_deepvariant.vcf.gz", "default", name = "cr21_2")
-
-# CR2 stacks short reads
-cr2_11A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/11A_deepvariant.vcf.gz", "default", name = "cr2_11A")
-cr2_12A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/12A_deepvariant.vcf.gz", "default", name = "cr2_12A")
-cr2_13A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/13A_deepvariant.vcf.gz", "default", name = "cr2_13A")
-cr2_15A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/15A_deepvariant.vcf.gz", "default", name = "cr2_15A")
-cr2_15A1 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/15A1_deepvariant.vcf.gz", "default", name = "cr2_15A1")
-cr2_16A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/16A_deepvariant.vcf.gz", "default", name = "cr2_16A")
-cr2_16A1 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/16A1_deepvariant.vcf.gz", "default", name = "cr2_16A1")
-cr2_16A2 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/16A2_deepvariant.vcf.gz", "default", name = "cr2_16A2")
-cr2_17A1 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/17A1_deepvariant.vcf.gz", "default", name = "cr2_17A1")
-cr2_17A2 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/17A2_deepvariant.vcf.gz", "default", name = "cr2_17A2")
-cr2_18A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/18A_deepvariant.vcf.gz", "default", name = "cr2_18A")
-cr2_18A1 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/18A1_deepvariant.vcf.gz", "default", name = "cr2_18A1")
-
-# Change UnnamedSample column name for combining data later
-setnames(ref_chandler, "UnnamedSample", "default")
-setnames(tree2, "UnnamedSample", "default")
-setnames(cr2_hifi, "UnnamedSample", "default")
+# # HiFi reads
+# ref_chandler <- import_vcf("./Data/VCFs/Longread_VCF/Ref_Primary_Aligned/ref_chandler_primary_deepvariant.vcf.gz", name = "ref_chandler")
+# tree2 <- import_vcf("./Data/VCFs/Longread_VCF/Ref_Primary_Aligned/term_chandler_primary_deepvariant.vcf.gz", name = "tree2")
+# cr2_hifi <- import_vcf("./Data/VCFs/Longread_VCF/Ref_Primary_Aligned/cr2_primary_deepvariant.vcf.gz", name = "cr2_hifi")
+# 
+# # Chandler shoots short reads
+# cr85 <- import_vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR85_S28_deepvariant.vcf.gz", "default", name = "cr85")
+# cr10 <- import_vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR10_S29_deepvariant.vcf.gz", "default", name = "cr10")
+# cr13 <- import_vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR13_S30_deepvariant.vcf.gz", "default", name = "cr13")
+# cr22 <- import_vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR22_S31_deepvariant.vcf.gz", "default", name = "cr22")
+# 
+# # CR2 original short reads
+# cr21_1 <- import_vcf("./Data/VCFs/Original_CR2/Ref_Primary_Aligned/CR21-1_S7_deepvariant.vcf.gz", "default", name = "cr21_1")
+# cr21_2 <- import_vcf("./Data/VCFs/Original_CR2/Ref_Primary_Aligned/CR21-2_S8_deepvariant.vcf.gz", "default", name = "cr21_2")
+# 
+# # CR2 stacks short reads
+# cr2_11A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/11A_deepvariant.vcf.gz", "default", name = "cr2_11A")
+# cr2_12A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/12A_deepvariant.vcf.gz", "default", name = "cr2_12A")
+# cr2_13A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/13A_deepvariant.vcf.gz", "default", name = "cr2_13A")
+# cr2_15A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/15A_deepvariant.vcf.gz", "default", name = "cr2_15A")
+# cr2_15A1 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/15A1_deepvariant.vcf.gz", "default", name = "cr2_15A1")
+# cr2_16A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/16A_deepvariant.vcf.gz", "default", name = "cr2_16A")
+# cr2_16A1 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/16A1_deepvariant.vcf.gz", "default", name = "cr2_16A1")
+# cr2_16A2 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/16A2_deepvariant.vcf.gz", "default", name = "cr2_16A2")
+# cr2_17A1 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/17A1_deepvariant.vcf.gz", "default", name = "cr2_17A1")
+# cr2_17A2 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/17A2_deepvariant.vcf.gz", "default", name = "cr2_17A2")
+# cr2_18A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/18A_deepvariant.vcf.gz", "default", name = "cr2_18A")
+# cr2_18A1 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/18A1_deepvariant.vcf.gz", "default", name = "cr2_18A1")
+# 
+# # Change UnnamedSample column name for combining data later
+# setnames(ref_chandler, "UnnamedSample", "default")
+# setnames(tree2, "UnnamedSample", "default")
+# setnames(cr2_hifi, "UnnamedSample", "default")
 ```
 
 # Identify de novo snps
 ## Three way comparisons only.
 Reference and terminal tree as the two constants, rotation of all other samples.
 ```{r}
-# HiFi
-cr2_hifi_3way <- comp_3way(cr2_hifi)
-
-# Shoots
-cr85_3way <-comp_3way(cr85)
-cr10_3way <-comp_3way(cr10)
-cr13_3way <-comp_3way(cr13)
-cr22_3way <-comp_3way(cr22)
-
-# Original short read embryos
-cr21_1_3way <-comp_3way(cr21_1)
-cr21_2_3way <-comp_3way(cr21_2)
-
-# Embryo stacks
-cr2_11A_3way <-comp_3way(cr2_11A)
-cr2_12A_3way <-comp_3way(cr2_12A)
-cr2_13A_3way <-comp_3way(cr2_13A)
-cr2_15A_3way <-comp_3way(cr2_15A)
-cr2_15A1_3way <-comp_3way(cr2_15A1)
-cr2_16A_3way <-comp_3way(cr2_16A)
-cr2_16A1_3way <-comp_3way(cr2_16A1)
-cr2_16A2_3way <-comp_3way(cr2_16A2)
-cr2_17A1_3way <-comp_3way(cr2_17A1)
-cr2_17A2_3way <-comp_3way(cr2_17A2)
-cr2_18A_3way <-comp_3way(cr2_18A)
-cr2_18A1_3way <-comp_3way(cr2_18A1)
+# # HiFi
+# cr2_hifi_3way <- comp_3way(cr2_hifi)
+# 
+# # Shoots
+# cr85_3way <-comp_3way(cr85)
+# cr10_3way <-comp_3way(cr10)
+# cr13_3way <-comp_3way(cr13)
+# cr22_3way <-comp_3way(cr22)
+# 
+# # Original short read embryos
+# cr21_1_3way <-comp_3way(cr21_1)
+# cr21_2_3way <-comp_3way(cr21_2)
+# 
+# # Embryo stacks
+# cr2_11A_3way <-comp_3way(cr2_11A)
+# cr2_12A_3way <-comp_3way(cr2_12A)
+# cr2_13A_3way <-comp_3way(cr2_13A)
+# cr2_15A_3way <-comp_3way(cr2_15A)
+# cr2_15A1_3way <-comp_3way(cr2_15A1)
+# cr2_16A_3way <-comp_3way(cr2_16A)
+# cr2_16A1_3way <-comp_3way(cr2_16A1)
+# cr2_16A2_3way <-comp_3way(cr2_16A2)
+# cr2_17A1_3way <-comp_3way(cr2_17A1)
+# cr2_17A2_3way <-comp_3way(cr2_17A2)
+# cr2_18A_3way <-comp_3way(cr2_18A)
+# cr2_18A1_3way <-comp_3way(cr2_18A1)
 ```
 
 ## Combining the data frames into a list
 ```{r}
-cr2_hifi_3way$summary_dn %>%
-  filter(!Source %in% c("ref_chandler", "tree2"))
-
-# Function to filter the dataframes
-filter_data <- function(df) {
-  df %>% filter(!Source %in% c("ref_chandler", "tree2"))
-}
-
-# Filter each dataframe
-cr2_hifi_3way_filtered <- filter_data(cr2_hifi_3way$summary_dn)
-cr85_3way_filtered <- filter_data(cr85_3way$summary_dn)
-cr10_3way_filtered <- filter_data(cr10_3way$summary_dn)
-cr13_3way_filtered <- filter_data(cr13_3way$summary_dn)
-cr22_3way_filtered <- filter_data(cr22_3way$summary_dn)
-cr21_1_3way_filtered <- filter_data(cr21_1_3way$summary_dn)
-cr21_2_3way_filtered <- filter_data(cr21_2_3way$summary_dn)
-cr2_11A_3way_filtered <- filter_data(cr2_11A_3way$summary_dn)
-cr2_12A_3way_filtered <- filter_data(cr2_12A_3way$summary_dn)
-cr2_13A_3way_filtered <- filter_data(cr2_13A_3way$summary_dn)
-cr2_15A_3way_filtered <- filter_data(cr2_15A_3way$summary_dn)
-cr2_15A1_3way_filtered <- filter_data(cr2_15A1_3way$summary_dn)
-cr2_16A_3way_filtered <- filter_data(cr2_16A_3way$summary_dn)
-cr2_16A1_3way_filtered <- filter_data(cr2_16A1_3way$summary_dn)
-cr2_16A2_3way_filtered <- filter_data(cr2_16A2_3way$summary_dn)
-cr2_17A1_3way_filtered <- filter_data(cr2_17A1_3way$summary_dn)
-cr2_17A2_3way_filtered <- filter_data(cr2_17A2_3way$summary_dn)
-cr2_18A_3way_filtered <- filter_data(cr2_18A_3way$summary_dn)
-cr2_18A1_3way_filtered <- filter_data(cr2_18A1_3way$summary_dn)
-
-# Combine all filtered dataframes into one
-combined_filtered_df <- bind_rows(
-  cr2_hifi_3way_filtered, cr85_3way_filtered, cr10_3way_filtered, cr13_3way_filtered, cr22_3way_filtered,
-  cr21_1_3way_filtered, cr21_2_3way_filtered, cr2_11A_3way_filtered, cr2_12A_3way_filtered, cr2_13A_3way_filtered,
-  cr2_15A_3way_filtered, cr2_15A1_3way_filtered, cr2_16A_3way_filtered, cr2_16A1_3way_filtered, cr2_16A2_3way_filtered,
-  cr2_17A1_3way_filtered, cr2_17A2_3way_filtered, cr2_18A_3way_filtered, cr2_18A1_3way_filtered
-)
-
-desired_levels <- c(
-  "cr2_hifi", "cr85", "cr10", "cr13", "cr22",
-  "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A",
-  "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2",
-  "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1"
-)
-
-combined_filtered_df$Source <- factor(combined_filtered_df$Source, levels = desired_levels)
-
-# Check the levels
-levels(combined_filtered_df$Source)
-
-combined_filtered_df %>%
-    ggplot(aes(x = Source, y = count, col = qual)) +
-    geom_point() +
-    scale_color_viridis(name = "Quality\nThreshold", option = "mako" ) +
-    theme_classic()
+# cr2_hifi_3way$summary_dn %>%
+#   filter(!Source %in% c("ref_chandler", "tree2"))
+# 
+# # Function to filter the dataframes
+# filter_data <- function(df) {
+#   df %>% filter(!Source %in% c("ref_chandler", "tree2"))
+# }
+# 
+# # Filter each dataframe
+# cr2_hifi_3way_filtered <- filter_data(cr2_hifi_3way$summary_dn)
+# cr85_3way_filtered <- filter_data(cr85_3way$summary_dn)
+# cr10_3way_filtered <- filter_data(cr10_3way$summary_dn)
+# cr13_3way_filtered <- filter_data(cr13_3way$summary_dn)
+# cr22_3way_filtered <- filter_data(cr22_3way$summary_dn)
+# cr21_1_3way_filtered <- filter_data(cr21_1_3way$summary_dn)
+# cr21_2_3way_filtered <- filter_data(cr21_2_3way$summary_dn)
+# cr2_11A_3way_filtered <- filter_data(cr2_11A_3way$summary_dn)
+# cr2_12A_3way_filtered <- filter_data(cr2_12A_3way$summary_dn)
+# cr2_13A_3way_filtered <- filter_data(cr2_13A_3way$summary_dn)
+# cr2_15A_3way_filtered <- filter_data(cr2_15A_3way$summary_dn)
+# cr2_15A1_3way_filtered <- filter_data(cr2_15A1_3way$summary_dn)
+# cr2_16A_3way_filtered <- filter_data(cr2_16A_3way$summary_dn)
+# cr2_16A1_3way_filtered <- filter_data(cr2_16A1_3way$summary_dn)
+# cr2_16A2_3way_filtered <- filter_data(cr2_16A2_3way$summary_dn)
+# cr2_17A1_3way_filtered <- filter_data(cr2_17A1_3way$summary_dn)
+# cr2_17A2_3way_filtered <- filter_data(cr2_17A2_3way$summary_dn)
+# cr2_18A_3way_filtered <- filter_data(cr2_18A_3way$summary_dn)
+# cr2_18A1_3way_filtered <- filter_data(cr2_18A1_3way$summary_dn)
+# 
+# # Combine all filtered dataframes into one
+# combined_filtered_df <- bind_rows(
+#   cr2_hifi_3way_filtered, cr85_3way_filtered, cr10_3way_filtered, cr13_3way_filtered, cr22_3way_filtered,
+#   cr21_1_3way_filtered, cr21_2_3way_filtered, cr2_11A_3way_filtered, cr2_12A_3way_filtered, cr2_13A_3way_filtered,
+#   cr2_15A_3way_filtered, cr2_15A1_3way_filtered, cr2_16A_3way_filtered, cr2_16A1_3way_filtered, cr2_16A2_3way_filtered,
+#   cr2_17A1_3way_filtered, cr2_17A2_3way_filtered, cr2_18A_3way_filtered, cr2_18A1_3way_filtered
+# )
+# 
+# desired_levels <- c(
+#   "cr2_hifi", "cr85", "cr10", "cr13", "cr22",
+#   "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A",
+#   "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2",
+#   "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1"
+# )
+# 
+# combined_filtered_df$Source <- factor(combined_filtered_df$Source, levels = desired_levels)
+# 
+# # Check the levels
+# levels(combined_filtered_df$Source)
+# 
+# combined_filtered_df %>%
+#     ggplot(aes(x = Source, y = count, col = qual)) +
+#     geom_point() +
+#     scale_color_viridis(name = "Quality\nThreshold", option = "mako" ) +
+#     theme_classic()
 ```
 
 # Finding overlaps between the 3 major groups
@@ -271,33 +271,33 @@ The venndiagram. remove the overlaps between embryo, tree, and shoots
 ## Read in the vcfs
 ```{r}
 # HiFi reads
-ref_chandler <- import_vcf("./Data/VCFs/Longread_VCF/Ref_Primary_Aligned/ref_chandler_primary_deepvariant.vcf.gz", name = "ref_chandler")
-tree2 <- import_vcf("./Data/VCFs/Longread_VCF/Ref_Primary_Aligned/term_chandler_primary_deepvariant.vcf.gz", name = "tree2")
-cr2_hifi <- import_vcf("./Data/VCFs/Longread_VCF/Ref_Primary_Aligned/cr2_primary_deepvariant.vcf.gz", name = "cr2_hifi")
+ref_chandler <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/HiFi/ref_chandler_deepvariant.vcf.gz", name = "ref_chandler")
+tree2 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/HiFi/term_chandler_deepvariant.vcf.gz", name = "tree2")
+cr2_hifi <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/HiFi/cr2_deepvariant.vcf.gz", name = "cr2_hifi")
 
 # Chandler shoots short reads
-cr85 <- import_vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR85_S28_deepvariant.vcf.gz", "default", name = "cr85")
-cr10 <- import_vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR10_S29_deepvariant.vcf.gz", "default", name = "cr10")
-cr13 <- import_vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR13_S30_deepvariant.vcf.gz", "default", name = "cr13")
-cr22 <- import_vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR22_S31_deepvariant.vcf.gz", "default", name = "cr22")
+cr85 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/CR85_deepvariant.vcf.gz", "default", name = "cr85")
+cr10 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/CR10_deepvariant.vcf.gz", "default", name = "cr10")
+cr13 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/CR13_deepvariant.vcf.gz", "default", name = "cr13")
+cr22 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/CR22_deepvariant.vcf.gz", "default", name = "cr22")
 
 # CR2 original short reads
-cr21_1 <- import_vcf("./Data/VCFs/Original_CR2/Ref_Primary_Aligned/CR21-1_S7_deepvariant.vcf.gz", "default", name = "cr21_1")
-cr21_2 <- import_vcf("./Data/VCFs/Original_CR2/Ref_Primary_Aligned/CR21-2_S8_deepvariant.vcf.gz", "default", name = "cr21_2")
+cr21_1 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/CR21-1_deepvariant.vcf.gz", "default", name = "cr21_1")
+cr21_2 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/CR21-2_deepvariant.vcf.gz", "default", name = "cr21_2")
 
 # CR2 stacks short reads
-cr2_11A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/11A_deepvariant.vcf.gz", "default", name = "cr2_11A")
-cr2_12A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/12A_deepvariant.vcf.gz", "default", name = "cr2_12A")
-cr2_13A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/13A_deepvariant.vcf.gz", "default", name = "cr2_13A")
-cr2_15A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/15A_deepvariant.vcf.gz", "default", name = "cr2_15A")
-cr2_15A1 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/15A1_deepvariant.vcf.gz", "default", name = "cr2_15A1")
-cr2_16A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/16A_deepvariant.vcf.gz", "default", name = "cr2_16A")
-cr2_16A1 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/16A1_deepvariant.vcf.gz", "default", name = "cr2_16A1")
-cr2_16A2 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/16A2_deepvariant.vcf.gz", "default", name = "cr2_16A2")
-cr2_17A1 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/17A1_deepvariant.vcf.gz", "default", name = "cr2_17A1")
-cr2_17A2 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/17A2_deepvariant.vcf.gz", "default", name = "cr2_17A2")
-cr2_18A <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/18A_deepvariant.vcf.gz", "default", name = "cr2_18A")
-cr2_18A1 <- import_vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/18A1_deepvariant.vcf.gz", "default", name = "cr2_18A1")
+cr2_11A <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/11A_deepvariant.vcf.gz", "default", name = "cr2_11A")
+cr2_12A <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/12A_deepvariant.vcf.gz", "default", name = "cr2_12A")
+cr2_13A <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/13A_deepvariant.vcf.gz", "default", name = "cr2_13A")
+cr2_15A <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/15A_deepvariant.vcf.gz", "default", name = "cr2_15A")
+cr2_15A1 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/15A1_deepvariant.vcf.gz", "default", name = "cr2_15A1")
+cr2_16A <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/16A_deepvariant.vcf.gz", "default", name = "cr2_16A")
+cr2_16A1 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/16A1_deepvariant.vcf.gz", "default", name = "cr2_16A1")
+cr2_16A2 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/16A2_deepvariant.vcf.gz", "default", name = "cr2_16A2")
+cr2_17A1 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/17A1_deepvariant.vcf.gz", "default", name = "cr2_17A1")
+cr2_17A2 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/17A2_deepvariant.vcf.gz", "default", name = "cr2_17A2")
+cr2_18A <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/18A_deepvariant.vcf.gz", "default", name = "cr2_18A")
+cr2_18A1 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Short_Read/18A1_deepvariant.vcf.gz", "default", name = "cr2_18A1")
 
 # Change UnnamedSample column name for combining data later
 setnames(ref_chandler, "UnnamedSample", "default")
@@ -390,8 +390,9 @@ cr2_17A1_unique <- unique_col(cr2_17A1)
 cr2_17A2_unique <- unique_col(cr2_17A2)
 cr2_18A_unique <- unique_col(cr2_18A)
 cr2_18A1_unique <- unique_col(cr2_18A1)
+embryos_snps_unique_hifi <- unique(cr2_hifi_unique)
+embryos_snps_unique_short <- unique(bind_rows(cr21_1_unique, cr21_2_unique, cr2_11A_unique, cr2_12A_unique, cr2_13A_unique, cr2_15A_unique, cr2_15A1_unique, cr2_16A_unique, cr2_16A1_unique, cr2_16A2_unique, cr2_17A1_unique, cr2_17A2_unique, cr2_18A_unique, cr2_18A1_unique))
 embryos_snps_unique <- unique(bind_rows(cr2_hifi_unique, cr21_1_unique, cr21_2_unique, cr2_11A_unique, cr2_12A_unique, cr2_13A_unique, cr2_15A_unique, cr2_15A1_unique, cr2_16A_unique, cr2_16A1_unique, cr2_16A2_unique, cr2_17A1_unique, cr2_17A2_unique, cr2_18A_unique, cr2_18A1_unique))
-
 ```
 
 ## Making the Venn Diagram
@@ -401,6 +402,10 @@ unique_snps.list <- list("embryo" = embryos_snps_unique$unique,
                          "shoot" = shoots_snps_unique$unique,
                          "tree" = trees_snps_unique$unique)
 
+unique_snps_hifivshort.list <- list("embryo hifi" = embryos_snps_unique_hifi$unique,
+                                    "embryo short" = embryos_snps_unique_short$unique,
+                                    "shoot" = shoots_snps_unique$unique,
+                                    "tree" = trees_snps_unique$unique)
 # 
 # trees_snps_unique <- trees_snps_unique %>%
 #   mutate(id = "tree")
@@ -412,6 +417,17 @@ unique_snps.list <- list("embryo" = embryos_snps_unique$unique,
 #   mutate(id = "embryo")
 
 # unique_snps.df <- rbind(trees_snps_unique, shoots_snps_unique, embryos_snps_unique)
+ggVennDiagram(x = unique_snps_hifivshort.list,
+              category.names = c("Embryo HiFi", "Embryo Short", "Shoots","Trees"),
+              set_color = c("orange","orangered", "dodgerblue","seagreen"),
+              edge_size = 2,
+              label = "percent",
+              label_percent_digit = 1,
+              label_alpha = 0,
+              label_color = "black") +
+  scale_fill_distiller(palette = "Greys", direction = 1)
+ggsave("~/Desktop/venndiagram_hifi_vs_short_snps.pdf", height = 5, width = 7)
+ggsave("~/Desktop/venndiagram_hifi_vs_short_snps.png", height = 5, width = 7)
 
 ggVennDiagram(x = unique_snps.list,
               category.names = c("Embryos","Shoots","Trees"),
@@ -422,8 +438,8 @@ ggVennDiagram(x = unique_snps.list,
               label_alpha = 0,
               label_color = "black") +
   scale_fill_distiller(palette = "Greys", direction = 1)
-#ggsave("~/Desktop/venndiagram_all_snps.pdf", height = 5, width = 7)
-#ggsave("~/Desktop/venndiagram_all_snps.png", height = 5, width = 7)
+ggsave("~/Desktop/venndiagram_all_snps.pdf", height = 5, width = 7)
+ggsave("~/Desktop/venndiagram_all_snps.png", height = 5, width = 7)
 ```
 
 ## Identifying snps in the intersections of the venn diagram
@@ -439,13 +455,9 @@ tree_shoot_embryo_snps <- tree_shoot_snps %>%
 # combining all to identify all ancestral snps
 all_anc_snps <- unique(bind_rows(tree_shoot_snps, tree_embryo_snps, shoot_embryo_snps, tree_shoot_embryo_snps))
 
-rm(embryos_snps_unique)
-rm(trees_snps_unique)
-rm(shoots_snps_unique)
-rm(tree_shoot_snps)
-rm(tree_embryo_snps)
-rm(shoot_embryo_snps)
-rm(tree_shoot_embryo_snps)
+rm(embryos_snps_unique, embryos_snps_unique_hifi, embryos_snps_unique_short, trees_snps_unique,shoots_snps_unique, 
+   tree_shoot_snps, tree_embryo_snps, shoot_embryo_snps, tree_shoot_embryo_snps, unique_snps.list,
+   unique_snps_hifivshort.list)
 ```
 
 ## Filtering all for denovo snps
@@ -523,6 +535,16 @@ all_dn_snps <- bind_rows(ref_chandler_dn, tree2_dn, cr2_hifi_dn,
                          cr2_13A_dn, cr2_15A_dn, cr2_15A1_dn, cr2_16A_dn,
                          cr2_16A1_dn, cr2_16A2_dn, cr2_17A1_dn, cr2_17A2_dn,
                          cr2_18A_dn, cr2_18A1_dn)
+rm(ref_chandler_dn, tree2_dn, cr2_hifi_dn, cr85_dn, cr10_dn, cr13_dn, 
+   cr22_dn, cr21_1_dn, cr21_2_dn, cr2_11A_dn, cr2_12A_dn, cr2_13A_dn, 
+   cr2_15A_dn, cr2_15A1_dn, cr2_16A_dn, cr2_16A1_dn, cr2_16A2_dn, 
+   cr2_17A1_dn, cr2_17A2_dn, cr2_18A_dn, cr2_18A1_dn)
+```
+## Write out vcfs
+```{r}
+all_dn_snps
+write_tsv(x = all_dn_snps, file = "./Data/VCFs/Filtered/all_dn_snps.vcf")
+rm(all_dn_snps)
 ```
 
 ## Filtering for all ancestral snps
@@ -530,111 +552,90 @@ all_dn_snps <- bind_rows(ref_chandler_dn, tree2_dn, cr2_hifi_dn,
 # Hifi
 ref_chandler_an <- ref_chandler %>%
   inner_join(all_anc_snps)
-rm(ref_chandler)
-rm(ref_chandler_unique)
+rm(ref_chandler, ref_chandler_unique)
 
 tree2_an <- tree2 %>%
   inner_join(all_anc_snps)
-rm(tree2)
-rm(tree2_unique)
+rm(tree2, tree2_unique)
 
 cr2_hifi_an <- cr2_hifi %>%
   inner_join(all_anc_snps)
-rm(cr2_hifi)
-rm(cr2_hifi_unique)
+rm(cr2_hifi, cr2_hifi_unique)
 
 # Short read shoots
 cr85_an <- cr85 %>%
   inner_join(all_anc_snps)
-rm(cr85)
-rm(cr85_unique)
+rm(cr85, cr85_unique)
 
 cr10_an <- cr10 %>%
   inner_join(all_anc_snps)
-rm(cr10)
-rm(cr10_unique)
+rm(cr10, cr10_unique)
 
 cr13_an <- cr13 %>%
   inner_join(all_anc_snps)
-rm(cr13)
-rm(cr13_unique)
+rm(cr13, cr13_unique)
 
 cr22_an <- cr22 %>%
   inner_join(all_anc_snps)
-rm(cr22)
-rm(cr22_unique)
+rm(cr22, cr22_unique)
 
 # Original embryo cultures
 cr21_1_an <- cr21_1 %>%
   inner_join(all_anc_snps)
-rm(cr21_1)
-rm(cr21_1_unique)
+rm(cr21_1, cr21_1_unique)
 
 cr21_2_an <- cr21_2 %>%
   inner_join(all_anc_snps)
-rm(cr21_2)
-rm(cr21_2_unique)
+rm(cr21_2, cr21_2_unique)
 
 # Embryo stacks
 cr2_11A_an <- cr2_11A %>%
   inner_join(all_anc_snps)
-rm(cr2_11A)
-rm(cr2_11A_unique)
+rm(cr2_11A, cr2_11A_unique)
 
 cr2_12A_an <- cr2_12A %>%
   inner_join(all_anc_snps)
-rm(cr2_12A)
-rm(cr2_12A_unique)
+rm(cr2_12A, cr2_12A_unique)
 
 cr2_13A_an <- cr2_13A %>%
   inner_join(all_anc_snps)
-rm(cr2_13A)
-rm(cr2_13A_unique)
+rm(cr2_13A, cr2_13A_unique)
 
 cr2_15A_an <- cr2_15A %>%
   inner_join(all_anc_snps)
-rm(cr2_15A)
-rm(cr2_15A_unique)
+rm(cr2_15A, cr2_15A_unique)
 
 cr2_15A1_an <- cr2_15A1 %>%
   inner_join(all_anc_snps)
-rm(cr2_15A1)
-rm(cr2_15A1_unique)
+rm(cr2_15A1, cr2_15A1_unique)
 
 cr2_16A_an <- cr2_16A %>%
   inner_join(all_anc_snps)
-rm(cr2_16A)
-rm(cr2_16A_unique)
+rm(cr2_16A, cr2_16A_unique)
 
 cr2_16A1_an <- cr2_16A1 %>%
   inner_join(all_anc_snps)
-rm(cr2_16A1)
-rm(cr2_16A1_unique)
+rm(cr2_16A1, cr2_16A1_unique)
 
 cr2_16A2_an <- cr2_16A2 %>%
   inner_join(all_anc_snps)
-rm(cr2_16A2)
-rm(cr2_16A2_unique)
+rm(cr2_16A2, cr2_16A2_unique)
 
 cr2_17A1_an <- cr2_17A1 %>%
   inner_join(all_anc_snps)
-rm(cr2_17A1)
-rm(cr2_17A1_unique)
+rm(cr2_17A1, cr2_17A1_unique)
 
 cr2_17A2_an <- cr2_17A2 %>%
   inner_join(all_anc_snps)
-rm(cr2_17A2)
-rm(cr2_17A2_unique)
+rm(cr2_17A2, cr2_17A2_unique)
 
 cr2_18A_an <- cr2_18A %>%
   inner_join(all_anc_snps)
-rm(cr2_18A)
-rm(cr2_18A_unique)
+rm(cr2_18A, cr2_18A_unique)
 
 cr2_18A1_an <- cr2_18A1 %>%
   inner_join(all_anc_snps)
-rm(cr2_18A1)
-rm(cr2_18A1_unique)
+rm(cr2_18A1, cr2_18A1_unique)
 
 all_an_snps <- list(ref_chandler_an, tree2_an, cr2_hifi_an,
                          cr85_an, cr10_an, cr13_an, cr22_an,
@@ -644,16 +645,15 @@ all_an_snps <- list(ref_chandler_an, tree2_an, cr2_hifi_an,
                          cr2_18A_an, cr2_18A1_an)
 
 
-# # Function to filter data tables
-# filter_unique <- function(dt) {
-#   dt[!duplicated(unique), ]
-# }
-# 
-# # Apply the function to each data table in the list
-# filtered_list <- lapply(all_an_snps, filter_unique)
+rm(ref_chandler_an, tree2_an, cr2_hifi_an, cr85_an, cr10_an, cr13_an, 
+   cr22_an, cr21_1_an, cr21_2_an, cr2_11A_an, cr2_12A_an, cr2_13A_an, 
+   cr2_15A_an, cr2_15A1_an, cr2_16A_an, cr2_16A1_an, cr2_16A2_an, 
+   cr2_17A1_an, cr2_17A2_an, cr2_18A_an, cr2_18A1_an, all_anc_snps)
 ```
-## Separate the ancestral snps by chromosome
-```{r}
+## Separate the ancestral snps by chromosome and save the file. CAUTION, see note below
+NOTE: Only run this one time! The files are being appended. If it needs to be rerun, files must be deleted.
+```{r, eval=FALSE}
+# NOTE: Only run this one time! The files are being appended. If it needs to be rerun, files must be deleted.
 # Create separate files for each CHROM value and write the header
 chrom_values <- 1:16
 file_paths <- paste0("./Data/VCFs/Filtered/all_an_snps_chr_", chrom_values, ".vcf")
@@ -679,34 +679,4 @@ append_to_file <- function(df) {
 lapply(all_an_snps, append_to_file)
 ```
 
-## Write out vcfs
-```{r}
-#all_dn_snps
-#write_tsv(x = all_dn_snps, file = "./Data/VCFs/Filtered/all_dn_snps.vcf")
-```
-
-## Write out ancestral snps
-```{r}
-# chr1_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_1.vcf")
-# chr2_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_2.vcf")
-# chr3_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_3.vcf") 
-# chr4_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_4.vcf") #
-# chr5_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_5.vcf")
-# chr6_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_6.vcf")
-# chr7_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_7.vcf")
-# chr8_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_8.vcf")
-# chr9_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_9.vcf") #
-# chr10_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_10.vcf")
-# chr11_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_11.vcf") #
-# chr12_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_12.vcf") #
-# chr13_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_13.vcf")
-# chr14_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_14.vcf")
-# chr15_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_15.vcf")
-# chr16_an <- fread("./Data/VCFs/Filtered/all_an_snps_chr_16.vcf") #
-# 
-# all_an_snps <- rbind(chr1_an, chr2_an, chr3_an, chr4_an, chr5_an, chr6_an,
-#       chr7_an, chr8_an, chr9_an, chr10_an, chr11_an, chr12_an,
-#       chr13_an, chr14_an, chr15_an, chr16_an)
-# Not enough memory
-```
 

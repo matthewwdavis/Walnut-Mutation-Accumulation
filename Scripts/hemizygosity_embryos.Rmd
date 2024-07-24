@@ -98,14 +98,14 @@ quick_qual_dist(chr16_an)
 ```{r}
 point_plot(chr11_an, col_num = 2, samples = c("cr2_hifi", "cr2_16A", "cr2_16A1", "cr2_16A2",
                                               "cr2_17A1", "cr2_17A2", "cr2_18A1"))
-#ggsave("./Figures/Hemizygosity/chr11_position_depth_genotype.png", height = 5, width = 7)
+ggsave("./Figures/Hemizygosity/chr11_position_depth_genotype.png", height = 5, width = 7)
 
 point_plot(chr12_an, samples = c("cr2_15A", "cr2_15A1"))
-#ggsave("./Figures/Hemizygosity/chr12_position_depth_genotype.png", height = 3, width = 4)
+ggsave("./Figures/Hemizygosity/chr12_position_depth_genotype.png", height = 3, width = 4)
 
 point_plot(chr16_an, col_num = 2, samples = c("cr2_hifi", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
                                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1"))
-#ggsave("./Figures/Hemizygosity/chr16_position_depth_genotype.png", height = 5, width = 7)
+ggsave("./Figures/Hemizygosity/chr16_position_depth_genotype.png", height = 5, width = 7)
 ```
 
 # Work on creating a smooth line graph
@@ -210,13 +210,13 @@ long_df_scaled <- long_df %>%
     scaled_depth_count = 2 * ((average_depth - min_depth) / (max_depth - min_depth)) - 1
   ) %>%
   select(-min_depth, -max_depth) %>%
-  mutate(Position = (Window*window_size) / 2)# Remove the min and max columns if not needed
+  mutate(Position = ((Window*window_size) / 2) / 1e6)# Remove the min and max columns if not needed
 
 # Plot the data
 ggplot(long_df_scaled, aes(x = Position, y = scaled_depth_count, color = type)) +
   geom_line() +
   facet_wrap(~ Source) +
-  labs(x = "Position",
+  labs(x = "Position (Mb)",
        y = "Average Depth",
        color = "Genotype") +
   theme_classic()
@@ -273,7 +273,7 @@ ggplot(aes(x = Position, y = scaled_depth_count, color = type)) +
   geom_line() +
   facet_wrap(~ Source) +
   labs(x = "Position (Mb)",
-       y = "Scaled Depth",
+       y = "Scaled Depth Count",
        color = "Genotype") +
   theme_classic()
 ```
@@ -293,7 +293,7 @@ ggplot(aes(x = POS, y = depth_count_log, color = type)) +
   geom_hline(aes(yintercept = depth_count_mean)) +
   facet_wrap(~ Source) +
   labs(x = "Position (Mb)",
-       y = "Depth per Window (natural log)",
+       y = "Mean Depth per Window (natural log)",
        color = "Genotype") +
   theme_classic()
 ```
