@@ -146,6 +146,11 @@ all_rna %>%
   geom_density() +
   facet_wrap(~Source, scales = "free") +
   theme_classic()
+
+all_rna %>%
+  group_by(Source, Chr) %>%
+  summarise(median(Counts))
+
 ```
 
 
@@ -154,6 +159,7 @@ all_rna %>%
 ```{r}
 all_rna_rel_chr <- chr_rel_gene_count(all_rna)
 all_rna_rel_site <- site_rel_gene_count(all_rna)
+
 ```
 
 
@@ -180,7 +186,7 @@ all_rna_rel_chr %>%
   theme(legend.position = "none")
 
 all_rna_rel_site %>%
-  ggplot(aes(x = as.factor(Chr), y = Relative_count, fill = Group)) + 
+  ggplot(aes(x = as.factor(Chr), y = log(Relative_count), fill = Group)) + 
   geom_boxplot() +
   facet_wrap(~Source) +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
@@ -197,4 +203,21 @@ all_rna_rel_site %>%
   theme_classic() +
   theme(legend.position = "none")
 
+all_rna_rel_site %>%
+  ggplot(aes(x = as.factor(Chr), y = log(Counts + 1), fill = Group)) + 
+  geom_boxplot() +
+  facet_wrap(~Source) +
+  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+  labs(x = "Chromosome", y = "Per gene RNA Count") +
+  theme_classic() +
+  theme(legend.position = "none")
+
+all_rna_rel_site %>%
+  ggplot(aes(x = as.factor(Chr %in% c(4,9)), y = log(Counts), fill = Group)) + 
+  geom_boxplot() +
+  facet_wrap(~Source) +
+  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+  labs(x = "Chromosome", y = "Per gene RNA Count") +
+  theme_classic() +
+  theme(legend.position = "none")
 ```

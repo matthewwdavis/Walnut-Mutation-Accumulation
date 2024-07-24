@@ -216,9 +216,9 @@ long_df_scaled <- long_df %>%
 ggplot(long_df_scaled, aes(x = Position, y = scaled_depth_count, color = type)) +
   geom_line() +
   facet_wrap(~ Source) +
-  labs(x = "Window",
+  labs(x = "Position",
        y = "Average Depth",
-       color = "Genotype Type") +
+       color = "Genotype") +
   theme_classic()
 ```
 
@@ -266,15 +266,15 @@ long_df2_scaled <- long_df2 %>%
     scaled_depth_count = 2 * ((depth_count - min_depth) / (max_depth - min_depth)) - 1
   ) %>%
   select(-min_depth, -max_depth) %>%
-  mutate(Position = (Window*window_size) / 2)# Remove the min and max columns if not needed
+  mutate(Position = ((Window*window_size) / 2) / 1e6)# Remove the min and max columns if not needed
 
 long_df2_scaled %>%
 ggplot(aes(x = Position, y = scaled_depth_count, color = type)) +
   geom_line() +
   facet_wrap(~ Source) +
-  labs(x = "Position",
-       y = "Scaled Number of Variants",
-       color = "Genotype Type") +
+  labs(x = "Position (Mb)",
+       y = "Scaled Depth",
+       color = "Genotype") +
   theme_classic()
 ```
 
