@@ -638,6 +638,7 @@ library(Biostrings)
 library(viridis)
 library(ggrepel)
 library(polymorphology2)
+library(boot)
 ```
 
 ## Functions
@@ -691,6 +692,314 @@ ref_pri.fasta <- readDNAStringSet("./Data/Fastas/ref_chandler_primary_default_sc
 genome_size <- genome_length(ref_pri.fasta)
 ref_chandler_gff <- read_gff("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
 ```
+
+# Trying to bootstrap the snps for support
+## read in data
+```{r}
+# Read in the data
+dn.df <- fread("./Data/VCFs/Filtered/all_dn_snps.vcf")
+
+# Calculate probabilities from the QUAL score
+dn.df <- dn.df %>%
+  mutate(PROB = 1- (10^(-(QUAL)/10))) # 1 minus to give probability that the call is correct
+
+# create filtered subset
+dn.df_20 <- dn.df %>%
+  filter(QUAL >= 20)
+
+# # Define a function
+# count_correct <- function(data, indices) {
+#     sample_data <- data[indices, ]  # sample with replacement
+#     correct_count <- sum(sample_data$PROB)  # sum of probabilities
+#     return(correct_count)
+# }
+# 
+# # Try this bootstrap
+# results <- boot(data = dn.df, statistic = count_correct, R = 500)
+# 
+# plot(results)
+# Try to bootstrap
+# lapply(1:100, function(i) sample(dn.df, replace = T)) # This doesn't work
+
+levels <- c("ref_chandler", "tree2", "cr2_hifi",
+            "cr21_1", "cr21_2", "cr2_11A", "cr2_12A",
+            "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A",
+            "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
+            "cr2_18A", "cr2_18A1",
+            "cr85", "cr10", "cr13", "cr22")
+
+dn.df.table <- dn.df %>%
+  filter(QUAL >= 20) %>%
+  group_by(Source) %>%
+  summarise(count = n())
+
+dn.df.table$Source <- factor(dn.df.table$Source, levels = levels)
+
+dn.df.table <- dn.df.table %>%
+  mutate(Type = case_when(
+    Source %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    Source %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "Short Read Embryo",
+    Source %in% c("cr85", "cr10", "cr13", "cr22") ~ "Short Read Shoot")) %>%
+  mutate(Type = factor(Type, levels = c("HiFi", "Short Read Embryo", "Short Read Shoot")))
+
+dn.df.table %>%
+  ggplot(aes(x = Source, y = count)) +
+  geom_point() +
+  labs(x = "Source", y = "SNP Count") +
+  facet_grid(~Type, scales = "free", space = "free") +
+  scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
+                              "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
+                              "cr2_11A" = "11A", "cr2_12A" = "12A", "cr2_13A" = "13A",
+                              "cr2_15A" = "15A", "cr2_15A1" = "15A1", "cr2_16A" = "16A",
+                              "cr2_16A1" = "16A1", "cr2_16A2" = "16A2", "cr2_17A1" = "17A1",
+                              "cr2_17A2" = "17A2", "cr2_18A" = "18A", "cr2_18A1" = "18A1",
+                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
+                              "cr22" = "Chandler '22")) +
+  theme_classic() +
+  theme(
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom")
+```
+
+## Try the chatgpt solution
+```{r}
+# Step 2: Define a function to calculate the number of correct rows
+count_correct <- function(data, indices) {
+    sample_data <- data[indices, ]  # sample with replacement
+    correct_count <- sum(sample_data$PROB)  # sum of probabilities
+    return(correct_count)
+}
+
+# Step 3: Function to perform bootstrap analysis for each Source group
+bootstrap_by_source <- function(data, source_col, prob_col, R) {
+    results_list <- list()
+    
+    # Perform bootstrap for each unique source
+    unique_sources <- unique(data[[source_col]])
+    
+    for (source in unique_sources) {
+        source_data <- data[data[[source_col]] == source, ]
+        results <- boot(data = source_data, statistic = count_correct, R = R) # added proabbality. May need to adjust. Not convinced this is the best way.
+        results_list[[source]] <- results
+    }
+    
+    return(results_list)
+}
+
+# Perform bootstrap analysis
+set.seed(25)  # for reproducibility
+bootstrap_results <- bootstrap_by_source(dn.df_20, source_col = "Source", prob_col = "PROB", R = 100)
+
+# Step 4: Function to extract and print results for each source
+print_bootstrap_results <- function(bootstrap_results) {
+    for (source in names(bootstrap_results)) {
+        cat("Results for Source:", source, "\n")
+        print(bootstrap_results[[source]])
+        cat("\n")
+    }
+}
+
+# Print bootstrap results
+print_bootstrap_results(bootstrap_results)
+
+# Plot results for each source
+par(mfrow = c(1, length(bootstrap_results)))  # set up the plotting area
+for (source in names(bootstrap_results)) {
+    plot(bootstrap_results[[source]], main = paste("Source:", source))
+}
+
+# Step 5: Function to calculate and print confidence intervals for each source
+print_confidence_intervals <- function(bootstrap_results) {
+    for (source in names(bootstrap_results)) {
+        cat("Confidence intervals for Source:", source, "\n")
+        ci <- boot.ci(bootstrap_results[[source]], type = "perc")
+        print(ci)
+        cat("\n")
+    }
+}
+
+# Print confidence intervals
+print_confidence_intervals(bootstrap_results)
+
+```
+
+## Put information into a table chatgpt style
+```{r}
+# Function to collate bootstrap results into a table
+collate_results <- function(bootstrap_results) {
+    results_list <- list()
+    
+    for (source in names(bootstrap_results)) {
+        results <- bootstrap_results[[source]]
+        ci <- boot.ci(results, type = "perc")
+        
+        summary_table <- data.table(
+            Source = source,
+            Median = median(results$t),
+            Lower_CI = ci$percent[4],
+            Upper_CI = ci$percent[5]
+        )
+        
+        results_list[[source]] <- summary_table
+    }
+    
+    final_table <- rbindlist(results_list)
+    return(final_table)
+}
+
+# Collate results into a data table
+final_table <- collate_results(bootstrap_results)
+print(final_table)
+
+# Prep the table and plot
+levels <- c("ref_chandler", "tree2", "cr2_hifi",
+            "cr21_1", "cr21_2", "cr2_11A", "cr2_12A",
+            "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A",
+            "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
+            "cr2_18A", "cr2_18A1",
+            "cr85", "cr10", "cr13", "cr22")
+
+final_table$Source <- factor(final_table$Source, levels = levels)
+
+final_table <- final_table %>%
+  mutate(Type = case_when(
+    Source %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    Source %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "Short Read Embryo",
+    Source %in% c("cr85", "cr10", "cr13", "cr22") ~ "Short Read Shoot")) %>%
+  mutate(Type = factor(Type, levels = c("HiFi", "Short Read Embryo", "Short Read Shoot")))
+
+final_table %>%
+  ggplot(aes(x = Source, y = Median)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = Lower_CI, ymax = Upper_CI)) +
+  labs(x = "Source", y = "Median SNPs") +
+  facet_grid(~Type, scales = "free", space = "free") +
+  scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
+                              "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
+                              "cr2_11A" = "11A", "cr2_12A" = "12A", "cr2_13A" = "13A",
+                              "cr2_15A" = "15A", "cr2_15A1" = "15A1", "cr2_16A" = "16A",
+                              "cr2_16A1" = "16A1", "cr2_16A2" = "16A2", "cr2_17A1" = "17A1",
+                              "cr2_17A2" = "17A2", "cr2_18A" = "18A", "cr2_18A1" = "18A1",
+                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
+                              "cr22" = "Chandler '22")) +
+  theme_classic() +
+  theme(
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom")
+```
+
+## try to use sample. The earlier code wasn't taking probability into account properly
+```{r}
+weighted_bootstrap <- function(data, R = 10){
+  
+  bootstrap_samples <- vector("list", R)
+  
+  for (i in seq_len(R)) {
+    bootstrap_sample <- unique(data[sample(nrow(data), size = nrow(data), replace = TRUE, prob = data$PROB)])
+    bootstrap_samples[[i]] <- bootstrap_sample
+  }
+  
+  
+  return(bootstrap_samples)
+}
+
+bootstraps <- weighted_bootstrap(dn.df)
+
+weighted_bootstrap <- function(data, R = 100) {
+  # Initialize a list to store the bootstrap samples
+  bootstrap_samples <- vector("list", R)
+  source_counts <- vector("list", R)
+  
+  # Loop to create R bootstrap samples
+  for (i in seq_len(R)) {
+    bootstrap_sample <- unique(data[sample(.N, size = .N, replace = TRUE, prob = data$PROB)])
+    bootstrap_samples[[i]] <- bootstrap_sample
+    
+    # Count the number of rows for each source
+    source_counts[[i]] <- table(bootstrap_sample$Source)
+  }
+  
+  return(list(bootstrap_samples = bootstrap_samples, source_counts = source_counts))
+}
+
+bootstraps <- weighted_bootstrap(dn.df_20)
+
+source_counts <- bootstraps$source_counts
+
+source_counts_df <- do.call(rbind, source_counts)
+
+table <- as.data.table(source_counts_df) %>%
+  pivot_longer(cols = everything())
+
+table$name <- factor(table$name, levels = levels)
+
+table %>%
+  ggplot(aes(x = name, y = value)) +
+  geom_boxplot() +
+  theme_classic() + 
+  theme()
+```
+
+
+## Try splitting by source
+```{r}
+weighted_bootstrap <- function(data, R = 10) {
+  # Split the data by the Source column
+  split_data <- split(data, by = "Source")
+  
+  # Initialize a list to store the bootstrap samples
+  bootstrap_samples <- vector("list", R)
+  source_counts <- vector("list", R)
+  
+  # Loop to create R bootstrap samples
+  for (i in seq_len(R)) {
+    # Initialize an empty list to store the sampled subsets
+    sampled_subsets <- list()
+    
+    # Sample from each subset
+    for (source in names(split_data)) {
+      subset <- split_data[[source]]
+      sampled_subset <- unique(subset[sample(.N, size = .N, replace = TRUE, prob = subset$PROB)])
+      sampled_subsets[[source]] <- sampled_subset
+    }
+    
+    # Combine the sampled subsets into a single bootstrap sample
+    bootstrap_sample <- do.call(rbind, sampled_subsets)
+    bootstrap_samples[[i]] <- bootstrap_sample
+    
+    # Count the number of rows for each source in the bootstrap sample
+    source_counts[[i]] <- table(bootstrap_sample$Source)
+  }
+  
+  return(list(bootstrap_samples = bootstrap_samples, source_counts = source_counts))
+}
+
+split_bootstraps <- weighted_bootstrap(dn.df_20)
+
+source_counts2 <- split_bootstraps$source_counts
+
+source_counts_df2 <- do.call(rbind, source_counts2)
+
+table2 <- as.data.table(source_counts_df2) %>%
+  pivot_longer(cols = everything())
+
+table2$name <- factor(table2$name, levels = levels)
+
+table2 %>%
+  ggplot(aes(x = name, y = value)) +
+  geom_boxplot() +
+  theme_classic() + 
+  theme()
+```
+
 
 ## Read in VCFs, add type and seq type columns, remove uninformative columns to save RAM
 ```{r}
@@ -748,6 +1057,7 @@ all_dn.df <- all_dn.df %>%
 ```{r}
 # Depth distribution
 all_dn.df %>%
+  
   ggplot(aes(x = DP, color = Type)) +
   geom_density() +
   labs(title = "Depth distribution by type") +
@@ -796,8 +1106,8 @@ all_dn.df %>%
   xlim(0, 1) +
   theme_classic() + 
   theme(legend.position = "bottom")
-#ggsave("./Figures/SNP_Calling/vaf_density_all_q30.pdf", height = 6, width = 12)
-#ggsave("./Figures/SNP_Calling/vaf_density_all_q30.png", height = 6, width = 12)
+# ggsave("./Figures/SNP_Calling/vaf_density_all_q30.pdf", height = 6, width = 12)
+# ggsave("./Figures/SNP_Calling/vaf_density_all_q30.png", height = 6, width = 12)
 
 all_dn.df %>%
   filter(median_QUAL >= 30) %>%
@@ -818,8 +1128,8 @@ all_dn.df %>%
   xlim(0, 1) +
   theme_classic() + 
   theme(legend.position = "bottom")
-#ggsave("./Figures/SNP_Calling/vaf_density_shoots_vs_embryos_q30.pdf", height = 6, width = 12)
-#ggsave("./Figures/SNP_Calling/vaf_density_shoots_vs_embryos_q30.png", height = 6, width = 12)
+# ggsave("./Figures/SNP_Calling/vaf_density_shoots_vs_embryos_q30.pdf", height = 6, width = 12)
+# ggsave("./Figures/SNP_Calling/vaf_density_shoots_vs_embryos_q30.png", height = 6, width = 12)
 
 all_dn.df %>%
   filter(Type != "Shoot", median_QUAL >= 30) %>%
@@ -831,8 +1141,8 @@ all_dn.df %>%
   xlim(0, 1) +
   theme_classic() + 
   theme(legend.position = "bottom")
-#ggsave("./Figures/SNP_Calling/vaf_density_trees_vs_embryos_q30.pdf", height = 6, width = 12)
-#ggsave("./Figures/SNP_Calling/vaf_density_trees_vs_embryos_q30.png", height = 6, width = 12)
+# ggsave("./Figures/SNP_Calling/vaf_density_trees_vs_embryos_q30.pdf", height = 6, width = 12)
+# ggsave("./Figures/SNP_Calling/vaf_density_trees_vs_embryos_q30.png", height = 6, width = 12)
 
 
 all_dn.df %>%
@@ -845,8 +1155,8 @@ all_dn.df %>%
   xlim(0, 1) +
   theme_classic() + 
   theme(legend.position = "bottom")
-#ggsave("./Figures/SNP_Calling/vaf_density_embryos_q30.pdf", height = 6, width = 12)
-#ggsave("./Figures/SNP_Calling/vaf_density_embryos_q30.png", height = 6, width = 12)
+# ggsave("./Figures/SNP_Calling/vaf_density_embryos_q30.pdf", height = 6, width = 12)
+# ggsave("./Figures/SNP_Calling/vaf_density_embryos_q30.png", height = 6, width = 12)
 
 all_dn.df %>%
   filter(median_QUAL >= 30) %>%
@@ -857,6 +1167,8 @@ all_dn.df %>%
   facet_grid(~Type) +
   theme_classic() + 
   theme(legend.position = "bottom")
+# ggsave("./Figures/SNP_Calling/vaf_depth_density2d_embryos_q30.pdf", height = 6, width = 12)
+# ggsave("./Figures/SNP_Calling/vaf_depth_density2d_embryos_q30.png", height = 6, width = 12)
 ```
 
 ## Creating quality filter table test
@@ -927,13 +1239,13 @@ quality_table %>%
         strip.background = element_blank(),
         strip.text = element_text(face = "bold"),
         legend.position = "bottom")
-ggsave("./Figures/SNP_Calling/snp_quality_filtering_all.pdf", height = 3, width = 5)
-ggsave("./Figures/SNP_Calling/snp_quality_filtering_all.png", height = 3, width = 5)
+# ggsave("./Figures/SNP_Calling/snp_quality_filtering_all.pdf", height = 3, width = 5)
+# ggsave("./Figures/SNP_Calling/snp_quality_filtering_all.png", height = 3, width = 5)
 
 quality_table %>%
   ggplot(aes(x = Source, y = median_qual_varnumber, col = q_value)) +
   geom_point() +
-  scale_color_viridis(name = "Median Site\nQualityThreshold", option = "viridis") +
+  scale_color_viridis(name = "Median Site\nQuality Threshold", option = "viridis") +
   labs(y = "Number of Mutations", x = "Individual") +
   facet_grid(~SeqType, scales = "free", space = "free") +
   scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
@@ -952,8 +1264,8 @@ quality_table %>%
         strip.background = element_blank(),
         strip.text = element_text(face = "bold"),
         legend.position = "bottom")
-ggsave("./Figures/SNP_Calling/snp_median_quality_filtering_all.pdf", height = 3, width = 5)
-ggsave("./Figures/SNP_Calling/snp_median_quality_filtering_all.png", height = 3, width = 5)
+# ggsave("./Figures/SNP_Calling/snp_median_quality_filtering_all.pdf", height = 3, width = 5)
+# ggsave("./Figures/SNP_Calling/snp_median_quality_filtering_all.png", height = 3, width = 5)
 
 # Plotting by sequencing type and organism type
 quality_table %>%
@@ -977,6 +1289,8 @@ quality_table %>%
         strip.background = element_blank(),
         strip.text = element_text(face = "bold"),
         legend.position = "bottom")
+# ggsave("./Figures/SNP_Calling/snp_quality_filtering_all_splits.pdf", height = 3, width = 5)
+# ggsave("./Figures/SNP_Calling/snp_quality_filtering_all_splits.png", height = 3, width = 5)
 
 quality_table %>%
   ggplot(aes(x = Source, y = median_qual_varnumber, col = q_value)) +
@@ -999,6 +1313,8 @@ quality_table %>%
         strip.background = element_blank(),
         strip.text = element_text(face = "bold"),
         legend.position = "bottom")
+# ggsave("./Figures/SNP_Calling/snp_median_quality_filtering_all_splits.pdf", height = 3, width = 5)
+# ggsave("./Figures/SNP_Calling/snp_median_quality_filtering_all_splits.png", height = 3, width = 5)
 ```
 
 ## Distribution of calls between QUAL and Median_Qual
@@ -1283,6 +1599,31 @@ mut.table %>%
         legend.position = "none") 
 ggsave("./Figures/SNP_Calling/facet_mutations_over_time_shoots_line_no_labels.pdf", height = 3, width = 5)
 ggsave("./Figures/SNP_Calling/facet_mutations_over_time_shoots_line_no_labels.png", height = 3, width = 5)
+
+mut.table %>%
+  filter(Type == "Shoot") %>%
+  ggplot(aes(x = Year, y = Mutations, color = factor(QUAL))) +
+  geom_point(color = "black", size = 1) +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_color_manual(values = c("purple3", "darkgreen", "orange", "royalblue"),
+                     breaks = c("10", "20", "30", "40")) +
+  labs(title = "Shoot culture mutation over time", 
+       x = "Years in tissue culture", y = "Number of Mutations",
+       color = "QUAL") +
+  facet_wrap(~QUAL, scales = "free", nrow = 1,
+             labeller = as_labeller(c("10" = "Quality >= 10", 
+                                      "20" = "Quality >= 20", 
+                                      "30" = "Quality >= 30", 
+                                      "40" = "Quality >= 40"))) +
+  theme_classic(base_size = 6) +
+  theme(plot.title = element_text(hjust = .5, face = "bold"),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "none") 
+ggsave("./Figures/SNP_Calling/facet_mutations_over_time_shoots_line_no_labels_1row.pdf", height = 2, width = 6)
+ggsave("./Figures/SNP_Calling/facet_mutations_over_time_shoots_line_no_labels_1row.png", height = 2, width = 6)
 ```
 
 
@@ -1314,6 +1655,7 @@ mut_rates_per_year <- mut_rates_embryo_shoot.table %>%
 
 ## Plant mutation rate comparison
 ```{r}
+# Some slightly wierder results with the new data
 plant_mut.table <- tribble(
   ~"Source", ~"mut_per_bp_per_year", ~"fill",
   "Oryza sativa(callus)", 2.87e-07, "callus",
@@ -1337,8 +1679,8 @@ plant_mut.table %>%
   theme_classic() +
   theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 0),
         axis.ticks.y = element_blank(), axis.text.y = element_blank())
-#ggsave("./Figures/SNP_Calling/other_plants_mutation_rate_comparison_q30.pdf", height = 4, width = 8)
-#ggsave("./Figures/SNP_Calling/other_plants_mutation_rate_comparison_q30.png", height = 4, width = 8)
+ggsave("./Figures/SNP_Calling/other_plants_mutation_rate_comparison_q30v2.pdf", height = 4, width = 8)
+ggsave("./Figures/SNP_Calling/other_plants_mutation_rate_comparison_q30v2.png", height = 4, width = 8)
 ```
 
 ## Looking into which chromosome was lost

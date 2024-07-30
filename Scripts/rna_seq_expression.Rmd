@@ -313,65 +313,112 @@ chr.table <- all_counts %>%
 chr.table %>%
   ggplot(aes(x = as.factor(seq_id), y = counts_by_length, fill = Group)) + 
   geom_bar(stat = "identity") +
-  facet_wrap(~ Source) +
+  facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
   labs(x = "Chromosome", y = "Gene transcripts / total exon length") +
   theme_classic() +
   theme(legend.position = "none")
+# ggsave("./Figures/RNA_Sequencing/kallisto_counts_over_length_per_chr.pdf", height = 8, width = 12)
+# ggsave("./Figures/RNA_Sequencing/kallisto_counts_over_length_per_chr.png", height = 8, width = 12)
 
 chr.table %>%
   ggplot(aes(x = as.factor(seq_id), y = counts_by_efflength, fill = Group)) + 
   geom_bar(stat = "identity") +
-  facet_wrap(~ Source) +
+  facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
-  labs(x = "Chromosome", y = "Gene transcripts / total exon length") +
+  labs(x = "Chromosome", y = "Gene transcripts / total effective exon length") +
   theme_classic() +
   theme(legend.position = "none")
+# ggsave("./Figures/RNA_Sequencing/kallisto_counts_over_efflength_per_chr.pdf", height = 8, width = 12)
+# ggsave("./Figures/RNA_Sequencing/kallisto_counts_over_efflength_per_chr.png", height = 8, width = 12)
 
 chr.table %>%
   ggplot(aes(x = as.factor(seq_id), y = tpm_by_length, fill = Group)) + 
   geom_bar(stat = "identity") +
-  facet_wrap(~ Source) +
+  facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
-  labs(x = "Chromosome", y = "Gene transcripts / total exon length") +
+  labs(x = "Chromosome", y = "Transcript per Million / total exon length") +
   theme_classic() +
   theme(legend.position = "none")
+# ggsave("./Figures/RNA_Sequencing/kallisto_tpm_over_length_per_chr.pdf", height = 8, width = 12)
+# ggsave("./Figures/RNA_Sequencing/kallisto_tpm_over_length_per_chr.png", height = 8, width = 12)
+
+chr.table %>%
+  ggplot(aes(x = as.factor(seq_id), y = tpm_by_efflength, fill = Group)) + 
+  geom_bar(stat = "identity") +
+  facet_wrap(~ Source, scales = "free") +
+  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+  labs(x = "Chromosome", y = "Transcript per Million / total  effective exon length") +
+  theme_classic() +
+  theme(legend.position = "none")
+# ggsave("./Figures/RNA_Sequencing/kallisto_tpm_over_efflength_per_chr.pdf", height = 8, width = 12)
+# ggsave("./Figures/RNA_Sequencing/kallisto_tpm_over_efflength_per_chr.png", height = 8, width = 12)
 
 chr.table %>%
   ggplot(aes(x = as.factor(seq_id), y = mean_counts, fill = Group)) + 
   geom_bar(stat = "identity") +
-  facet_wrap(~ Source) +
+  facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
   labs(x = "Chromosome", y = "Mean Counts") +
   theme_classic() +
   theme(legend.position = "none")
+# ggsave("./Figures/RNA_Sequencing/kallisto_mean_counts_per_chr.pdf", height = 8, width = 12)
+# ggsave("./Figures/RNA_Sequencing/kallisto_mean_counts_per_chr.png", height = 8, width = 12)
 
 chr.table %>%
   ggplot(aes(x = as.factor(seq_id), y = mean_tpm, fill = Group)) + 
   geom_bar(stat = "identity") +
-  facet_wrap(~ Source) +
+  facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
   labs(x = "Chromosome", y = "Mean TPM") +
   theme_classic() +
   theme(legend.position = "none")
+# ggsave("./Figures/RNA_Sequencing/kallisto_mean_tpm_per_chr.pdf", height = 8, width = 12)
+# ggsave("./Figures/RNA_Sequencing/kallisto_mean_tpm_per_chr.png", height = 8, width = 12)
 
 chr.table %>%
   ggplot(aes(x = as.factor(seq_id), y = mean_length, fill = Group)) + 
   geom_bar(stat = "identity") +
-  facet_wrap(~ Source) +
+  facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
   labs(x = "Chromosome", y = "Mean Length") +
   theme_classic() +
   theme(legend.position = "none")
+ggsave("./Figures/RNA_Sequencing/kallisto_mean_length_per_chr.pdf", height = 8, width = 12)
+ggsave("./Figures/RNA_Sequencing/kallisto_mean_length_per_chr.png", height = 8, width = 12)
+
 
 all_counts %>%
   filter(est_counts > 0) %>%
-  ggplot(aes(x = as.factor(seq_id), y = log(est_counts) , fill = Group)) + 
+  ggplot(aes(x = as.factor(seq_id), y = log(est_counts), fill = Group)) + 
   geom_boxplot() +
-  facet_wrap(~ Source) +
+  facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
   labs(x = "Chromosome", y = "Estimated Counts") +
   theme_classic() +
   theme(legend.position = "none")
+# ggsave("./Figures/RNA_Sequencing/kallisto_boxplot_counts_per_chr.pdf", height = 8, width = 12)
+# ggsave("./Figures/RNA_Sequencing/kallisto_boxplot_counts_per_chr.png", height = 8, width = 12)
+
+all_counts %>%
+  ggplot(aes(x = as.factor(seq_id), y = log(est_counts/length), fill = Group)) + 
+  geom_boxplot() +
+  facet_wrap(~Source, scales = "free") +
+  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+  labs(x = "Chromosome", y = "RNA Count / total exon length") +
+  theme_classic() +
+  theme(legend.position = "none")
+# ggsave("./Figures/RNA_Sequencing/kallisto_boxplot_counts_over_length_per_chr.pdf", height = 8, width = 12)
+# ggsave("./Figures/RNA_Sequencing/kallisto_boxplot_counts_over_length_per_chr.png", height = 8, width = 12)
+
+all_counts %>%
+  ggplot(aes(x = as.factor(seq_id %in% c(4,9)), y = log(tpm/length), fill = Group)) + 
+  geom_boxplot() +
+  facet_wrap(~Source, scales = "free") +
+  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+  labs(x = "Chromosome", y = "TPM / Length") +
+  theme_classic() +
+  theme(legend.position = "none")
+# Where is there nothing when looking at the boxplots of the genes?
 ```
 

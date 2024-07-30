@@ -96,16 +96,42 @@ quick_qual_dist(chr16_an)
 # Looking at position by depth by genotype
 ## Plot SNPs by position and depth, colored by genotype
 ```{r}
+# Plot individual chromosomes and affected samples
 point_plot(chr11_an, col_num = 2, samples = c("cr2_hifi", "cr2_16A", "cr2_16A1", "cr2_16A2",
                                               "cr2_17A1", "cr2_17A2", "cr2_18A1"))
-ggsave("./Figures/Hemizygosity/chr11_position_depth_genotype.png", height = 5, width = 7)
+#ggsave("./Figures/Hemizygosity/chr11_position_depth_genotype.png", height = 5, width = 7)
 
 point_plot(chr12_an, samples = c("cr2_15A", "cr2_15A1"))
-ggsave("./Figures/Hemizygosity/chr12_position_depth_genotype.png", height = 3, width = 4)
+#ggsave("./Figures/Hemizygosity/chr12_position_depth_genotype.png", height = 3, width = 4)
 
 point_plot(chr16_an, col_num = 2, samples = c("cr2_hifi", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
                                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1"))
-ggsave("./Figures/Hemizygosity/chr16_position_depth_genotype.png", height = 5, width = 7)
+#ggsave("./Figures/Hemizygosity/chr16_position_depth_genotype.png", height = 5, width = 7)
+
+
+# Combine chromosome data
+dup_chr_snps <- rbind(chr11_an, chr12_an, chr16_an)
+
+# Plot all samples and chromsomes for large scale comparison
+dup_chr_snps  %>%
+    filter(GT %in% c("0/1", "1/1")) %>%
+    filter(QUAL >= 0) %>%
+    group_by(Source) %>%
+    mutate(DP_log = log(DP)) %>%
+    mutate(DP_log_mean = mean(DP_log)) %>%
+  ggplot(aes(x = POS/1000000, y = DP_log, col = GT)) +
+    geom_point() +
+    geom_hline(aes(yintercept = DP_log_mean)) +
+    scale_color_manual(values=c("0/1" = "deepskyblue4", "1/1" = "darksalmon")) +
+    facet_grid(Source ~ CHROM, space = "free", scales = "free_x") +
+    labs(x = "Position (Mb)",
+         y = "Depth (natural log)",
+         color = "Genotype") +
+    theme_classic() +
+    theme(legend.position = "bottom",
+          axis.title.x = element_text(face = "bold"),
+          axis.title.y = element_text(face = "bold"))
+# ggsave("./Figures/Hemizygosity/all_source_chr11_12_16_position_depth_genotype.png", height = 15, width = 9)
 ```
 
 # Work on creating a smooth line graph
@@ -276,6 +302,8 @@ ggplot(aes(x = Position, y = scaled_depth_count, color = type)) +
        y = "Scaled Depth Count",
        color = "Genotype") +
   theme_classic()
+ggsave("./Figures/Hemizygosity/chr16_position_depth_genotype_1mb_window.pdf", height = 5, width = 7)
+ggsave("./Figures/Hemizygosity/chr16_position_depth_genotype_1mb_window.png", height = 5, width = 7)
 ```
 
 ## Try the counts, but using log

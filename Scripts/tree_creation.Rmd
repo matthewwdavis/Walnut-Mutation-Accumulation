@@ -25,7 +25,7 @@ library(DECIPHER)
 ```{r}
 snp_matrix <- function(vcf.data, qual){
   
-  snp.matrix <- dn_snps %>%
+  snp.matrix <- vcf.data %>%
     filter(QUAL >= qual) %>%
     select(Source, unique) %>%
     mutate(present = 1) %>%
@@ -44,6 +44,16 @@ dendro_plot <- function(clust.data, clusters = 3, height = 3, color = "red", qua
   rect.hclust(clust.data , k = clusters, border = 2:6)
   abline(h = height, col = color)
 }
+
+read_ancestral_snps <- function(path){
+  # Read in data
+  data <- fread(path)
+  
+  table <- data %>%
+    select(Source, unique, QUAL)
+  
+  return(table)
+}
 ```
 
 
@@ -52,7 +62,7 @@ dendro_plot <- function(clust.data, clusters = 3, height = 3, color = "red", qua
 dn_snps <- fread("./Data/VCFs/Filtered/all_dn_snps.vcf")
 ```
 
-# Making SNP trees
+# Make SNP tree for denovo variants
 ## Make matrix
 ```{r}
 # Create matrix
@@ -64,7 +74,7 @@ snp.matrix40 <- snp_matrix(dn_snps, qual = 40)
 
 ## Calculate the bindary distance between samples and cluster the matrix
 ```{r}
-## distacnce
+## distance
 dist.matrix0 <- dist(snp.matrix0, method = "binary")
 dist.matrix20 <- dist(snp.matrix20, method = "binary")
 dist.matrix30 <- dist(snp.matrix30, method = "binary")
@@ -83,10 +93,18 @@ clust_avg40 <- hclust(dist.matrix40, method = "average")
 ## Plot the tree
 ```{r}
 ## Base R
+pdf("./Figures/Trees/dn_snps_dendrogram_q>=0.pdf", height = 5, width = 8)
 dendro_plot(clust_avg0, qual = "q>=0")
+dev.off()
+pdf("./Figures/Trees/dn_snps_dendrogram_q>=20.pdf", height = 5, width = 8)
 dendro_plot(clust_avg20, qual = "q>=20")
+dev.off()
+pdf("./Figures/Trees/dn_snps_dendrogram_q>=30.pdf", height = 5, width = 8)
 dendro_plot(clust_avg30, qual = "q>=30")
+dev.off()
+pdf("./Figures/Trees/dn_snps_dendrogram_q>=40.pdf", height = 5, width = 8)
 dendro_plot(clust_avg40, qual = "q>=40")
+dev.off()
 
 # ## GG Dendro
 # dendro <- as.dendrogram(clust_avg)
@@ -117,6 +135,77 @@ dendro_plot(clust_avg40, qual = "q>=40")
 #   geom_text(aes(x = x, y = y, label = label, hjust = 0), data = label_data) +
 #   scale_y_reverse(expand = c(0.2, 0)) +
 #   theme_dendro()
+```
+
+# make ancestral sites tree
+```{r}
+# Read in only necessary columns
+chr1 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_1.vcf")
+chr2 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_2.vcf")
+chr3 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_3.vcf")
+chr4 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_4.vcf")
+chr5 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_5.vcf")
+chr6 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_6.vcf")
+chr7 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_7.vcf")
+chr8 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_8.vcf")
+chr9 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_9.vcf")
+chr10 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_10.vcf")
+chr11 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_11.vcf")
+chr12 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_12.vcf")
+chr13 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_13.vcf")
+chr14 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_14.vcf")
+chr15 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_15.vcf")
+chr16 <- read_ancestral_snps("./Data/VCFs/Filtered/all_an_snps_chr_16.vcf") 
+
+#Bind all columns
+an_snps <- rbind(chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16)
+
+# Remove unnecessary files
+rm(chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16)
+```
+
+## Make matrix
+```{r}
+# Create matrix
+an.matrix0 <- snp_matrix(an_snps, qual = 0)
+an.matrix20 <- snp_matrix(an_snps, qual = 20)
+an.matrix30 <- snp_matrix(an_snps, qual = 30)
+an.matrix40 <- snp_matrix(an_snps, qual = 40)
+```
+## Calculate the bindary distance between samples and cluster the matrix
+```{r}
+## distance
+an_dist.matrix0 <- dist(an.matrix0, method = "binary")
+an_dist.matrix20 <- dist(an.matrix20, method = "binary")
+an_dist.matrix30 <- dist(an.matrix30, method = "binary")
+an_dist.matrix40 <- dist(an.matrix40, method = "binary")
+
+## cluster
+an_clust_avg0 <- hclust(an_dist.matrix0, method = "average")
+an_clust_avg20 <- hclust(an_dist.matrix20, method = "average")
+an_clust_avg30 <- hclust(an_dist.matrix30, method = "average")
+an_clust_avg40 <- hclust(an_dist.matrix40, method = "average")
+
+# Define expected clusters. These are the different sample groups
+#clusters <- cutree(clust_avg, k = 3)  # Adjust 'k' as needed
+```
+
+## Plot the tree
+```{r}
+## Base R
+pdf("./Figures/Trees/an_snps_dendrogram_q>=0.pdf", height = 5, width = 8)
+dendro_plot(an_clust_avg0, qual = "q>=0")
+dev.off()
+pdf("./Figures/Trees/an_snps_dendrogram_q>=20.pdf", height = 5, width = 8)
+dendro_plot(an_clust_avg20, qual = "q>=20")
+dev.off()
+pdf("./Figures/Trees/an_snps_dendrogram_q>=30.pdf", height = 5, width = 8)
+dendro_plot(an_clust_avg30, qual = "q>=30")
+dev.off()
+pdf("./Figures/Trees/an_snps_dendrogram_q>=40.pdf", height = 5, width = 8)
+dendro_plot(an_clust_avg40, qual = "q>=40")
+dev.off()
+# Having some trouble interpreting some of these clusters
 ```
 
 # Making a TE tree
