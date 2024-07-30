@@ -701,7 +701,22 @@ dn.df <- fread("./Data/VCFs/Filtered/all_dn_snps.vcf")
 
 # Calculate probabilities from the QUAL score
 dn.df <- dn.df %>%
-  mutate(PROB = 1- (10^(-(QUAL)/10))) # 1 minus to give probability that the call is correct
+  mutate(PROB = 1 - (10^(-(QUAL)/10))) # 1 minus to give probability that the call is correct
+
+# # The sum of the column should be 1
+# dn.df[, PROB_norm := PROB / sum(PROB)]
+# sum(dn.df$PROB_norm)
+
+filt_dn.df <- dn.df %>%
+  filter(GT %in% c("0/1", "1/1")) %>%
+  filter(grepl("^([^,]*,[^,]*)$", AD))
+
+dn.df <- dn.df %>%
+  select(Source, unique, QUAL, PROB)
+
+filt_dn.df <- filt_dn.df %>%
+  select(Source, unique, QUAL, PROB)%>%
+  filter(QUAL >= 30)
 
 # create filtered subset
 dn.df_20 <- dn.df %>%
@@ -729,7 +744,7 @@ levels <- c("ref_chandler", "tree2", "cr2_hifi",
             "cr85", "cr10", "cr13", "cr22")
 
 dn.df.table <- dn.df %>%
-  filter(QUAL >= 20) %>%
+  filter(QUAL >= 0) %>%
   group_by(Source) %>%
   summarise(count = n())
 
@@ -792,7 +807,7 @@ bootstrap_by_source <- function(data, source_col, prob_col, R) {
 
 # Perform bootstrap analysis
 set.seed(25)  # for reproducibility
-bootstrap_results <- bootstrap_by_source(dn.df_20, source_col = "Source", prob_col = "PROB", R = 100)
+bootstrap_results <- bootstrap_by_source(dn.df, source_col = "Source", prob_col = "PROB", R = 100)
 
 # Step 4: Function to extract and print results for each source
 print_bootstrap_results <- function(bootstrap_results) {
@@ -896,31 +911,16 @@ final_table %>%
         legend.position = "bottom")
 ```
 
-## try to use sample. The earlier code wasn't taking probability into account properly
+## Unweighted bootstrap
 ```{r}
-weighted_bootstrap <- function(data, R = 10){
-  
-  bootstrap_samples <- vector("list", R)
-  
-  for (i in seq_len(R)) {
-    bootstrap_sample <- unique(data[sample(nrow(data), size = nrow(data), replace = TRUE, prob = data$PROB)])
-    bootstrap_samples[[i]] <- bootstrap_sample
-  }
-  
-  
-  return(bootstrap_samples)
-}
-
-bootstraps <- weighted_bootstrap(dn.df)
-
-weighted_bootstrap <- function(data, R = 100) {
+bootstrap <- function(data, R = 10) {
   # Initialize a list to store the bootstrap samples
   bootstrap_samples <- vector("list", R)
   source_counts <- vector("list", R)
   
   # Loop to create R bootstrap samples
   for (i in seq_len(R)) {
-    bootstrap_sample <- unique(data[sample(.N, size = .N, replace = TRUE, prob = data$PROB)])
+    bootstrap_sample <- unique(data[sample(.N, size = .N, replace = TRUE)])
     bootstrap_samples[[i]] <- bootstrap_sample
     
     # Count the number of rows for each source
@@ -930,7 +930,19 @@ weighted_bootstrap <- function(data, R = 100) {
   return(list(bootstrap_samples = bootstrap_samples, source_counts = source_counts))
 }
 
-bootstraps <- weighted_bootstrap(dn.df_20)
+bootstraps <- bootstrap(dn.df)
+
+bootstraps$bootstrap_samples[[1]] %>%
+  ggplot(aes(x = QUAL)) +
+  geom_histogram() +
+  facet_wrap(~Source) +
+  theme_classic()
+
+bootstraps$bootstrap_samples[[1]] %>%
+  ggplot(aes(x = PROB)) +
+  geom_histogram() +
+  facet_wrap(~Source) +
+  theme_classic()
 
 source_counts <- bootstraps$source_counts
 
@@ -949,57 +961,252 @@ table %>%
 ```
 
 
-## Try splitting by source
+## try to use sample. The earlier code wasn't taking probability into account properly
 ```{r}
 weighted_bootstrap <- function(data, R = 10) {
-  # Split the data by the Source column
-  split_data <- split(data, by = "Source")
-  
   # Initialize a list to store the bootstrap samples
   bootstrap_samples <- vector("list", R)
   source_counts <- vector("list", R)
   
   # Loop to create R bootstrap samples
   for (i in seq_len(R)) {
-    # Initialize an empty list to store the sampled subsets
-    sampled_subsets <- list()
-    
-    # Sample from each subset
-    for (source in names(split_data)) {
-      subset <- split_data[[source]]
-      sampled_subset <- unique(subset[sample(.N, size = .N, replace = TRUE, prob = subset$PROB)])
-      sampled_subsets[[source]] <- sampled_subset
-    }
-    
-    # Combine the sampled subsets into a single bootstrap sample
-    bootstrap_sample <- do.call(rbind, sampled_subsets)
+    bootstrap_sample <- unique(data[sample(.N, size = .N, replace = TRUE, prob = data$PROB)])
     bootstrap_samples[[i]] <- bootstrap_sample
     
-    # Count the number of rows for each source in the bootstrap sample
+    # Count the number of rows for each source
     source_counts[[i]] <- table(bootstrap_sample$Source)
   }
   
   return(list(bootstrap_samples = bootstrap_samples, source_counts = source_counts))
 }
 
-split_bootstraps <- weighted_bootstrap(dn.df_20)
+bootstraps <- weighted_bootstrap(dn.df)
 
-source_counts2 <- split_bootstraps$source_counts
+bootstraps$bootstrap_samples[[1]] %>%
+  ggplot(aes(x = QUAL)) +
+  geom_histogram() +
+  facet_wrap(~Source) +
+  theme_classic()
 
-source_counts_df2 <- do.call(rbind, source_counts2)
+bootstraps$bootstrap_samples[[1]] %>%
+  ggplot(aes(x = PROB)) +
+  geom_histogram() +
+  facet_wrap(~Source) +
+  theme_classic()
 
-table2 <- as.data.table(source_counts_df2) %>%
+source_counts <- bootstraps$source_counts
+
+source_counts_df <- do.call(rbind, source_counts)
+
+table <- as.data.table(source_counts_df) %>%
   pivot_longer(cols = everything())
 
-table2$name <- factor(table2$name, levels = levels)
+levels <- c("ref_chandler", "tree2", "cr2_hifi",
+            "cr21_1", "cr21_2", "cr2_11A", "cr2_12A",
+            "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A",
+            "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
+            "cr2_18A", "cr2_18A1",
+            "cr85", "cr10", "cr13", "cr22")
 
-table2 %>%
+table$name <- factor(table$name, levels = levels)
+
+table %>%
   ggplot(aes(x = name, y = value)) +
   geom_boxplot() +
   theme_classic() + 
   theme()
 ```
 
+## Stop the unique calculations. So far this makes the most sense
+```{r}
+weighted_nonunique_bootstrap <- function(data, R = 5000) {
+  # Initialize a list to store the bootstrap sample
+  bootstrap_samples <- vector("list", R)
+  source_counts <- vector("list", R)
+  
+  # Loop to create R bootstrap samples
+  for (i in seq_len(R)) {
+    bootstrap_sample <- data[sample(.N, size = .N, replace = TRUE, prob = data$QUAL)]
+    bootstrap_samples[[i]] <- bootstrap_sample
+    
+    # Count the number of rows for each source
+    source_counts[[i]] <- table(bootstrap_sample$Source)
+  }
+  
+  return(list(bootstrap_samples = bootstrap_samples, source_counts = source_counts))
+}
+
+bootstraps <- weighted_nonunique_bootstrap(filt_dn.df)
+
+bootstraps$bootstrap_samples[[1]] %>%
+  ggplot(aes(x = QUAL)) +
+  geom_histogram() +
+  facet_wrap(~Source, scales = "free") +
+  theme_classic()
+
+bootstraps$bootstrap_samples[[1]] %>%
+  ggplot(aes(x = PROB)) +
+  geom_histogram() +
+  facet_wrap(~Source, scales = "free") +
+  theme_classic()
+
+source_counts <- bootstraps$source_counts
+
+source_counts_df <- do.call(rbind, source_counts)
+
+table <- as.data.table(source_counts_df) %>%
+  pivot_longer(cols = everything())
+
+samples = 5000
+
+# Compute the z-score for the desired confidence level
+z_score <- qnorm(1 - (1 - 0.99) / 2)
+
+# Calculate T score
+alpha = 0.05
+degrees.freedom = samples - 1
+t.score = qt(p=alpha/2, df=degrees.freedom,lower.tail=F)
+
+# Compute standard deviation
+stand <- sd(table$value) # I should probably do this by sample. This is sample standard deviation calculation, should I do population? Am I over counting SD?
+
+stand_pop <- sd(table$value)*sqrt((samples-1)/samples) # Here is of a population
+
+table.sum <- table %>%
+  group_by(name) %>%
+  summarise(mean_value = mean(value),
+            count_bs = n(),
+            stand_dev = sd(value),
+            stand_dev_pop = sd(value)*sqrt((samples-1)/samples),
+            moe = t.score * (stand_dev / sqrt(samples)),
+            moe_pop = t.score * (stand_dev_pop / sqrt(samples)),
+            moe_gen = t.score * (stand / sqrt(samples)),
+            moe_pop_gen = t.score * (stand_pop / sqrt(samples)),
+            lower_ci = mean_value - moe,
+            upper_ci = mean_value + moe,
+            lower_ci_pop = mean_value - moe_pop,
+            upper_ci_pop = mean_value + moe_pop,
+            lower_ci_gen = mean_value - moe_gen,
+            upper_ci_gen = mean_value + moe_gen,
+            lower_ci_pop_gen = mean_value - moe_pop_gen,
+            upper_ci_pop_gen = mean_value + moe_pop_gen)
+
+filt_dn.df %>%
+  group_by(Source) %>%
+  summarise(count = n())
+
+levels <- c("ref_chandler", "tree2", "cr2_hifi",
+            "cr21_1", "cr21_2", "cr2_11A", "cr2_12A",
+            "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A",
+            "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
+            "cr2_18A", "cr2_18A1",
+            "cr85", "cr10", "cr13", "cr22")
+
+table.sum$name <- factor(table.sum$name, levels = levels)
+
+table.sum <- table.sum %>%
+  mutate(Type = case_when(
+    name %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    name %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "Short Read Embryo",
+    name %in% c("cr85", "cr10", "cr13", "cr22") ~ "Short Read Shoot")) %>%
+  mutate(Type = factor(Type, levels = c("HiFi", "Short Read Embryo", "Short Read Shoot")))
+
+table.sum <- table.sum %>%
+  mutate(Organism = case_when(
+    name %in% c("ref_chandler", "tree2") ~ "Tree",
+    name %in% c("cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "Embryo",
+    name %in% c("cr85", "cr10", "cr13", "cr22") ~ "Shoot")) %>%
+  mutate(Organism = factor(Organism, levels = c("Tree", "Shoot", "Embryo")))
+
+table.sum <- table.sum %>%
+  mutate(SeqType = case_when(
+    name %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    name %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ "Short Read")) %>%
+  mutate(SeqType = factor(SeqType, levels = c("HiFi", "Short Read")))
+
+# Plot confidence intervals
+table.sum %>%
+  ggplot(aes(x = name, y = mean_value)) +
+  geom_errorbar(aes(ymin = lower_ci_gen, ymax = upper_ci_gen)) +
+  geom_point(aes(color = Organism)) +
+  facet_grid(~Type, scales = "free", space = "free") +
+  scale_color_manual(values = c("Tree" = "seagreen", 
+                               "Shoot" = "dodgerblue", 
+                               "Embryo" = "orangered")) +
+  scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
+                              "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
+                              "cr2_11A" = "11A", "cr2_12A" = "12A", "cr2_13A" = "13A",
+                              "cr2_15A" = "15A", "cr2_15A1" = "15A1", "cr2_16A" = "16A",
+                              "cr2_16A1" = "16A1", "cr2_16A2" = "16A2", "cr2_17A1" = "17A1",
+                              "cr2_17A2" = "17A2", "cr2_18A" = "18A", "cr2_18A1" = "18A1",
+                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
+                              "cr22" = "Chandler '22")) +
+  theme_classic(base_size = 6) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom")
+ggsave("./Figures/SNP_Calling/dn_snp_bootstrap_n5000_ci95_q30.pdf", height = 3, width = 5)
+ggsave("./Figures/SNP_Calling/dn_snp_bootstrap_n5000_ci95_q30.png", height = 3, width = 5)
+
+
+
+# Prep violin and plot
+table$name <- factor(table$name, levels = levels)
+
+table <- table %>%
+  mutate(Type = case_when(
+    name %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    name %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "Short Read Embryo",
+    name %in% c("cr85", "cr10", "cr13", "cr22") ~ "Short Read Shoot")) %>%
+  mutate(Type = factor(Type, levels = c("HiFi", "Short Read Embryo", "Short Read Shoot")))
+
+table <- table %>%
+  mutate(Organism = case_when(
+    name %in% c("ref_chandler", "tree2") ~ "Tree",
+    name %in% c("cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "Embryo",
+    name %in% c("cr85", "cr10", "cr13", "cr22") ~ "Shoot")) %>%
+  mutate(Organism = factor(Organism, levels = c("Tree", "Shoot", "Embryo")))
+
+table <- table %>%
+  mutate(SeqType = case_when(
+    name %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    name %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ "Short Read")) %>%
+  mutate(SeqType = factor(SeqType, levels = c("HiFi", "Short Read")))
+
+
+
+table %>%
+  ggplot(aes(x = name, y = value)) +
+  geom_violin(aes(fill = Organism)) +
+  facet_grid(~Type, scales = "free", space = "free") +
+  scale_fill_manual(values = c("Tree" = "seagreen", 
+                               "Shoot" = "dodgerblue", 
+                               "Embryo" = "orangered")) +
+  scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
+                              "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
+                              "cr2_11A" = "11A", "cr2_12A" = "12A", "cr2_13A" = "13A",
+                              "cr2_15A" = "15A", "cr2_15A1" = "15A1", "cr2_16A" = "16A",
+                              "cr2_16A1" = "16A1", "cr2_16A2" = "16A2", "cr2_17A1" = "17A1",
+                              "cr2_17A2" = "17A2", "cr2_18A" = "18A", "cr2_18A1" = "18A1",
+                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
+                              "cr22" = "Chandler '22")) +
+  theme_classic(base_size = 6) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "bottom")
+ggsave("./Figures/SNP_Calling/dn_snp_bootstrap_n5000_q30_violin.pdf", height = 3, width = 6)
+ggsave("./Figures/SNP_Calling/dn_snp_bootstrap_n5000_q30_violin.png", height = 3, width = 6)
+```
 
 ## Read in VCFs, add type and seq type columns, remove uninformative columns to save RAM
 ```{r}
