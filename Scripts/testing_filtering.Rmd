@@ -426,8 +426,8 @@ ggVennDiagram(x = unique_snps_hifivshort.list,
               label_alpha = 0,
               label_color = "black") +
   scale_fill_distiller(palette = "Greys", direction = 1)
-ggsave("~/Desktop/venndiagram_hifi_vs_short_snps.pdf", height = 5, width = 7)
-ggsave("~/Desktop/venndiagram_hifi_vs_short_snps.png", height = 5, width = 7)
+# ggsave("~/Desktop/venndiagram_hifi_vs_short_snps.pdf", height = 5, width = 7)
+# ggsave("~/Desktop/venndiagram_hifi_vs_short_snps.png", height = 5, width = 7)
 
 ggVennDiagram(x = unique_snps.list,
               category.names = c("Embryos","Shoots","Trees"),
@@ -438,8 +438,8 @@ ggVennDiagram(x = unique_snps.list,
               label_alpha = 0,
               label_color = "black") +
   scale_fill_distiller(palette = "Greys", direction = 1)
-ggsave("~/Desktop/venndiagram_all_snps.pdf", height = 5, width = 7)
-ggsave("~/Desktop/venndiagram_all_snps.png", height = 5, width = 7)
+# ggsave("~/Desktop/venndiagram_all_snps.pdf", height = 5, width = 7)
+# ggsave("~/Desktop/venndiagram_all_snps.png", height = 5, width = 7)
 ```
 
 ## Identifying snps in the intersections of the venn diagram
@@ -540,15 +540,150 @@ rm(ref_chandler_dn, tree2_dn, cr2_hifi_dn, cr85_dn, cr10_dn, cr13_dn,
    cr2_15A_dn, cr2_15A1_dn, cr2_16A_dn, cr2_16A1_dn, cr2_16A2_dn, 
    cr2_17A1_dn, cr2_17A2_dn, cr2_18A_dn, cr2_18A1_dn)
 ```
-## Write out vcfs
-```{r}
+
+## Write out vcf
+```{eval = FALSE}
 all_dn_snps
 write_tsv(x = all_dn_snps, file = "./Data/VCFs/Filtered/all_dn_snps.vcf")
-rm(all_dn_snps)
 ```
+
+## Filter SNPs shared between independent samples, trees and shoots
+```{r}
+# Looking for shared SNPs among tree samples
+ref_chandler_data <- all_dn_snps %>% filter(Source == 'ref_chandler')
+tree2_data <- all_dn_snps %>% filter(Source == 'tree2')
+unique_tree.list <- list("ref" = ref_chandler_data$unique,
+                         "tree2" = tree2_data$unique)
+
+# Plot venndiagram to see SNP overlap
+ggVennDiagram(x = unique_tree.list,
+              edge_size = 2,
+              label = "count",
+              label_alpha = 0,
+              label_color = "black") +
+  scale_fill_distiller(palette = "Greys", direction = 1)
+
+# Find intersection of tree values
+common_unique_tree <- intersect(ref_chandler_data$unique, tree2_data$unique)
+length(common_unique_tree)
+
+# Look into shared SNPs between the shoots
+cr85_data <- all_dn_snps %>% filter(Source == 'cr85')
+cr10_data <- all_dn_snps %>% filter(Source == 'cr10')
+cr13_data <- all_dn_snps %>% filter(Source == 'cr13')
+cr22_data <- all_dn_snps %>% filter(Source == 'cr22')
+unique_shoot.list <- list("cr85" = cr85_data$unique,
+                          "cr10" = cr10_data$unique,
+                          "cr13" = cr13_data$unique,
+                          "cr22" = cr22_data$unique)
+
+#Plot
+ggVennDiagram(x = unique_shoot.list,
+              edge_size = 2,
+              label = "count",
+              label_alpha = 0,
+              label_color = "black") +
+  scale_fill_distiller(palette = "Greys", direction = 1)
+
+# Function to find intersections between multiple data frames
+intersect_multiple <- function(...) {
+  Reduce(intersect, list(...))
+}
+
+# Pairwise intersections
+intersect_cr85_cr10 <- intersect(cr85_data$unique, cr10_data$unique)
+intersect_cr85_cr13 <- intersect(cr85_data$unique, cr13_data$unique)
+intersect_cr85_cr22 <- intersect(cr85_data$unique, cr22_data$unique)
+intersect_cr10_cr13 <- intersect(cr10_data$unique, cr13_data$unique)
+intersect_cr10_cr22 <- intersect(cr10_data$unique, cr22_data$unique)
+intersect_cr13_cr22 <- intersect(cr13_data$unique, cr22_data$unique)
+
+# Intersections involving three data frames
+intersect_cr85_cr10_cr13 <- intersect_multiple(cr85_data$unique, cr10_data$unique, cr13_data$unique)
+intersect_cr85_cr10_cr22 <- intersect_multiple(cr85_data$unique, cr10_data$unique, cr22_data$unique)
+intersect_cr85_cr13_cr22 <- intersect_multiple(cr85_data$unique, cr13_data$unique, cr22_data$unique)
+intersect_cr10_cr13_cr22 <- intersect_multiple(cr10_data$unique, cr13_data$unique, cr22_data$unique)
+
+# Intersection of all four data frames
+intersect_all <- intersect_multiple(cr85_data$unique, cr10_data$unique, cr13_data$unique, cr22_data$unique)
+
+# List of all intersections
+intersections_list <- list(
+  intersect_cr85_cr10 = intersect_cr85_cr10,
+  intersect_cr85_cr13 = intersect_cr85_cr13,
+  intersect_cr85_cr22 = intersect_cr85_cr22,
+  intersect_cr10_cr13 = intersect_cr10_cr13,
+  intersect_cr10_cr22 = intersect_cr10_cr22,
+  intersect_cr13_cr22 = intersect_cr13_cr22,
+  intersect_cr85_cr10_cr13 = intersect_cr85_cr10_cr13,
+  intersect_cr85_cr10_cr22 = intersect_cr85_cr10_cr22,
+  intersect_cr85_cr13_cr22 = intersect_cr85_cr13_cr22,
+  intersect_cr10_cr13_cr22 = intersect_cr10_cr13_cr22,
+  intersect_all = intersect_all
+)
+
+# Create a table of sites to remove
+shoot_instersects <- do.call(rbind, intersections_list)
+
+shoot_instersects <- as.data.table(shoot_instersects) %>%
+  pivot_longer(cols = everything())
+
+shoot_instersects_unique <- unique(shoot_instersects$value)
+
+within_shoot_tree_intersects <- unique(c(shoot_instersects_unique,common_unique_tree))
+
+within_shoot_tree_intersects <- as.data.frame(within_shoot_tree_intersects)
+
+colnames(within_shoot_tree_intersects)[colnames(within_shoot_tree_intersects) == "within_shoot_tree_intersects"] <- "unique"
+
+# Remove these sites from the de novo snp list
+filt_all_dn_snp <- all_dn_snps %>%
+  anti_join(within_shoot_tree_intersects)
+
+# Verify the sites were removed from trees
+ref_chandler_data <- filt_all_dn_snp %>% filter(Source == 'ref_chandler')
+tree2_data <- filt_all_dn_snp %>% filter(Source == 'tree2')
+
+unique_tree.list <- list("ref" = ref_chandler_data$unique,
+                         "tree2" = tree2_data$unique)
+
+ggVennDiagram(x = unique_tree.list,
+              edge_size = 2,
+              label = "count",
+              label_alpha = 0,
+              label_color = "black") +
+  scale_fill_distiller(palette = "Greys", direction = 1)
+
+# Verify the sites were removed from shoots
+cr85_data <- filt_all_dn_snp %>% filter(Source == 'cr85')
+cr10_data <- filt_all_dn_snp %>% filter(Source == 'cr10')
+cr13_data <- filt_all_dn_snp %>% filter(Source == 'cr13')
+cr22_data <- filt_all_dn_snp %>% filter(Source == 'cr22')
+unique_shoot.list <- list("cr85" = cr85_data$unique,
+                          "cr10" = cr10_data$unique,
+                          "cr13" = cr13_data$unique,
+                          "cr22" = cr22_data$unique)
+
+
+ggVennDiagram(x = unique_shoot.list,
+              edge_size = 2,
+              label = "count",
+              label_alpha = 0,
+              label_color = "black") +
+  scale_fill_distiller(palette = "Greys", direction = 1)
+```
+
+## Write out vcf
+```{r, eval=FALSE}
+filt_all_dn_snp
+write_tsv(x = filt_all_dn_snp, file = "./Data/VCFs/Filtered/dn_snps_no_share.vcf")
+```
+
 
 ## Filtering for all ancestral snps
 ```{r}
+rm(all_dn_snps,filt_all_dn_snp)
+
 # Hifi
 ref_chandler_an <- ref_chandler %>%
   inner_join(all_anc_snps)

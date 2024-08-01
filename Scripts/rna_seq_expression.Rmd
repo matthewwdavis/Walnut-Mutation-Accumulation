@@ -16,140 +16,141 @@ library(data.table)
 library(tidyverse)
 ```
 
+# STAR data
 ## Functions
 ```{r}
-read_rna_counts <- function(path, source){
-  
-  # Read in data
-  table <- fread(path)
-
-  # Manipulate table
-  colnames(table)[7] <- "Counts" # Change column 7 to counts
-  table$Chr <- sub(";.*", "",table$Chr) # Keep entry for first exon
-  table$Strand <- sub(";.*", "",table$Strand) # Keep first entry for strand
-  table$Start <- sub(";.*", "",table$Start) # Keep first entry for start
-  table$End <- sub(".*;([^;]+)$", "\\1",table$End) # keep last entry for end. This gives total gene position. Lengths aren't quite right though.
-  
-  # Add Source column
-  table <- table %>%
-    mutate(Source = source)
-  
-  # Rename chromosome names
-  table <- table %>%
-    mutate(Chr = gsub("NC_0499.*?([0-9]+).*", "\\1", Chr) %>%
-             str_remove("^0+") %>%
-             as.numeric())
-  
-  #Reorganize the table
-  table <- table %>%
-    select(Chr, Start, End, Strand, Length, Counts, Geneid, Source)
-  
-  return(table)
-  
-}
-
-site_rel_gene_count <- function(rna_table) {
-  
-  tot_genes <- rna_table %>%
-  group_by(Chr) %>%
-  add_count(name = "Total_genes")
-
-  table <- tot_genes %>%
-    mutate(Relative_count = Counts / Total_genes) %>%
-    mutate(Group = case_when(
-      Chr == 4 ~ "chr_4",
-      Chr == 9 ~ "chr_9",
-      TRUE ~ "Other"))
-  
-  return(table)
-}
-
-chr_rel_gene_count <- function(rna_table) {
-  
-  # Total genes per chromosome
-  tot_genes <- rna_table %>%
-    group_by(Source, Chr) %>%
-    summarise(Total_genes = n()) %>%
-    ungroup
-  
-  # Sum of all RNA counts per chromosome
-  tot_counts <- rna_table %>%
-    group_by(Source, Chr) %>%
-    summarise(Total_counts = sum(Counts)) %>%
-    ungroup()
-  
-  # Sum of all lengths per chromosome
-  tot_length <- rna_table %>%
-    group_by(Source, Chr) %>%
-    summarise(Total_length = sum(Length)) %>%
-    ungroup()
-  
-  #combine tables
-  tmp_table <- full_join(tot_counts, tot_genes)
-  
-  tot_table <- full_join(tmp_table, tot_length)
-  
-  # Calculate relative count and give colors to chromosomes
-  tot_table <- tot_table %>%
-    mutate(Rel_count_per_gene = Total_counts / Total_genes) %>%
-    mutate(Rel_count_per_length = Total_counts / Total_length) %>%
-    mutate(Group = case_when(
-      Chr == 4 ~ "chr_4",
-      Chr == 9 ~ "chr_9",
-      TRUE ~ "Other"))
-  
-  return(tot_table)
-  
-}
+# read_rna_counts <- function(path, source){
+#   
+#   # Read in data
+#   table <- fread(path)
+# 
+#   # Manipulate table
+#   colnames(table)[7] <- "Counts" # Change column 7 to counts
+#   table$Chr <- sub(";.*", "",table$Chr) # Keep entry for first exon
+#   table$Strand <- sub(";.*", "",table$Strand) # Keep first entry for strand
+#   table$Start <- sub(";.*", "",table$Start) # Keep first entry for start
+#   table$End <- sub(".*;([^;]+)$", "\\1",table$End) # keep last entry for end. This gives total gene position. Lengths aren't quite right though.
+#   
+#   # Add Source column
+#   table <- table %>%
+#     mutate(Source = source)
+#   
+#   # Rename chromosome names
+#   table <- table %>%
+#     mutate(Chr = gsub("NC_0499.*?([0-9]+).*", "\\1", Chr) %>%
+#              str_remove("^0+") %>%
+#              as.numeric())
+#   
+#   #Reorganize the table
+#   table <- table %>%
+#     select(Chr, Start, End, Strand, Length, Counts, Geneid, Source)
+#   
+#   return(table)
+#   
+# }
+# 
+# site_rel_gene_count <- function(rna_table) {
+#   
+#   tot_genes <- rna_table %>%
+#   group_by(Chr) %>%
+#   add_count(name = "Total_genes")
+# 
+#   table <- tot_genes %>%
+#     mutate(Relative_count = Counts / Total_genes) %>%
+#     mutate(Group = case_when(
+#       Chr == 4 ~ "chr_4",
+#       Chr == 9 ~ "chr_9",
+#       TRUE ~ "Other"))
+#   
+#   return(table)
+# }
+# 
+# chr_rel_gene_count <- function(rna_table) {
+#   
+#   # Total genes per chromosome
+#   tot_genes <- rna_table %>%
+#     group_by(Source, Chr) %>%
+#     summarise(Total_genes = n()) %>%
+#     ungroup
+#   
+#   # Sum of all RNA counts per chromosome
+#   tot_counts <- rna_table %>%
+#     group_by(Source, Chr) %>%
+#     summarise(Total_counts = sum(Counts)) %>%
+#     ungroup()
+#   
+#   # Sum of all lengths per chromosome
+#   tot_length <- rna_table %>%
+#     group_by(Source, Chr) %>%
+#     summarise(Total_length = sum(Length)) %>%
+#     ungroup()
+#   
+#   #combine tables
+#   tmp_table <- full_join(tot_counts, tot_genes)
+#   
+#   tot_table <- full_join(tmp_table, tot_length)
+#   
+#   # Calculate relative count and give colors to chromosomes
+#   tot_table <- tot_table %>%
+#     mutate(Rel_count_per_gene = Total_counts / Total_genes) %>%
+#     mutate(Rel_count_per_length = Total_counts / Total_length) %>%
+#     mutate(Group = case_when(
+#       Chr == 4 ~ "chr_4",
+#       Chr == 9 ~ "chr_9",
+#       TRUE ~ "Other"))
+#   
+#   return(tot_table)
+#   
+# }
 ```
 
 ## Read in data
 ```{r}
-cr2_11A <- read_rna_counts("./Data/RNASeq_Counts/11A_I2_S29_counts.txt", source = "cr2_11A")
-cr2_12A <- read_rna_counts("./Data/RNASeq_Counts/12A_I2_S30_counts.txt", source = "cr2_12A")
-cr2_13A <- read_rna_counts("./Data/RNASeq_Counts/13A_I1_S31_counts.txt", source = "cr2_13A")
-cr2_15A <- read_rna_counts("./Data/RNASeq_Counts/15A_I1_S32_counts.txt", source = "cr2_15A")
-cr2_15A1 <- read_rna_counts("./Data/RNASeq_Counts/15A1_I1_S40_counts.txt", source = "cr2_15A1")
-cr2_16A <- read_rna_counts("./Data/RNASeq_Counts/16A_I2_S33_counts.txt", source = "cr2_16A")
-cr2_16A1 <- read_rna_counts("./Data/RNASeq_Counts/16A1_I1_S34_counts.txt", source = "cr2_16A1")
-cr2_16A2 <- read_rna_counts("./Data/RNASeq_Counts/16A2_I2_S35_counts.txt", source = "cr2_16A2")
-cr2_17A1 <- read_rna_counts("./Data/RNASeq_Counts/17A1_I2_S36_counts.txt", source = "cr2_17A1")
-cr2_17A2 <- read_rna_counts("./Data/RNASeq_Counts/17A2_I2_S37_counts.txt", source = "cr2_17A2")
-cr2_18A <- read_rna_counts("./Data/RNASeq_Counts/18A_I2_S38_counts.txt", source = "cr2_18A")
-cr2_18A1 <- read_rna_counts("./Data/RNASeq_Counts/18A1_I1_S39_counts.txt", source = "cr2_18A1")
-
-all_rna <- rbind(cr2_11A, cr2_12A, cr2_13A, cr2_15A, cr2_15A1, cr2_16A, cr2_16A1, cr2_16A2, cr2_17A1, cr2_17A2, cr2_18A, cr2_18A1)
+# cr2_11A <- read_rna_counts("./Data/RNASeq_Counts/11A_I2_S29_counts.txt", source = "cr2_11A")
+# cr2_12A <- read_rna_counts("./Data/RNASeq_Counts/12A_I2_S30_counts.txt", source = "cr2_12A")
+# cr2_13A <- read_rna_counts("./Data/RNASeq_Counts/13A_I1_S31_counts.txt", source = "cr2_13A")
+# cr2_15A <- read_rna_counts("./Data/RNASeq_Counts/15A_I1_S32_counts.txt", source = "cr2_15A")
+# cr2_15A1 <- read_rna_counts("./Data/RNASeq_Counts/15A1_I1_S40_counts.txt", source = "cr2_15A1")
+# cr2_16A <- read_rna_counts("./Data/RNASeq_Counts/16A_I2_S33_counts.txt", source = "cr2_16A")
+# cr2_16A1 <- read_rna_counts("./Data/RNASeq_Counts/16A1_I1_S34_counts.txt", source = "cr2_16A1")
+# cr2_16A2 <- read_rna_counts("./Data/RNASeq_Counts/16A2_I2_S35_counts.txt", source = "cr2_16A2")
+# cr2_17A1 <- read_rna_counts("./Data/RNASeq_Counts/17A1_I2_S36_counts.txt", source = "cr2_17A1")
+# cr2_17A2 <- read_rna_counts("./Data/RNASeq_Counts/17A2_I2_S37_counts.txt", source = "cr2_17A2")
+# cr2_18A <- read_rna_counts("./Data/RNASeq_Counts/18A_I2_S38_counts.txt", source = "cr2_18A")
+# cr2_18A1 <- read_rna_counts("./Data/RNASeq_Counts/18A1_I1_S39_counts.txt", source = "cr2_18A1")
+# 
+# all_rna <- rbind(cr2_11A, cr2_12A, cr2_13A, cr2_15A, cr2_15A1, cr2_16A, cr2_16A1, cr2_16A2, cr2_17A1, cr2_17A2, cr2_18A, cr2_18A1)
 ```
 
 # Searching for the HDA genes
 ## Try filtering for them
 ```{r}
-all_rna %>%
-  filter(Geneid == "LOC108981459" | Geneid == "LOC109003842") %>%
-  mutate(hda_id = "hda6")
-
-all_rna %>%
-  filter(Geneid == "LOC108997370" | Geneid == "LOC109000511" | Geneid == "LOC109007743") %>%
-  mutate(hda_id = "hda19")
+# all_rna %>%
+#   filter(Geneid == "LOC108981459" | Geneid == "LOC109003842") %>%
+#   mutate(hda_id = "hda6")
+# 
+# all_rna %>%
+#   filter(Geneid == "LOC108997370" | Geneid == "LOC109000511" | Geneid == "LOC109007743") %>%
+#   mutate(hda_id = "hda19")
 ```
 # Explore the data
 ## Check distributions of data
 ```{r}
-all_rna %>%
-  ggplot(aes(x = Counts)) +
-  geom_density() +
-  facet_wrap(~Source) +
-  theme_classic()
-
-all_rna %>%
-  ggplot(aes(x = Length)) +
-  geom_density() +
-  facet_wrap(~Source, scales = "free") +
-  theme_classic()
-
-all_rna %>%
-  group_by(Source, Chr) %>%
-  summarise(median(Counts))
+# all_rna %>%
+#   ggplot(aes(x = Counts)) +
+#   geom_density() +
+#   facet_wrap(~Source) +
+#   theme_classic()
+# 
+# all_rna %>%
+#   ggplot(aes(x = Length)) +
+#   geom_density() +
+#   facet_wrap(~Source, scales = "free") +
+#   theme_classic()
+# 
+# all_rna %>%
+#   group_by(Source, Chr) %>%
+#   summarise(median(Counts))
 
 ```
 
@@ -157,8 +158,8 @@ all_rna %>%
 # Relative expression per chromosome
 ## Generate relative expression tables
 ```{r}
-all_rna_rel_chr <- chr_rel_gene_count(all_rna)
-all_rna_rel_site <- site_rel_gene_count(all_rna)
+# all_rna_rel_chr <- chr_rel_gene_count(all_rna)
+# all_rna_rel_site <- site_rel_gene_count(all_rna)
 
 ```
 
@@ -167,59 +168,59 @@ all_rna_rel_site <- site_rel_gene_count(all_rna)
 ```{r}
 # Wondering if there is an impact of number of exons in genes. Genes with more exons will havew higher counts. Maybe all of the high exon count genes are also on chromosome 7?
 
-all_rna_rel_chr %>%
-  ggplot(aes(x = as.factor(Chr), y = Rel_count_per_gene, fill = Group)) + 
-  geom_bar(stat = "identity") +
-  facet_wrap(~Source) +
-  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
-  labs(x = "Chromosome", y = "RNA Count per Gene") +
-  theme_classic() +
-  theme(legend.position = "none")
-
-all_rna_rel_chr %>%
-  ggplot(aes(x = as.factor(Chr), y = Rel_count_per_length, fill = Group)) + 
-  geom_bar(stat = "identity") +
-  facet_wrap(~Source) +
-  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
-  labs(x = "Chromosome", y = "RNA Count per Exon Length") +
-  theme_classic() +
-  theme(legend.position = "none")
-
-all_rna_rel_site %>%
-  ggplot(aes(x = as.factor(Chr), y = log(Relative_count), fill = Group)) + 
-  geom_boxplot() +
-  facet_wrap(~Source) +
-  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
-  labs(x = "Chromosome", y = "Relative per gene RNA Count") +
-  theme_classic() +
-  theme(legend.position = "none")
-
-all_rna_rel_site %>%
-  ggplot(aes(x = as.factor(Chr), y = Relative_count, col = Group)) + 
-  geom_point() +
-  facet_wrap(~Source) +
-  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
-  labs(x = "Chromosome", y = "Relative per gene RNA Count") +
-  theme_classic() +
-  theme(legend.position = "none")
-
-all_rna_rel_site %>%
-  ggplot(aes(x = as.factor(Chr), y = log(Counts + 1), fill = Group)) + 
-  geom_boxplot() +
-  facet_wrap(~Source) +
-  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
-  labs(x = "Chromosome", y = "RNA Count") +
-  theme_classic() +
-  theme(legend.position = "none")
-
-all_rna_rel_site %>%
-  ggplot(aes(x = as.factor(Chr %in% c(4,9)), y = log(Counts), fill = Group)) + 
-  geom_boxplot() +
-  facet_wrap(~Source) +
-  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
-  labs(x = "Chromosome", y = "RNA Count") +
-  theme_classic() +
-  theme(legend.position = "none")
+# all_rna_rel_chr %>%
+#   ggplot(aes(x = as.factor(Chr), y = Rel_count_per_gene, fill = Group)) + 
+#   geom_bar(stat = "identity") +
+#   facet_wrap(~Source) +
+#   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+#   labs(x = "Chromosome", y = "RNA Count per Gene") +
+#   theme_classic() +
+#   theme(legend.position = "none")
+# 
+# all_rna_rel_chr %>%
+#   ggplot(aes(x = as.factor(Chr), y = Rel_count_per_length, fill = Group)) + 
+#   geom_bar(stat = "identity") +
+#   facet_wrap(~Source) +
+#   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+#   labs(x = "Chromosome", y = "RNA Count per Exon Length") +
+#   theme_classic() +
+#   theme(legend.position = "none")
+# 
+# all_rna_rel_site %>%
+#   ggplot(aes(x = as.factor(Chr), y = log(Relative_count), fill = Group)) + 
+#   geom_boxplot() +
+#   facet_wrap(~Source) +
+#   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+#   labs(x = "Chromosome", y = "Relative per gene RNA Count") +
+#   theme_classic() +
+#   theme(legend.position = "none")
+# 
+# all_rna_rel_site %>%
+#   ggplot(aes(x = as.factor(Chr), y = Relative_count, col = Group)) + 
+#   geom_point() +
+#   facet_wrap(~Source) +
+#   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+#   labs(x = "Chromosome", y = "Relative per gene RNA Count") +
+#   theme_classic() +
+#   theme(legend.position = "none")
+# 
+# all_rna_rel_site %>%
+#   ggplot(aes(x = as.factor(Chr), y = log(Counts + 1), fill = Group)) + 
+#   geom_boxplot() +
+#   facet_wrap(~Source) +
+#   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+#   labs(x = "Chromosome", y = "RNA Count") +
+#   theme_classic() +
+#   theme(legend.position = "none")
+# 
+# all_rna_rel_site %>%
+#   ggplot(aes(x = as.factor(Chr %in% c(4,9)), y = log(Counts), fill = Group)) + 
+#   geom_boxplot() +
+#   facet_wrap(~Source) +
+#   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+#   labs(x = "Chromosome", y = "RNA Count") +
+#   theme_classic() +
+#   theme(legend.position = "none")
 ```
 # Working with the Kallisto Counts
 ## Functions
@@ -292,7 +293,7 @@ all_counts <- rbind(cr11a, cr12a, cr13a, cr15a, cr15a1, cr16a, cr16a1, cr16a2, c
 ## Calculate the counts per chromsome
 ```{r}
 chr.table <- all_counts %>%
-  filter(est_counts > 0) %>%
+  filter(tpm > 1.0) %>%
   group_by(Source, seq_id) %>%
   summarise(counts_by_length = sum(est_counts)/sum(length), 
             counts_by_efflength = sum(est_counts)/sum(eff_length), 
@@ -389,7 +390,7 @@ ggsave("./Figures/RNA_Sequencing/kallisto_mean_length_per_chr.png", height = 8, 
 
 
 all_counts %>%
-  filter(est_counts > 0) %>%
+  filter(tpm > 1.0) %>%
   ggplot(aes(x = as.factor(seq_id), y = log(est_counts), fill = Group)) + 
   geom_boxplot() +
   facet_wrap(~ Source, scales = "free") +
@@ -401,17 +402,19 @@ all_counts %>%
 # ggsave("./Figures/RNA_Sequencing/kallisto_boxplot_counts_per_chr.png", height = 8, width = 12)
 
 all_counts %>%
+  filter(tpm > 1.0) %>%
   ggplot(aes(x = as.factor(seq_id), y = log(est_counts/length), fill = Group)) + 
   geom_boxplot() +
   facet_wrap(~Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
-  labs(x = "Chromosome", y = "RNA Count / total exon length") +
+  labs(x = "Chromosome", y = "Count / total exon length (log)") +
   theme_classic() +
   theme(legend.position = "none")
 # ggsave("./Figures/RNA_Sequencing/kallisto_boxplot_counts_over_length_per_chr.pdf", height = 8, width = 12)
 # ggsave("./Figures/RNA_Sequencing/kallisto_boxplot_counts_over_length_per_chr.png", height = 8, width = 12)
 
 all_counts %>%
+  filter(tpm > 1.0) %>%
   ggplot(aes(x = as.factor(seq_id %in% c(4,9)), y = log(tpm/length), fill = Group)) + 
   geom_boxplot() +
   facet_wrap(~Source, scales = "free") +

@@ -57,9 +57,17 @@ read_ancestral_snps <- function(path){
 ```
 
 
-## Read in files
+## Read in files and create  chr 4 and 9 files
 ```{r}
 dn_snps <- fread("./Data/VCFs/Filtered/all_dn_snps.vcf")
+
+chr4_dn_snps <- dn_snps %>%
+  filter(CHROM %in% 4) %>%
+  filter(!Source %in% c("ref_chandler", "tree2", "cr85", "cr10", "cr13", "cr22"))
+
+chr9_dn_snps <- dn_snps %>%
+  filter(CHROM %in% 9) %>%
+  filter(!Source %in% c("ref_chandler", "tree2", "cr85", "cr10", "cr13", "cr22"))
 ```
 
 # Make SNP tree for denovo variants
@@ -70,6 +78,9 @@ snp.matrix0 <- snp_matrix(dn_snps, qual = 0)
 snp.matrix20 <- snp_matrix(dn_snps, qual = 20)
 snp.matrix30 <- snp_matrix(dn_snps, qual = 30)
 snp.matrix40 <- snp_matrix(dn_snps, qual = 40)
+
+chr4_snp.matrix20 <- snp_matrix(chr4_dn_snps, qual = 20)
+chr9_snp.matrix20 <- snp_matrix(chr9_dn_snps, qual = 20)
 ```
 
 ## Calculate the bindary distance between samples and cluster the matrix
@@ -80,11 +91,18 @@ dist.matrix20 <- dist(snp.matrix20, method = "binary")
 dist.matrix30 <- dist(snp.matrix30, method = "binary")
 dist.matrix40 <- dist(snp.matrix40, method = "binary")
 
+chr4_dist.matrix20 <- dist(chr4_snp.matrix20, method = "binary")
+chr9_dist.matrix20 <- dist(chr9_snp.matrix20, method = "binary")
+
 ## cluster
 clust_avg0 <- hclust(dist.matrix0, method = "average")
 clust_avg20 <- hclust(dist.matrix20, method = "average")
 clust_avg30 <- hclust(dist.matrix30, method = "average")
 clust_avg40 <- hclust(dist.matrix40, method = "average")
+
+chr4_clust_avg20 <- hclust(chr4_dist.matrix20, method = "average")
+chr9_clust_avg20 <- hclust(chr9_dist.matrix20, method = "average")
+
 
 # Define expected clusters. These are the different sample groups
 #clusters <- cutree(clust_avg, k = 3)  # Adjust 'k' as needed
@@ -105,6 +123,9 @@ dev.off()
 pdf("./Figures/Trees/dn_snps_dendrogram_q>=40.pdf", height = 5, width = 8)
 dendro_plot(clust_avg40, qual = "q>=40")
 dev.off()
+
+dendro_plot(chr4_clust_avg20, qual = "q>=20", clusters = 2)
+dendro_plot(chr9_clust_avg20, qual = "q>=20", clusters = 2)
 
 # ## GG Dendro
 # dendro <- as.dendrogram(clust_avg)
