@@ -696,8 +696,9 @@ group_info <- function(data){
     mutate(Type = factor(Type, levels = c("HiFi", "Short Read Embryo", "Short Read Shoot"))) %>%
     mutate(Organism = case_when(
       Source %in% c("ref_chandler", "tree2") ~ "Tree",
-      Source %in% c("cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
-                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "Embryo",
+      Source %in% c("cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A",
+                    "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
+                    "cr2_18A", "cr2_18A1") ~ "Embryo",
       Source %in% c("cr85", "cr10", "cr13", "cr22") ~ "Shoot")) %>%
     mutate(Organism = factor(Organism, levels = c("Tree", "Shoot", "Embryo"))) %>%
     mutate(SeqType = case_when(
@@ -706,13 +707,22 @@ group_info <- function(data){
                   "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ "Short Read")) %>%
     mutate(SeqType = factor(SeqType, levels = c("HiFi", "Short Read"))) %>%
     mutate(Years = case_when(
-      Source %in% c("ref_chandler", "tree2") ~ NA,
+      Source %in% c("ref_chandler", "tree2") ~ 0,
       Source %in% c("cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
                   "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ 2022-1995,
       Source %in% "cr85" ~ 2023-1985,
       Source %in% "cr10" ~ 2023-2010,
       Source %in% "cr13" ~ 2023-2013,
-      Source %in% "cr22" ~ 2023-2022))
+      Source %in% "cr22" ~ 2023-2022)) %>%
+    mutate(Genome_Size = case_when(
+      Source %in% c("ref_chandler", "tree2", "cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ 540705719)) %>%
+    mutate(Embryogenic = case_when(
+      Source %in% c("ref_chandler", "tree2", "cr85", "cr10", "cr13", "cr22") ~ 0,
+      Source %in% c("cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A",
+                    "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
+                    "cr2_18A", "cr2_18A1") ~ 1
+    ))
   
   return(table)
 }
@@ -746,13 +756,6 @@ bs_summary <- function(data, samples = 100){
     }
   return(summary_list)
   }
-```
-
-## Genome data
-```{r}
-ref_pri.fasta <- readDNAStringSet("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
-genome_size <- genome_length(ref_pri.fasta)
-ref_chandler_gff <- read_gff("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
 ```
 
 # Bootstrap the snps to identify mutations
@@ -813,8 +816,10 @@ sum.table <- sample_sums.df %>%
             num_bs = n(),
             stand_dev = sd(count),
             stand_dev_pop = sd(count)*sqrt((num_bs-1)/num_bs),
-            lower_ci = quantile(count, 0.005),
-            upper_ci = quantile(count, 0.995))
+            lower_ci99 = quantile(count, 0.005),
+            upper_ci99 = quantile(count, 0.995),
+            lower_ci95 = quantile(count, 0.025),
+            upper_ci95 = quantile(count, 0.975))
 
 # Add designating groups to samples
 sum.table <- group_info(sum.table)
@@ -825,11 +830,20 @@ sum.table$Source <- factor(sum.table$Source, levels = levels)
 sample_sums.df$Source <- factor(sample_sums.df$Source, levels = levels)
 ```
 
+## Testing model
+```{r}
+mod1 <- lm(data = sum.table, formula = mean_mut ~ Years)
+summary(mod1)
+
+mod2 <- lm(data = sum.table, formula = mean_mut ~ Years + Embryogenic)
+summary(mod2)
+```
+
 ## Plot bootstrap results percentile confidence intervals
 ```{r}
 sum.table %>%
   ggplot(aes(x = Source, y = mean_mut)) +
-  geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), width = 0.5) +
+  geom_errorbar(aes(ymin = lower_ci99, ymax = upper_ci99), width = 0.5) +
   geom_point(aes(color = Organism)) +
   #geom_text(aes(label = round(mean_value, 0)), vjust = -0.5, size = 2.5) +  # Add this line for the labels
   facet_grid(~Type, scales = "free", space = "free") +
@@ -884,12 +898,12 @@ ggsave("./Figures/SNP_Calling/dn_snp_bootstrap_n5000_violin.png", height = 2, wi
 ```
 
 # Calculate rates with the bootstrapped data
-## Plot shoot mutation rate
+## Plot shoot mutation rate based on bootstrap
 ```{r}
-sum.table %>% 
+sample_sums.df %>% 
   filter(Source %in% c("cr85", "cr10", "cr13", "cr22")) %>%
   ggplot(aes(x = Years, y = mean_mut)) +
-  geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), width = 0.5) +
+  geom_errorbar(aes(ymin = lower_ci99, ymax = upper_ci99), width = 1.5) +
   geom_point(aes(color = Organism)) +
   geom_smooth(method = "lm", se = FALSE, color = "red3") +
   scale_color_manual(values = "dodgerblue") +
@@ -902,14 +916,115 @@ sum.table %>%
         strip.background = element_blank(),
         strip.text = element_text(face = "bold"),
         legend.position = "none")
+ggsave("./Figures/SNP_Calling/shoot_dn_snp_mut_year_bs5000_ci99.pdf", height = 2, width = 3)
+ggsave("./Figures/SNP_Calling/shoot_dn_snp_mut_year_bs5000_ci99.png", height = 2, width = 3)
+```
+
+## Calculate the mutation rate of each individual
+```{r}
+# Calculate mutation rates and CI per individual
+mut_rate_ind.df <- sample_sums.df %>%
+  mutate(Mut_Rate_BP = count / Genome_Size) %>%
+  mutate(Mut_Rate_BP_Year = count / Genome_Size / Years) %>%
+  group_by(Source) %>%
+  summarise(mean_mut_rate_bp = mean(Mut_Rate_BP),
+            mean_mut_rate_bp_year = mean(Mut_Rate_BP_Year),
+            lower_ci99_bp = quantile(Mut_Rate_BP, 0.005, na.rm = TRUE),
+            upper_ci99_bp = quantile(Mut_Rate_BP, 0.995, na.rm = TRUE),
+            lower_ci99_bp_year = quantile(Mut_Rate_BP_Year, 0.005, na.rm = TRUE),
+            upper_ci99_bp_year = quantile(Mut_Rate_BP_Year, 0.995, na.rm = TRUE),
+            lower_ci95_bp = quantile(Mut_Rate_BP, 0.025, na.rm = TRUE),
+            upper_ci95_bp = quantile(Mut_Rate_BP, 0.975, na.rm = TRUE),
+            lower_ci95_bp_year = quantile(Mut_Rate_BP_Year, 0.025, na.rm = TRUE),
+            upper_ci95_bp_year = quantile(Mut_Rate_BP_Year, 0.975, na.rm = TRUE))
+
+# Add groupiung information
+mut_rate_ind.df <- group_info(mut_rate_ind.df)
+
+# Plot individual mutation rates
+mut_rate_ind.df %>%
+  ggplot(aes(x = Source, y = mean_mut_rate_bp_year)) +
+  geom_point(aes(color = Organism)) +
+  geom_errorbar(aes(ymin = lower_ci99_bp_year, ymax = upper_ci99_bp_year), width = 0.5) +
+  #geom_text(aes(label = round(mean_value, 0)), vjust = -0.5, size = 2.5) +  # Add this line for the labels
+  facet_grid(~Type, scales = "free", space = "free") +
+  scale_color_manual(values = c("Tree" = "seagreen", 
+                               "Shoot" = "dodgerblue", 
+                               "Embryo" = "orangered")) +
+  scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
+                              "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
+                              "cr2_11A" = "11A", "cr2_12A" = "12A", "cr2_13A" = "13A",
+                              "cr2_15A" = "15A", "cr2_15A1" = "15A1", "cr2_16A" = "16A",
+                              "cr2_16A1" = "16A1", "cr2_16A2" = "16A2", "cr2_17A1" = "17A1",
+                              "cr2_17A2" = "17A2", "cr2_18A" = "18A", "cr2_18A1" = "18A1",
+                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
+                              "cr22" = "Chandler '22")) +
+  labs(y = "Mean Mutations per Base Pair")+
+  theme_classic(base_size = 6) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "none")
+# Lower bar would be the higher per year mutation rate. Chandler 22 is a bit odd, but only 1 year in culture.
+```
+
+## Look at Mutation Rates by Organism
+```{r}
+# Create a data table on a per organism basis
+mut_rate_org.df <- sample_sums.df %>%
+  mutate(Mut_Rate_BP = count / Genome_Size) %>%
+  mutate(Mut_Rate_BP_Year = count / Genome_Size / Years) %>%
+  group_by(Organism) %>%
+  summarise(mean_mut_rate_bp = mean(Mut_Rate_BP),
+            mean_mut_rate_bp_year = mean(Mut_Rate_BP_Year),
+            lower_ci99_bp = quantile(Mut_Rate_BP, 0.005, na.rm = TRUE),
+            upper_ci99_bp = quantile(Mut_Rate_BP, 0.995, na.rm = TRUE),
+            lower_ci99_bp_year = quantile(Mut_Rate_BP_Year, 0.005, na.rm = TRUE),
+            upper_ci99_bp_year = quantile(Mut_Rate_BP_Year, 0.995, na.rm = TRUE),
+            lower_ci95_bp = quantile(Mut_Rate_BP, 0.025, na.rm = TRUE),
+            upper_ci95_bp = quantile(Mut_Rate_BP, 0.975, na.rm = TRUE),
+            lower_ci95_bp_year = quantile(Mut_Rate_BP_Year, 0.025, na.rm = TRUE),
+            upper_ci95_bp_year = quantile(Mut_Rate_BP_Year, 0.975, na.rm = TRUE))
+
+mut_rate_org.df %>%
+  filter(!Organism %in% "Tree") %>%
+  ggplot(aes(x = Organism, y = mean_mut_rate_bp_year, fill = Organism)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = lower_ci99_bp_year, ymax = upper_ci99_bp_year), width = 0.5) +
+  #geom_text(aes(label = round(mean_value, 0)), vjust = -0.5, size = 2.5) +  # Add this line for the labels
+  facet_grid(~Organism, scales = "free", space = "free") +
+  scale_fill_manual(values = c("Tree" = "seagreen", 
+                               "Shoot" = "dodgerblue", 
+                               "Embryo" = "orangered")) +
+  scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
+                              "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
+                              "cr2_11A" = "11A", "cr2_12A" = "12A", "cr2_13A" = "13A",
+                              "cr2_15A" = "15A", "cr2_15A1" = "15A1", "cr2_16A" = "16A",
+                              "cr2_16A1" = "16A1", "cr2_16A2" = "16A2", "cr2_17A1" = "17A1",
+                              "cr2_17A2" = "17A2", "cr2_18A" = "18A", "cr2_18A1" = "18A1",
+                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
+                              "cr22" = "Chandler '22")) +
+  labs(y = "Mean Mutations per Base Pair")+
+  theme_classic(base_size = 6) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "none")
 ```
 
 
-## Remove uninformative columns to save RAM
+## Remove uninformative columns to save RAM and read in genome data
 ```{r}
-# Remove unneeded columns
+# Remove unneeded columns from de novo SNPs
 dn_snps.df <- dn_snps.df %>%
   select(-c(ID, FILTER, INFO, FORMAT, Hap, default, PL))
+
+# Genome data
+ref_pri.fasta <- readDNAStringSet("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+genome_size <- genome_length(ref_pri.fasta)
+ref_chandler_gff <- read_gff("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
 ```
 
 ## Finding mean DP and median QUAL. Normalizing depth
