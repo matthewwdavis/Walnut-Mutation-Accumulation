@@ -704,7 +704,15 @@ group_info <- function(data){
       Source %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
       Source %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
                   "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ "Short Read")) %>%
-    mutate(SeqType = factor(SeqType, levels = c("HiFi", "Short Read")))
+    mutate(SeqType = factor(SeqType, levels = c("HiFi", "Short Read"))) %>%
+    mutate(Years = case_when(
+      Source %in% c("ref_chandler", "tree2") ~ NA,
+      Source %in% c("cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ 2022-1995,
+      Source %in% "cr85" ~ 2023-1985,
+      Source %in% "cr10" ~ 2023-2010,
+      Source %in% "cr13" ~ 2023-2013,
+      Source %in% "cr22" ~ 2023-2022))
   
   return(table)
 }
@@ -797,8 +805,8 @@ sample_sums.df %>%
   facet_wrap(~Source, scales = "free") +
   theme_classic()
 
-# Create table to plot summaries
-plot.table <- sample_sums.df %>%
+# Create table of summaries
+sum.table <- sample_sums.df %>%
   group_by(Source) %>%
   summarise(mean_mut = mean(count),
             median_mut = median(count),
@@ -809,17 +817,17 @@ plot.table <- sample_sums.df %>%
             upper_ci = quantile(count, 0.995))
 
 # Add designating groups to samples
-plot.table <- group_info(plot.table)
+sum.table <- group_info(sum.table)
 sample_sums.df <- group_info(sample_sums.df)
 
 # Set levels for plotting
-plot.table$Source <- factor(plot.table$Source, levels = levels)
+sum.table$Source <- factor(sum.table$Source, levels = levels)
 sample_sums.df$Source <- factor(sample_sums.df$Source, levels = levels)
 ```
 
 ## Plot bootstrap results percentile confidence intervals
 ```{r}
-plot.table %>%
+sum.table %>%
   ggplot(aes(x = Source, y = mean_mut)) +
   geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), width = 0.5) +
   geom_point(aes(color = Organism)) +
@@ -876,7 +884,25 @@ ggsave("./Figures/SNP_Calling/dn_snp_bootstrap_n5000_violin.png", height = 2, wi
 ```
 
 # Calculate rates with the bootstrapped data
-## First look at shoot mutation rate
+## Plot shoot mutation rate
+```{r}
+sum.table %>% 
+  filter(Source %in% c("cr85", "cr10", "cr13", "cr22")) %>%
+  ggplot(aes(x = Years, y = mean_mut)) +
+  geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), width = 0.5) +
+  geom_point(aes(color = Organism)) +
+  geom_smooth(method = "lm", se = FALSE, color = "red3") +
+  scale_color_manual(values = "dodgerblue") +
+  labs(title = "Shoot culture mutation over time", 
+         x = "Years in tissue culture", y = "Mean Number of Mutations") +
+  theme_classic(base_size = 6) +
+  theme(plot.title = element_text(hjust = .5, face = "bold"),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.position = "none")
+```
 
 
 ## Remove uninformative columns to save RAM
