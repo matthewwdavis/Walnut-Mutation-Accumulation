@@ -14,6 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r, message=FALSE}
 library(data.table)
 library(tidyverse)
+library(ggpubr)
 ```
 
 # STAR data
@@ -233,7 +234,10 @@ parse_columns <- function(table, sample){
            gene = sub(".*gene=([^=]+).*", "\\1", target_id),
            name = sub(".*name=([^=]+).*", "\\1", target_id),
            seq_id = sub(".*seq_id=([^=]+).*", "\\1", target_id),
-           type = sub(".*type=([^=]+)", "\\1", target_id)) %>%
+           type = sub(".*type=([^=]+)", "\\1", target_id),
+           rna = gsub("gene", "", rna),
+           gene = gsub("gene-|name", "", gene),
+           name = gsub("seq_id", "", name)) %>%
     select(-target_id) %>%
     select(seq_id, everything()) %>%
     mutate(Source = sample)
@@ -250,9 +254,25 @@ parse_columns <- function(table, sample){
   
   return(final.table)
 }
-
-chr_summary <- function(){
   
+
+read_gff <- function(file){
+  
+  gff <- fread(file, skip = 3)
+  
+  colnames(gff) <- c("CHROM", "SOURCE", "ID", "START", "STOP", "SCORE", "STRAND", "FRAME", "ATTRIBUTE")
+  
+  # Parse the columns
+  parse.table <- gff %>%
+    mutate(gene = sub(".*gene-([^=]+).*", "\\1", ATTRIBUTE),
+           POS = (STOP + START) / 2) %>%
+    select(-ATTRIBUTE) %>%
+    filter(!grepl(";", gene))
+  
+  gff <- parse.table[grep("^NC_0499", parse.table$CHROM), ]
+  gff$CHROM <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", gff$CHROM))
+  
+  return(gff)  
 }
 ```
 
@@ -274,18 +294,18 @@ cr18a1 <- fread("./Data/Kallisto/18A1_abundance.tsv")
 
 ## Parse column information and create large data frame
 ```{r}
-cr11a <- parse_columns(cr11a, "cr2_11a")
-cr12a <- parse_columns(cr12a, "cr2_12a")
-cr13a <- parse_columns(cr13a, "cr2_13a")
-cr15a <- parse_columns(cr15a, "cr2_15a")
-cr15a1 <- parse_columns(cr15a1, "cr2_15a1")
-cr16a <- parse_columns(cr16a, "cr2_16a")
-cr16a1 <- parse_columns(cr16a1, "cr2_16a1")
-cr16a2 <- parse_columns(cr16a2, "cr2_16a2")
-cr17a1 <- parse_columns(cr17a1, "cr2_17a1")
-cr17a2 <- parse_columns(cr17a2, "cr2_17a2")
-cr18a <- parse_columns(cr18a, "cr2_18a")
-cr18a1 <- parse_columns(cr18a1, "cr2_18a1")
+cr11a <- parse_columns(cr11a, "11A")
+cr12a <- parse_columns(cr12a, "12A")
+cr13a <- parse_columns(cr13a, "13A")
+cr15a <- parse_columns(cr15a, "15A")
+cr15a1 <- parse_columns(cr15a1, "15A1")
+cr16a <- parse_columns(cr16a, "16A")
+cr16a1 <- parse_columns(cr16a1, "16A1")
+cr16a2 <- parse_columns(cr16a2, "16A2")
+cr17a1 <- parse_columns(cr17a1, "17A1")
+cr17a2 <- parse_columns(cr17a2, "17A2")
+cr18a <- parse_columns(cr18a, "18A")
+cr18a1 <- parse_columns(cr18a1, "18A1")
 
 all_counts <- rbind(cr11a, cr12a, cr13a, cr15a, cr15a1, cr16a, cr16a1, cr16a2, cr17a1, cr17a2, cr18a, cr18a1)
 ```
@@ -415,13 +435,157 @@ all_counts %>%
 
 all_counts %>%
   filter(tpm > 1.0) %>%
-  ggplot(aes(x = as.factor(seq_id %in% c(4,9)), y = log(tpm/length), fill = Group)) + 
+  ggplot(aes(x = as.factor(seq_id), y = log(tpm), fill = Group)) + 
   geom_boxplot() +
   facet_wrap(~Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
-  labs(x = "Chromosome", y = "TPM / Length") +
+  labs(x = "Chromosome", y = "TPM") +
   theme_classic() +
   theme(legend.position = "none")
-# Where is there nothing when looking at the boxplots of the genes?
+# ggsave("./Figures/RNA_Sequencing/kallisto_boxplot_tpm_per_chr.pdf", height = 8, width = 12)
+# ggsave("./Figures/RNA_Sequencing/kallisto_boxplot_tpm_per_chr.png", height = 8, width = 12)
+
+all_counts %>%
+  filter(tpm > 1.0) %>%
+  ggplot(aes(x = as.factor(seq_id %in% c(4,9)), y = log(tpm), fill = Group)) + 
+  geom_boxplot() +
+  facet_wrap(~Source, scales = "free") +
+  scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
+  labs(x = "Chromosome", y = "Log TPM") +
+  theme_classic() +
+  theme(legend.position = "none")
+```
+
+# Plot to compare all chr to 4 and 9
+```{r}
+# Set levels
+levels <- c("11A", "12A", "13A", "15A",
+            "15A1", "16A1", "16A2", "17A1",
+            "17A2", "18A", "16A", "18A1")
+grp_levels <- c("Other", "chr_4", "chr_9")
+all_counts$Source <- factor(all_counts$Source, levels = levels)
+all_counts$Group <- factor(all_counts$Group, levels = grp_levels)
+
+# Specifying t.test comparisons
+comparisons <- list(c("chr_4", "Other"), c("chr_9", "Other"))
+
+
+all_counts %>%
+  filter(tpm > 1.0) %>%
+  ggplot(aes(x = Group, y = log(tpm), fill = Group)) + 
+  geom_boxplot() +
+  facet_wrap(~ Source, scales = "free") +
+  scale_fill_manual(values = c("chr_4" = "firebrick", "chr_9" = "firebrick", "Other" = "gray90")) +
+  scale_x_discrete(labels = c("Other" = "Others", "chr_4" = "4", "chr_9" = "9")) +
+  labs(x = "Chromosome", y = "TPM") +
+  stat_compare_means(method = "t.test", comparisons = comparisons, label = "p.signif") +
+  theme_classic(base_size = 6) +
+  theme(legend.position = "none",
+        axis.title = element_text(face = "bold"),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"))
+
+all_counts %>%
+  filter(tpm > 1.0) %>%
+  ggplot(aes(x = Group, y = log(tpm), fill = Group)) + 
+  geom_boxplot() +
+  facet_wrap(~ Source, scales = "free") +
+  scale_fill_manual(values = c("chr_4" = "firebrick", "chr_9" = "firebrick", "Other" = "gray90")) +
+  scale_x_discrete(labels = c("Other" = "Others", "chr_4" = "4", "chr_9" = "9")) +
+  labs(x = "Chromosome", y = "TPM") +
+  stat_compare_means(comparisons = comparisons) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = "none",
+        axis.title = element_text(face = "bold"),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"))
+
+all_counts %>% 
+  filter(tpm > 1.0) %>%
+  ggplot(aes(x = Group, y = log(tpm), fill = Group)) + 
+  geom_boxplot() +
+  facet_grid(~ Source, scales = "free") +
+  scale_fill_manual(values = c("chr_4" = "firebrick", "chr_9" = "firebrick", "Other" = "gray90")) +
+  scale_x_discrete(labels = c("Other" = "Others", "chr_4" = "4", "chr_9" = "9")) +
+  labs(x = "Chromosome", y = "Natural Log TPM") +
+  stat_compare_means(method = "t.test", comparisons = comparisons, label = "p.signif", bracket.size = .3, size = 2) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = "none",
+        axis.title = element_text(face = "bold"),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"))
+#ggsave("./Figures/RNA_Sequencing/compare_chr_49_to_all_ttest.pdf", height = 2.2, width = 5.8)
+#ggsave("./Figures/RNA_Sequencing/compare_chr_49_to_all_ttest.png", height = 2.2, width = 5.8)
+```
+
+## Look for regions of lower expression along the Chromosomes
+# Get gene position
+```{r}
+gff <- read_gff("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
+
+gene_pos <- gff %>%
+  select(CHROM, POS, gene)
+
+gene_pos <- gene_pos %>%
+  mutate(gene = sub("_.*", "", gene))
+
+all_counts <- all_counts %>%
+  rename(CHROM = seq_id)
+
+all_counts <- left_join(all_counts, gene_pos)
+
+
+all_counts %>%
+  filter(tpm > 1.0) %>%
+  filter(Source == "12A") %>%
+  ggplot(aes(x = POS, y = tpm)) + 
+  geom_point() +
+  facet_wrap(~ CHROM, scales = "free") +
+  labs(x = "Position", y = "Log TPM") +
+  theme_classic(base_size = 6) +
+  theme()
+
+str(all_counts)
+```
+# Creating windows
+```{r}
+trial <- all_counts %>%
+  filter(tpm > 1) %>%
+  filter(!is.na(POS))
+
+# Define the window size
+window_size <- 1e6
+
+# Create a new column to define windows based on the POS column
+trial[, window := floor((POS - 1) / window_size) + 1, by = CHROM]
+
+# Calculate the mean TPM for each window for every chromosome, keeping the Source information
+mean_tpm_windows <- trial[, .(mean_tpm = mean(tpm, na.rm = TRUE)), by = .(CHROM, window, Source)]
+
+# Add a group column
+mean_tpm_windows <- mean_tpm_windows %>%
+    mutate(Group = case_when(
+      CHROM == 4 ~ "chr_4",
+      CHROM == 9 ~ "chr_9",
+      TRUE ~ "Other"))
+
+# Plotting
+mean_tpm_windows %>%
+  ggplot(aes(x = window, y = log(mean_tpm), color = Source)) + 
+  geom_line() +
+  facet_wrap(~ CHROM, scales = "free") +
+  labs(x = "Position", y = "Log TPM") +
+  scale_color_manual(values = c("16A" = "firebrick", "18A1" = "gold")) +
+  theme_classic(base_size = 6) +
+  theme()
+
+mean_tpm_windows %>%
+  ggplot(aes(x = window, y = log(mean_tpm), color = Source)) + 
+  geom_point() +
+  facet_wrap(~ CHROM, scales = "free") +
+  labs(x = "Position", y = "Log TPM") +
+  scale_color_manual(values = c("16A" = "firebrick", "18A1" = "gold")) +
+  theme_classic(base_size = 6) +
+  theme()
 ```
 

@@ -790,6 +790,7 @@ levels <- c("ref_chandler", "tree2", "cr2_hifi",
 
 ## Sampling with a binomial, bootstrapping, checking distribution, and preparing plotting tables
 ```{r}
+set.seed(25)
 # Only keep necessary information for more bootstraps
 snps_bs.df <- dn_snps.df %>%
   select(Source, unique, PROB)
@@ -832,11 +833,17 @@ sample_sums.df$Source <- factor(sample_sums.df$Source, levels = levels)
 
 ## Testing model
 ```{r}
+shoot.table <- sum.table %>%
+  filter(Embryogenic == 0, Years > 0)
+
 mod1 <- lm(data = sum.table, formula = mean_mut ~ Years)
 summary(mod1)
 
 mod2 <- lm(data = sum.table, formula = mean_mut ~ Years + Embryogenic)
 summary(mod2)
+
+mod3 <- lm(data = shoot.table, formula = mean_mut ~ Years)
+summary(mod3)
 ```
 
 ## Plot bootstrap results percentile confidence intervals
@@ -898,9 +905,10 @@ ggsave("./Figures/SNP_Calling/dn_snp_bootstrap_n5000_violin.png", height = 2, wi
 ```
 
 # Calculate rates with the bootstrapped data
-## Plot shoot mutation rate based on bootstrap
+## Plot mutation rate based on bootstrap
 ```{r}
-sample_sums.df %>% 
+# Shoot mutation rates
+sum.table %>% 
   filter(Source %in% c("cr85", "cr10", "cr13", "cr22")) %>%
   ggplot(aes(x = Years, y = mean_mut)) +
   geom_errorbar(aes(ymin = lower_ci99, ymax = upper_ci99), width = 1.5) +
@@ -938,14 +946,14 @@ mut_rate_ind.df <- sample_sums.df %>%
             lower_ci95_bp_year = quantile(Mut_Rate_BP_Year, 0.025, na.rm = TRUE),
             upper_ci95_bp_year = quantile(Mut_Rate_BP_Year, 0.975, na.rm = TRUE))
 
-# Add groupiung information
+# Add grouping information
 mut_rate_ind.df <- group_info(mut_rate_ind.df)
 
 # Plot individual mutation rates
 mut_rate_ind.df %>%
-  ggplot(aes(x = Source, y = mean_mut_rate_bp_year)) +
+  ggplot(aes(x = Source, y = mean_mut_rate_bp)) +
   geom_point(aes(color = Organism)) +
-  geom_errorbar(aes(ymin = lower_ci99_bp_year, ymax = upper_ci99_bp_year), width = 0.5) +
+  geom_errorbar(aes(ymin = lower_ci99_bp, ymax = upper_ci99_bp), width = 0.5) +
   #geom_text(aes(label = round(mean_value, 0)), vjust = -0.5, size = 2.5) +  # Add this line for the labels
   facet_grid(~Type, scales = "free", space = "free") +
   scale_color_manual(values = c("Tree" = "seagreen", 
