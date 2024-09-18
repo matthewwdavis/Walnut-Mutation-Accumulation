@@ -9,22 +9,266 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+# Set up
+## Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(data.table)
 ```
 
-## Including Plots
+## Functions
+```{r}
+parse_columns <- function(table, sample){
+  
+  # Parse the columns
+  parse.table <- table %>%
+    mutate(rna = sub("rna-([^=]+).*", "\\1", target_id),
+           gene = sub(".*gene=([^=]+).*", "\\1", target_id),
+           name = sub(".*name=([^=]+).*", "\\1", target_id),
+           seq_id = sub(".*seq_id=([^=]+).*", "\\1", target_id),
+           type = sub(".*type=([^=]+)", "\\1", target_id),
+           rna = gsub("gene", "", rna),
+           gene = gsub("gene-|name", "", gene),
+           name = gsub("seq_id", "", name)) %>%
+    select(-target_id) %>%
+    select(seq_id, everything()) %>%
+    mutate(Source = sample)
+  
+  # Make the chromosome column numeric
+  parse.table$seq_id <- as.numeric(gsub("NC_0499.*?([0-9]+).*", "\\1", parse.table$seq_id))
 
-You can also embed plots, for example:
+  # Add groups for later coloring
+  final.table <- parse.table %>%
+    mutate(Group = case_when(
+      seq_id == 4 ~ "chr_4",
+      seq_id == 9 ~ "chr_9",
+      TRUE ~ "Other"))
+  
+  final.table <- final.table %>%
+    rename(CHROM = seq_id)
+  
+  return(final.table)
+}
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+read_genes_gff <- function(file){
+  
+  gff <- fread(file, skip = 3)
+  
+  colnames(gff) <- c("CHROM", "SOURCE", "ID", "START", "STOP", "SCORE", "STRAND", "FRAME", "ATTRIBUTE")
+  
+  # Parse the columns
+  parse.table <- gff %>%
+    mutate(gene = sub(".*gene-([^=]+).*", "\\1", ATTRIBUTE),
+           POS = (STOP + START) / 2) %>%
+    select(-ATTRIBUTE) %>%
+    filter(!grepl(";", gene))
+  
+  gff <- parse.table[grep("^NC_0499", parse.table$CHROM), ]
+  gff$CHROM <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", gff$CHROM))
+  
+  gene_pos <- gff %>%
+  select(CHROM, START, STOP, gene)
+  
+  genes <- gene_pos %>%
+  mutate(gene = sub("_.*", "", gene))
+  
+  return(genes)  
+}
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Read in data
+```{r}
+# SNP data
+dn_snps.df <- fread("./Data/VCFs/Filtered/all_dn_snps.vcf")
+
+# RNA data
+cr11a <- fread("./Data/Kallisto/11A_abundance.tsv")
+cr12a <- fread("./Data/Kallisto/12A_abundance.tsv")
+cr13a <- fread("./Data/Kallisto/13A_abundance.tsv")
+cr15a <- fread("./Data/Kallisto/15A_abundance.tsv")
+cr15a1 <- fread("./Data/Kallisto/15A1_abundance.tsv")
+cr16a <- fread("./Data/Kallisto/16A_abundance.tsv")
+cr16a1 <- fread("./Data/Kallisto/16A1_abundance.tsv")
+cr16a2 <- fread("./Data/Kallisto/16A2_abundance.tsv")
+cr17a1 <- fread("./Data/Kallisto/17A1_abundance.tsv")
+cr17a2 <- fread("./Data/Kallisto/17A2_abundance.tsv")
+cr18a <- fread("./Data/Kallisto/18A_abundance.tsv")
+cr18a1 <- fread("./Data/Kallisto/18A1_abundance.tsv")
+
+# GFF
+genes <- read_genes_gff("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
+```
+
+## Filter data for analysis
+```{r}
+# Get all unique snp values
+uniq_snps <- unique(dn_snps.df$unique)
+
+# filter for only biallelic sites in the stacks, remove largest dataframe
+dn_stacks.df <- dn_snps.df %>%
+  filter(!Source %in% c("ref_chandler", "tree2", "cr2_hifi", "cr85", "cr10", "cr13", "cr22", "cr21_1", "cr21_2")) %>%
+  filter(GT %in% c("0/1", "1/1")) %>%
+  filter(grepl("^([^,]*,[^,]*)$", AD)) %>%
+  filter(str_length(REF) == 1) %>%
+  filter(str_length(ALT) == 1)
+
+rm(dn_snps.df)
+
+# Parse and combine RNA data
+cr11a <- parse_columns(cr11a, "cr2_11A")
+cr12a <- parse_columns(cr12a, "cr2_12A")
+cr13a <- parse_columns(cr13a, "cr2_13A")
+cr15a <- parse_columns(cr15a, "cr2_15A")
+cr15a1 <- parse_columns(cr15a1, "cr2_15A1")
+cr16a <- parse_columns(cr16a, "cr2_16A")
+cr16a1 <- parse_columns(cr16a1, "cr2_16A1")
+cr16a2 <- parse_columns(cr16a2, "cr2_16A2")
+cr17a1 <- parse_columns(cr17a1, "cr2_17A1")
+cr17a2 <- parse_columns(cr17a2, "cr2_17A2")
+cr18a <- parse_columns(cr18a, "cr2_18A")
+cr18a1 <- parse_columns(cr18a1, "cr2_18A1")
+
+all_rna <- rbind(cr11a, cr12a, cr13a, cr15a, cr15a1, cr16a, cr16a1, cr16a2, cr17a1, cr17a2, cr18a, cr18a1)
+
+# Filter for TPM > 1
+all_rna <- all_rna %>%
+  filter(tpm > 1.0)
+
+rm(cr11a, cr12a, cr13a, cr15a, cr15a1, cr16a, cr16a1, cr16a2, cr17a1, cr17a2, cr18a, cr18a1)
+```
+
+# Idnetify SNP presence in stacks
+## Extract only unique SNP entries
+```{r}
+# Create summary table of snp presence
+snp_pres.df <- dn_stacks.df %>%
+  filter(unique %in% uniq_snps) %>%
+  group_by(unique) %>%
+  summarize(
+    CHROM = first(CHROM),
+    POS = first(POS),
+    unique = first(unique),
+    REF = first(REF),
+    ALT = first(ALT),
+    QUAL = median(QUAL),
+    sources_present = paste(unique(Source), collapse = ", ")
+  )
+
+# Remove snps present in every sample
+snp_diff.df <- snp_pres.df %>%
+  filter(str_count(sources_present, ",") != 11)
+```
+
+## Find differences in expression due to SNPs
+# Merge gff and rna data
+```{r}
+all_rna <- left_join(all_rna, genes, by = join_by(CHROM, gene))
+```
+
+# Compare average TPM where snps are present and where they are not present
+```{r}
+all_rna
+
+snp_diff.df
+
+```
+## Try 2
+```{r}
+expanded_snp_diff <- snp_diff.df %>%
+  separate_rows(sources_present, sep = ",") %>%
+  rename(source = sources_present) # Rename for clarity
+
+matched_df <- expanded_snp_diff %>%
+  left_join(all_rna, by = c("CHROM" = "CHROM")) %>%
+  filter(POS >= START & POS <= STOP & source == Source) %>%
+  select(CHROM, POS, source, rna, gene, START, STOP, match_tpm)
+
+
+# Convert to tibble if not already
+all_rna <- as_tibble(all_rna)
+snp_diff_df <- as_tibble(snp_diff.df)
+
+# Function to find matches for a given SNP
+find_matches <- function(chrom, pos, sources, all_rna) {
+  sources_list <- str_split(sources, ",")[[1]]
+  
+  matches <- all_rna %>%
+    filter(
+      CHROM == chrom &
+      POS >= START &
+      POS <= STOP &
+      Source %in% sources_list
+    )
+  
+  if (nrow(matches) > 0) {
+    # Print the matched rows
+    print(bind_cols(tibble(CHROM = chrom, POS = pos, sources_present = sources), matches))
+  }
+}
+
+# Apply the function to each row of snp_diff_df
+snp_diff_df %>%
+  pmap(~ find_matches(..1, ..2, ..7, all_rna))
+
+
+```
+
+
+
+## TEst
+ ```{r}
+# # Convert sources_present to list of sources
+# snp_diff.df <- snp_diff.df %>%
+#   mutate(sources_present_list = strsplit(sources_present, ",\\s*"))
+# 
+# setDT(all_rna)
+# 
+# # Function to calculate mean TPM for matching entries
+# calc_mean_tpm <- function(all_rna, snp_diff.df, present = TRUE) {
+#   all_rna[, match_tpm := NA_real_]  # Add a column for matched TPM
+# 
+#   # Loop through each row in snp_diff.df
+#   for (i in 1:nrow(snp_diff.df)) {
+#     chrom <- snp_diff.df$CHROM[i]
+#     pos <- snp_diff.df$POS[i]
+#     sources_list <- snp_diff.df$sources_present_list[[i]]
+# 
+#     if (present) {
+#       # Filter rows where Source is present in sources_present
+#       matches <- all_rna[CHROM == chrom &
+#                          (POS >= START & POS <= STOP) &
+#                          Source %in% sources_list]
+#     } else {
+#       # Filter rows where Source is absent from sources_present
+#       matches <- all_rna[CHROM == chrom &
+#                          (POS >= START & POS <= STOP ) &
+#                          !(Source %in% sources_list)]
+#     }
+# 
+#     # Calculate the average TPM for the matches
+#     if (nrow(matches) > 0) {
+#       all_rna[CHROM == chrom &
+#               (POS >= START & POS <= STOP) &
+#               ifelse(present, Source %in% sources_list, !(Source %in% sources_list)),
+#               match_tpm := mean(tpm)]
+#     }
+#   }
+# 
+#   return(all_rna[!is.na(match_tpm), .(CHROM, START, STOP, gene, mean_tpm = mean(match_tpm)),
+#                  by = .(CHROM, START, STOP, gene)])
+# }
+# 
+# # Calculate mean TPM for matches when Source is present
+# mean_tpm_present <- calc_mean_tpm(all_rna, snp_diff.df, present = TRUE)
+# 
+# # Calculate mean TPM for matches when Source is absent
+# mean_tpm_absent <- calc_mean_tpm(all_rna, snp_diff.df, present = FALSE)
+# 
+# # Combine results into a final table
+# final_result <- inner_join(mean_tpm_present, mean_tpm_absent,
+#                        by = join_by("CHROM", "START", "STOP", "gene"))
+# 
+# # View final result
+# final_result
+```
+

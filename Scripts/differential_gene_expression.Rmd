@@ -1,0 +1,94 @@
+---
+title: "differential_gene_expression"
+author: "Matthew Davis"
+date: "2024-09-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Set up
+## Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(data.table)
+```
+
+## Functions
+```{r}
+parse_columns <- function(table, sample){
+  
+  # Parse the columns
+  parse.table <- table %>%
+    mutate(rna = sub("rna-([^=]+).*", "\\1", target_id),
+           gene = sub(".*gene=([^=]+).*", "\\1", target_id),
+           name = sub(".*name=([^=]+).*", "\\1", target_id),
+           seq_id = sub(".*seq_id=([^=]+).*", "\\1", target_id),
+           type = sub(".*type=([^=]+)", "\\1", target_id),
+           rna = gsub("gene", "", rna),
+           gene = gsub("gene-|name", "", gene),
+           name = gsub("seq_id", "", name)) %>%
+    select(-target_id) %>%
+    select(seq_id, everything()) %>%
+    mutate(Source = sample)
+  
+  # Make the chromosome column numeric
+  parse.table$seq_id <- as.numeric(gsub("NC_0499.*?([0-9]+).*", "\\1", parse.table$seq_id))
+
+  # Add groups for later coloring
+  final.table <- parse.table %>%
+    mutate(Group = case_when(
+      seq_id == 4 ~ "chr_4",
+      seq_id == 9 ~ "chr_9",
+      TRUE ~ "Other"))
+  
+  final.table <- final.table %>%
+    rename(CHROM = seq_id)
+  
+  return(final.table)
+}
+```
+
+## Read in data
+```{r}
+# RNA data
+cr11a <- fread("./Data/Kallisto/11A_abundance.tsv")
+cr12a <- fread("./Data/Kallisto/12A_abundance.tsv")
+cr13a <- fread("./Data/Kallisto/13A_abundance.tsv")
+cr15a <- fread("./Data/Kallisto/15A_abundance.tsv")
+cr15a1 <- fread("./Data/Kallisto/15A1_abundance.tsv")
+cr16a <- fread("./Data/Kallisto/16A_abundance.tsv")
+cr16a1 <- fread("./Data/Kallisto/16A1_abundance.tsv")
+cr16a2 <- fread("./Data/Kallisto/16A2_abundance.tsv")
+cr17a1 <- fread("./Data/Kallisto/17A1_abundance.tsv")
+cr17a2 <- fread("./Data/Kallisto/17A2_abundance.tsv")
+cr18a <- fread("./Data/Kallisto/18A_abundance.tsv")
+cr18a1 <- fread("./Data/Kallisto/18A1_abundance.tsv")
+
+```
+
+## Parse files
+```{r}
+cr11a <- parse_columns(cr11a, "cr2_11A")
+cr12a <- parse_columns(cr12a, "cr2_12A")
+cr13a <- parse_columns(cr13a, "cr2_13A")
+cr15a <- parse_columns(cr15a, "cr2_15A")
+cr15a1 <- parse_columns(cr15a1, "cr2_15A1")
+cr16a <- parse_columns(cr16a, "cr2_16A")
+cr16a1 <- parse_columns(cr16a1, "cr2_16A1")
+cr16a2 <- parse_columns(cr16a2, "cr2_16A2")
+cr17a1 <- parse_columns(cr17a1, "cr2_17A1")
+cr17a2 <- parse_columns(cr17a2, "cr2_17A2")
+cr18a <- parse_columns(cr18a, "cr2_18A")
+cr18a1 <- parse_columns(cr18a1, "cr2_18A1")
+
+all_rna <- rbind(cr11a, cr12a, cr13a, cr15a, cr15a1, cr16a, cr16a1, cr16a2, cr17a1, cr17a2, cr18a, cr18a1)
+
+# Filter for TPM > 1
+all_rna <- all_rna %>%
+  filter(tpm > 1.0)
+```
+
+##
