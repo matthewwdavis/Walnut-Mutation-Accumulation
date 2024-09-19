@@ -14,6 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r, message=FALSE}
 library(tidyverse)
 library(data.table)
+library(edgeR)
 ```
 
 ## Functions
@@ -90,5 +91,16 @@ all_rna <- rbind(cr11a, cr12a, cr13a, cr15a, cr15a1, cr16a, cr16a1, cr16a2, cr17
 all_rna <- all_rna %>%
   filter(tpm > 1.0)
 ```
+## select and pivot data
+```{r}
+all_rna %>%
+  select(gene, tpm, Source) %>%
+  pivot_wider(names_from = Source, values_from = tpm)
 
-##
+all_rna %>%
+  group_by(gene, Source) %>%
+  summarise(n = n()) %>%
+  filter(n > 1)
+```
+
+

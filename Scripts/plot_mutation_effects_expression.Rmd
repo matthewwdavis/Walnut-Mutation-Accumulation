@@ -1,0 +1,78 @@
+---
+title: "plot_mutation_effects_expression"
+author: "Matthew Davis"
+date: "2024-09-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r, message=FALSE}
+library(data.table)
+library(tidyverse)
+```
+
+## Read in data
+```{r}
+df <- fread("./Data/Mutation_Expression/mutation_transcript_association.tsv")
+```
+
+## Downsample data for script testing
+```{r}
+set.seed(25)
+
+small_df <- df[sample(.N, 10000)]
+```
+
+
+# Plotting
+## Adjust for multiple testing 
+```{r}
+small_df[, adj_pvalue := p.adjust(pvalue)]
+```
+
+## Createing significance line
+```{r}
+alpha <- 0.01
+tests <- length(1:nrow(small_df))
+
+p_threshold <- -log10(alpha)
+
+bon_threshold <- -log10(alpha / tests)
+```
+
+## Create color map
+```{r}
+unique_chroms <- unique(sort(small_df$CHROM))
+colors <- rep(c("skyblue4", "goldenrod"), length.out = length(unique_chroms))
+
+color_map <- setNames(colors, unique_chroms)
+```
+
+
+## Plot
+```{r}
+small_df %>%
+  ggplot(aes(x=START/1e7, y=-log10(pvalue), color = factor(CHROM)))+
+  geom_point(size = .5) +
+  geom_hline(yintercept = p_threshold, linetype = "dotted", color = "grey30", linewidth = 0.5)+
+  geom_hline(yintercept = bon_threshold, linetype = "dotted", color = "grey30", linewidth = 0.5)+
+  geom_text(data = small_df %>% filter(-log10(pvalue) > bon_threshold), 
+            aes(label = rna), 
+            vjust = 0.75, hjust = -.1, size = 1) +
+  facet_grid(~CHROM, space = "free", scales = "free_x") +
+  scale_color_manual(values = color_map) +
+  labs(x = "Position (10 Mb)", y = "- Log 10 P Value") +
+  theme_classic(base_size = 6) +
+  theme(legend.position = "none",
+        strip.background = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+#ggsave("./mut_expression_effect_plot.pdf")
+ggsave("./mut_expression_effect_plot.png", height = 1, width = 4)
+```
+

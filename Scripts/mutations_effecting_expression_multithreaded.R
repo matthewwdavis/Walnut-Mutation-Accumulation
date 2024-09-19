@@ -1,24 +1,14 @@
----
-title: "mutations_effecting_expression"
-author: "Matthew Davis"
-date: "2024-09-17"
-output: html_document
----
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-# Set up
+#Set up
 ## Libraries
-```{r, message=FALSE}
 library(tidyverse)
 library(data.table)
-library(pbapply)
-```
+library(future.apply)
+
+## Set multithreading rules
+plan(multicore, workers = 32)
+options(future.globals.maxSize = 128 * 1024^3)
 
 ## Functions
-```{r}
 parse_columns <- function(table, sample){
   
   # Parse the columns
@@ -37,7 +27,7 @@ parse_columns <- function(table, sample){
   
   # Make the chromosome column numeric
   parse.table$seq_id <- as.numeric(gsub("NC_0499.*?([0-9]+).*", "\\1", parse.table$seq_id))
-
+  
   # Add groups for later coloring
   final.table <- parse.table %>%
     mutate(Group = case_when(
@@ -68,40 +58,36 @@ read_genes_gff <- function(file){
   gff$CHROM <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", gff$CHROM))
   
   gene_pos <- gff %>%
-  select(CHROM, START, STOP, gene)
+    select(CHROM, START, STOP, gene)
   
   genes <- gene_pos %>%
-  mutate(gene = sub("_.*", "", gene))
+    mutate(gene = sub("_.*", "", gene))
   
   return(genes)  
 }
-```
 
 ## Read in data
-```{r}
 # SNP data
-dn_snps.df <- fread("./Data/VCFs/Filtered/all_dn_snps.vcf")
+dn_snps.df <- fread("./all_dn_snps.vcf")
 
 # RNA data
-cr11a <- fread("./Data/Kallisto/11A_abundance.tsv")
-cr12a <- fread("./Data/Kallisto/12A_abundance.tsv")
-cr13a <- fread("./Data/Kallisto/13A_abundance.tsv")
-cr15a <- fread("./Data/Kallisto/15A_abundance.tsv")
-cr15a1 <- fread("./Data/Kallisto/15A1_abundance.tsv")
-cr16a <- fread("./Data/Kallisto/16A_abundance.tsv")
-cr16a1 <- fread("./Data/Kallisto/16A1_abundance.tsv")
-cr16a2 <- fread("./Data/Kallisto/16A2_abundance.tsv")
-cr17a1 <- fread("./Data/Kallisto/17A1_abundance.tsv")
-cr17a2 <- fread("./Data/Kallisto/17A2_abundance.tsv")
-cr18a <- fread("./Data/Kallisto/18A_abundance.tsv")
-cr18a1 <- fread("./Data/Kallisto/18A1_abundance.tsv")
+cr11a <- fread("./11A_abundance.tsv")
+cr12a <- fread("./12A_abundance.tsv")
+cr13a <- fread("./13A_abundance.tsv")
+cr15a <- fread("./15A_abundance.tsv")
+cr15a1 <- fread("./15A1_abundance.tsv")
+cr16a <- fread("./16A_abundance.tsv")
+cr16a1 <- fread("./16A1_abundance.tsv")
+cr16a2 <- fread("./16A2_abundance.tsv")
+cr17a1 <- fread("./17A1_abundance.tsv")
+cr17a2 <- fread("./17A2_abundance.tsv")
+cr18a <- fread("./18A_abundance.tsv")
+cr18a1 <- fread("./18A1_abundance.tsv")
 
 # GFF
-genes <- read_genes_gff("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
-```
+genes <- read_genes_gff("./ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
 
 ## Filter data for analysis
-```{r}
 # Get all unique snp values
 uniq_snps <- unique(dn_snps.df$unique)
 
@@ -132,11 +118,9 @@ cr18a1 <- parse_columns(cr18a1, "cr2_18A1")
 all_rna <- rbind(cr11a, cr12a, cr13a, cr15a, cr15a1, cr16a, cr16a1, cr16a2, cr17a1, cr17a2, cr18a, cr18a1)
 
 rm(cr11a, cr12a, cr13a, cr15a, cr15a1, cr16a, cr16a1, cr16a2, cr17a1, cr17a2, cr18a, cr18a1)
-```
 
 # Identify SNP presence in stacks
 ## Extract only unique SNP entries
-```{r}
 # Create summary table of snp presence
 snp_pres.df <- dn_stacks.df %>%
   filter(unique %in% uniq_snps) %>%
@@ -156,43 +140,45 @@ snp_diff.df <- snp_pres.df %>%
   filter(str_count(sources_present, ",") != 11) %>%
   filter(str_count(sources_present, ",") != 10) %>%
   filter(str_count(sources_present, ",") > 0)
-```
 
 ## Find differences in expression due to SNPs
 # Merge gff and rna data
-```{r}
 all_rna <- left_join(all_rna, genes, by = join_by(CHROM, gene))
-```
+
 
 # Look for difference in TPM where snps are present and where they are not present
-```{r}
-all_rna<-data.table(all_rna)
+all_rna <- data.table(all_rna)
 
-snp_diff.df<-data.table(snp_diff.df)
+snp_diff.df <- data.table(snp_diff.df)
 
-#m=1:3
-r=unique(all_rna$rna)
-association<-rbindlist(pblapply(1:3, function(m){
-  u=snp_diff.df$unique[m]
-  samples<-snp_diff.df$sources_present[m]
- samples<-unlist(strsplit(samples, ", "))
- gene_assoc<-rbindlist(pblapply(unique(all_rna$rna), function(r){
-   #message(r)
-   rna_sub<-all_rna[rna==r]
-   rna_sub$mut<-rna_sub$Source %in% samples
-   if(uniqueN(rna_sub$mut)==1 | min(table(rna_sub$mut))==1) return(NULL)
-   ttest<-t.test(rna_sub$tpm~rna_sub$mut)
-   out<-data.table(unique=u, rna=r, pvalue=ttest$p.value)
-   return(out)
- }))
+r = unique(all_rna$rna)
+
+association<-rbindlist(future_lapply(1:nrow(snp_diff.df), function(m){
+  
+  u = snp_diff.df$unique[m]
+  
+  samples <- snp_diff.df$sources_present[m]
+  samples <- unlist(strsplit(samples, ", "))
+  
+  gene_assoc<-rbindlist(future_lapply(unique(all_rna$rna), function(r){
+    
+    rna_sub <- all_rna[rna==r]
+    rna_sub$mut <- rna_sub$Source %in% samples
+    if(uniqueN(rna_sub$mut)==1 | min(table(rna_sub$mut))==1) return(NULL)
+    ttest <- t.test(rna_sub$tpm~rna_sub$mut)
+    out <- data.table(unique=u, rna=r, pvalue=ttest$p.value)
+    
+    return(out)
+  }))
+  
   return(gene_assoc)
 }))
 
-rna_locs<-all_rna[,.(CHROM=unique(CHROM), START=unique(START)), by=.(rna)]
-gene_assoc_merge<-merge(rna_locs, association, by="rna")
-sort(p.adjust(gene_assoc_merge$pvalue))
-ggplot(gene_assoc_merge, aes(x=START, y=-log10(pvalue)))+
-  geom_point()+
-  facet_grid(~CHROM, scales="free",space="free")
-```
+  # Retrieve RNA locations
+rna_locs <- all_rna[,.(CHROM=unique(CHROM), START=unique(START)), by=.(rna)]
 
+  # Merge results from loop with RNA locations
+gene_assoc_merge <- merge(rna_locs, association, by="rna")
+
+## Write out the file
+write_tsv(x = gene_assoc_merge, file = "./mutation_transcript_association.tsv")
