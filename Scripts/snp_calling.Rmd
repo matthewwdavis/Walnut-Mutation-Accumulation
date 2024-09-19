@@ -785,6 +785,10 @@ levels <- c("ref_chandler", "tree2", "cr2_hifi",
             "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
             "cr2_18A", "cr2_18A1",
             "cr85", "cr10", "cr13", "cr22")
+
+# Test by placing a filter on QUAL >= 30
+ # dn_snps.df <- dn_snps.df %>%
+ #   filter(QUAL >= 30)
 ```
 
 
@@ -805,7 +809,7 @@ sample_sums.df <- do.call(rbind, sample.sums)
 # Look at distribution of data
 sample_sums.df %>%
   ggplot(aes(x = count)) +
-  geom_histogram() +
+  geom_histogram(bins = 20) +
   facet_wrap(~Source, scales = "free") +
   theme_classic()
 
