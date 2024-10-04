@@ -633,6 +633,19 @@ short_read_tel$ID <- factor(short_read_tel$ID, levels = levels)
 
 ## Plot data
 ```{r}
+# Plot raw counts
+ggplot(data = short_read_tel, aes(x = ID, fill = Type, y = Count)) +
+  geom_bar(stat = "identity") +
+  #geom_text(aes(label = Scientific_Notation), vjust = -0.7) +
+  scale_fill_manual(values = c("embryo" = "orangered",
+                               "shoot" = "dodgerblue")) + 
+  facet_grid(~Type, scales = "free", space = "free") +
+  labs(y = "Number of 21-mer telomere sequences \n(corrected with total bp/21)",
+       x = "", fill = "") +
+  theme_classic(base_size = 6) + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "none")
+
+# Plot corrected by bp
 ggplot(data = short_read_tel, aes(x = ID, fill = Type, y = Corrected_Count)) +
   geom_bar(stat = "identity") +
   geom_text(aes(label = Scientific_Notation), vjust = -0.7) +
