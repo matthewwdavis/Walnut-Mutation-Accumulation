@@ -247,11 +247,15 @@ parse_columns <- function(table, sample){
 
   # Add groups for later coloring
   final.table <- parse.table %>%
-    mutate(Group = case_when(
-      seq_id == 4 ~ "chr_4",
-      seq_id == 9 ~ "chr_9",
-      TRUE ~ "Other"))
-  
+  mutate(Dup_Group = case_when(
+    seq_id == 4 ~ "chr_4",
+    seq_id == 9 ~ "chr_9",
+    TRUE ~ "Other")) %>%
+  mutate(Hom_Group = case_when(
+    seq_id == 11 ~ "chr_11",
+    seq_id == 12 ~ "chr_12",
+    seq_id == 16 ~ "chr_16",
+    TRUE ~ "Other"))
   return(final.table)
 }
   
@@ -323,16 +327,22 @@ chr.table <- all_counts %>%
             mean_tpm = mean(tpm), 
             mean_length = mean(length)) %>%
   ungroup() %>%
-  mutate(Group = case_when(
+  mutate(Dup_Group = case_when(
     seq_id == 4 ~ "chr_4",
     seq_id == 9 ~ "chr_9",
+    TRUE ~ "Other")) %>%
+  mutate(Hom_Group = case_when(
+    seq_id == 11 ~ "chr_11",
+    seq_id == 12 ~ "chr_12",
+    seq_id == 16 ~ "chr_16",
     TRUE ~ "Other"))
+
 ```
 
 ## Plot
 ```{r}
 chr.table %>%
-  ggplot(aes(x = as.factor(seq_id), y = counts_by_length, fill = Group)) + 
+  ggplot(aes(x = as.factor(seq_id), y = counts_by_length, fill = Dup_Group)) + 
   geom_bar(stat = "identity") +
   facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
@@ -343,7 +353,7 @@ chr.table %>%
 # ggsave("./Figures/RNA_Sequencing/kallisto_counts_over_length_per_chr.png", height = 8, width = 12)
 
 chr.table %>%
-  ggplot(aes(x = as.factor(seq_id), y = counts_by_efflength, fill = Group)) + 
+  ggplot(aes(x = as.factor(seq_id), y = counts_by_efflength, fill = Dup_Group)) + 
   geom_bar(stat = "identity") +
   facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
@@ -354,7 +364,7 @@ chr.table %>%
 # ggsave("./Figures/RNA_Sequencing/kallisto_counts_over_efflength_per_chr.png", height = 8, width = 12)
 
 chr.table %>%
-  ggplot(aes(x = as.factor(seq_id), y = tpm_by_length, fill = Group)) + 
+  ggplot(aes(x = as.factor(seq_id), y = tpm_by_length, fill = Dup_Group)) + 
   geom_bar(stat = "identity") +
   facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
@@ -365,7 +375,7 @@ chr.table %>%
 # ggsave("./Figures/RNA_Sequencing/kallisto_tpm_over_length_per_chr.png", height = 8, width = 12)
 
 chr.table %>%
-  ggplot(aes(x = as.factor(seq_id), y = tpm_by_efflength, fill = Group)) + 
+  ggplot(aes(x = as.factor(seq_id), y = tpm_by_efflength, fill = Dup_Group)) + 
   geom_bar(stat = "identity") +
   facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
@@ -376,7 +386,7 @@ chr.table %>%
 # ggsave("./Figures/RNA_Sequencing/kallisto_tpm_over_efflength_per_chr.png", height = 8, width = 12)
 
 chr.table %>%
-  ggplot(aes(x = as.factor(seq_id), y = mean_counts, fill = Group)) + 
+  ggplot(aes(x = as.factor(seq_id), y = mean_counts, fill = Dup_Group)) + 
   geom_bar(stat = "identity") +
   facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
@@ -387,7 +397,7 @@ chr.table %>%
 # ggsave("./Figures/RNA_Sequencing/kallisto_mean_counts_per_chr.png", height = 8, width = 12)
 
 chr.table %>%
-  ggplot(aes(x = as.factor(seq_id), y = mean_tpm, fill = Group)) + 
+  ggplot(aes(x = as.factor(seq_id), y = mean_tpm, fill = Dup_Group)) + 
   geom_bar(stat = "identity") +
   facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
@@ -398,7 +408,7 @@ chr.table %>%
 # ggsave("./Figures/RNA_Sequencing/kallisto_mean_tpm_per_chr.png", height = 8, width = 12)
 
 chr.table %>%
-  ggplot(aes(x = as.factor(seq_id), y = mean_length, fill = Group)) + 
+  ggplot(aes(x = as.factor(seq_id), y = mean_length, fill = Dup_Group)) + 
   geom_bar(stat = "identity") +
   facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
@@ -411,7 +421,7 @@ ggsave("./Figures/RNA_Sequencing/kallisto_mean_length_per_chr.png", height = 8, 
 
 all_counts %>%
   filter(tpm > 1.0) %>%
-  ggplot(aes(x = as.factor(seq_id), y = log(est_counts), fill = Group)) + 
+  ggplot(aes(x = as.factor(seq_id), y = log(est_counts), fill = Dup_Group)) + 
   geom_boxplot() +
   facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
@@ -423,7 +433,7 @@ all_counts %>%
 
 all_counts %>%
   filter(tpm > 1.0) %>%
-  ggplot(aes(x = as.factor(seq_id), y = log(est_counts/length), fill = Group)) + 
+  ggplot(aes(x = as.factor(seq_id), y = log(est_counts/length), fill = Dup_Group)) + 
   geom_boxplot() +
   facet_wrap(~Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
@@ -435,7 +445,7 @@ all_counts %>%
 
 all_counts %>%
   filter(tpm > 1.0) %>%
-  ggplot(aes(x = as.factor(seq_id), y = log(tpm), fill = Group)) + 
+  ggplot(aes(x = as.factor(seq_id), y = log(tpm), fill = Dup_Group)) + 
   geom_boxplot() +
   facet_wrap(~Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
@@ -447,7 +457,7 @@ all_counts %>%
 
 all_counts %>%
   filter(tpm > 1.0) %>%
-  ggplot(aes(x = as.factor(seq_id %in% c(4,9)), y = log(tpm), fill = Group)) + 
+  ggplot(aes(x = as.factor(seq_id %in% c(4,9)), y = log(tpm), fill = Dup_Group)) + 
   geom_boxplot() +
   facet_wrap(~Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "red", "chr_9" = "red", "Other" = "gray")) +
@@ -464,7 +474,7 @@ levels <- c("11A", "12A", "13A", "15A",
             "17A2", "18A", "16A", "18A1")
 grp_levels <- c("Other", "chr_4", "chr_9")
 all_counts$Source <- factor(all_counts$Source, levels = levels)
-all_counts$Group <- factor(all_counts$Group, levels = grp_levels)
+all_counts$Dup_Group <- factor(all_counts$Dup_Group, levels = grp_levels)
 
 # Specifying t.test comparisons
 comparisons <- list(c("chr_4", "Other"), c("chr_9", "Other"))
@@ -472,7 +482,7 @@ comparisons <- list(c("chr_4", "Other"), c("chr_9", "Other"))
 
 all_counts %>%
   filter(tpm > 1.0) %>%
-  ggplot(aes(x = Group, y = log(tpm), fill = Group)) + 
+  ggplot(aes(x = Dup_Group, y = log(tpm), fill = Dup_Group)) + 
   geom_boxplot() +
   facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "firebrick", "chr_9" = "firebrick", "Other" = "gray90")) +
@@ -487,7 +497,7 @@ all_counts %>%
 
 all_counts %>%
   filter(tpm > 1.0) %>%
-  ggplot(aes(x = Group, y = log(tpm), fill = Group)) + 
+  ggplot(aes(x = Dup_Group, y = log(tpm), fill = Dup_Group)) + 
   geom_boxplot() +
   facet_wrap(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "firebrick", "chr_9" = "firebrick", "Other" = "gray90")) +
@@ -502,7 +512,7 @@ all_counts %>%
 
 all_counts %>% 
   filter(tpm > 1.0) %>%
-  ggplot(aes(x = Group, y = log(tpm), fill = Group)) + 
+  ggplot(aes(x = Dup_Group, y = log(tpm), fill = Dup_Group)) + 
   geom_boxplot() +
   facet_grid(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "firebrick", "chr_9" = "firebrick", "Other" = "gray90")) +
@@ -517,6 +527,31 @@ all_counts %>%
 #ggsave("./Figures/RNA_Sequencing/compare_chr_49_to_all_ttest.pdf", height = 2.2, width = 5.8)
 #ggsave("./Figures/RNA_Sequencing/compare_chr_49_to_all_ttest.png", height = 2.2, width = 5.8)
 ```
+
+## Look at homozygous regions of the genome
+```{r}
+comparisons <- list(c("chr_11", "Other"), c("chr_12", "Other"), c("chr_16", "Other"))
+
+all_counts %>%
+  filter(!seq_id %in% c(4,9)) %>%
+  filter(tpm >= 1.0) %>%
+  ggplot(aes(x = Hom_Group, y = log(tpm), fill = Hom_Group)) + 
+  geom_boxplot(outlier.size = .25) +
+  facet_grid(~ Source, scales = "free") +
+  scale_fill_manual(values = c("chr_11" = "firebrick", "chr_12" = "dodgerblue",  "chr_16" = "firebrick", "Other" = "gray90")) +
+  scale_x_discrete(labels = c("Other" = "Others", "chr_11" = "11", "chr_12" = "12", "chr_16" = "16")) +
+  labs(x = "Chromosome", y = "Natural Log TPM") +
+  stat_compare_means(method = "t.test", comparisons = comparisons, label = "p.signif", bracket.size = .3, size = 2) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = "none",
+        axis.title = element_text(face = "bold"),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"))
+
+#ggsave("./Figures/RNA_Sequencing/compare_chr_111216_to_all_ttest.pdf", height = 2.2, width = 5.8)
+#ggsave("./Figures/RNA_Sequencing/compare_chr_111216_to_all_ttest.png", height = 2.2, width = 5.8)
+```
+
 
 ## Look for regions of lower expression along the Chromosomes
 # Get gene position
@@ -564,7 +599,7 @@ mean_tpm_windows <- trial[, .(mean_tpm = mean(tpm, na.rm = TRUE)), by = .(CHROM,
 
 # Add a group column
 mean_tpm_windows <- mean_tpm_windows %>%
-    mutate(Group = case_when(
+    mutate(Dup_Group = case_when(
       CHROM == 4 ~ "chr_4",
       CHROM == 9 ~ "chr_9",
       TRUE ~ "Other"))

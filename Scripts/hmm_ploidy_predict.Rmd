@@ -1,0 +1,27 @@
+---
+title: "hmm_ploidy_predict"
+author: "Matthew Davis"
+date: "2024-09-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Library
+```{r, message = FALSE}
+library(data.table)
+library(tidyverse)
+library(depmixS4)
+```
+
+## Read in data and sort. Test data to start
+```{r}
+test.vcf <- fread("./Data/VCFs/Predicting_Ploidy/test.gvcf")
+
+setnames(test.vcf, "#CHROM", "CHROM")
+setorder(test.vcf, CHROM, POS)
+```
+

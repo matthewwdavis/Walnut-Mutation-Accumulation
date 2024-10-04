@@ -51,7 +51,7 @@ parse_columns <- function(table, sample){
   return(final.table)
 }
 
-read_genes_gff <- function(file){
+read_rna_gff <- function(file){
   
   gff <- fread(file, skip = 3)
   
@@ -59,21 +59,15 @@ read_genes_gff <- function(file){
   
   # Parse the columns
   parse.table <- gff %>%
-    mutate(gene = sub(".*gene-([^=]+).*", "\\1", ATTRIBUTE),
-           POS = (STOP + START) / 2) %>%
-    select(-ATTRIBUTE) %>%
-    filter(!grepl(";", gene))
+    mutate(rna = sub("ID=rna-([^=]+).*", "\\1", ATTRIBUTE),
+           rna = gsub(";Parent", "", rna)) %>%
+    filter(!ID %in% c("gene", "exon", "CDS")) %>%
+    select(CHROM, START, STOP, ID, rna)
   
-  gff <- parse.table[grep("^NC_0499", parse.table$CHROM), ]
-  gff$CHROM <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", gff$CHROM))
+  gff_chr <- parse.table[grep("^NC_0499", parse.table$CHROM), ]
+  gff_chr$CHROM <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", gff_chr$CHROM))
   
-  gene_pos <- gff %>%
-  select(CHROM, START, STOP, gene)
-  
-  genes <- gene_pos %>%
-  mutate(gene = sub("_.*", "", gene))
-  
-  return(genes)  
+  return(gff_chr) 
 }
 ```
 
@@ -97,7 +91,7 @@ cr18a <- fread("./Data/Kallisto/18A_abundance.tsv")
 cr18a1 <- fread("./Data/Kallisto/18A1_abundance.tsv")
 
 # GFF
-genes <- read_genes_gff("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
+rna <- read_rna_gff("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
 ```
 
 ## Filter data for analysis
@@ -161,7 +155,7 @@ snp_diff.df <- snp_pres.df %>%
 ## Find differences in expression due to SNPs
 # Merge gff and rna data
 ```{r}
-all_rna <- left_join(all_rna, genes, by = join_by(CHROM, gene))
+all_rna <- left_join(all_rna, rna, by = join_by(CHROM, rna))
 ```
 
 # Look for difference in TPM where snps are present and where they are not present
@@ -180,7 +174,7 @@ association<-rbindlist(pblapply(1:3, function(m){
    #message(r)
    rna_sub<-all_rna[rna==r]
    rna_sub$mut<-rna_sub$Source %in% samples
-   if(uniqueN(rna_sub$mut)==1 | min(table(rna_sub$mut))==1) return(NULL)
+   #if(uniqueN(rna_sub$mut)==1 | min(table(rna_sub$mut))==1) return(NULL)
    ttest<-t.test(rna_sub$tpm~rna_sub$mut)
    out<-data.table(unique=u, rna=r, pvalue=ttest$p.value)
    return(out)
@@ -190,9 +184,15 @@ association<-rbindlist(pblapply(1:3, function(m){
 
 rna_locs<-all_rna[,.(CHROM=unique(CHROM), START=unique(START)), by=.(rna)]
 gene_assoc_merge<-merge(rna_locs, association, by="rna")
-sort(p.adjust(gene_assoc_merge$pvalue))
+#sort(p.adjust(gene_assoc_merge$pvalue))
 ggplot(gene_assoc_merge, aes(x=START, y=-log10(pvalue)))+
   geom_point()+
   facet_grid(~CHROM, scales="free",space="free")
+
+sum(is.na(gene_assoc_merge$pvalue))
+sum(is.na(gene_assoc_merge$START))
+sum(is.na(rna_locs$START))
+sum(is.na(all_rna$START))
+sum(is.na(genes$START))
 ```
 

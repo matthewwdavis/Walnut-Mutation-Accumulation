@@ -9,10 +9,12 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Set up
 ## Libraries
 ```{r, message = FALSE}
 library(tidyverse)
 library(ggtree)
+library(phangorn)
 ```
 
 ## Read in data
@@ -21,18 +23,59 @@ cr2_stacks_q20.gtrasc <- read.tree("./Data/Iqtree/cr2_stacks_q20_gtr_asc.contree
 cr2_stacks_q20dp10.gtr <- read.tree("./Data/Iqtree/cr2_stacks_q20dp10.contree")
 cr2_stacks_q20dp10.gtrasc <- read.tree("./Data/Iqtree/cr2_stacks_q20dp10_gtr_asc.contree")
 cr2_stacks_q30.gtrasc <- read.tree("./Data/Iqtree/cr2_stacks_q30_gtr_asc.contree")
+
+all_q10.gtrasc <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q10_gtrasc.contree")
+all_q20.gtrasc <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q20_gtrasc.contree")
+all_q30.gtrasc <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q30_gtrasc.contree")
+all_q40.gtrasc <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q40_gtrasc.contree")
+
+all_q10_noindel.gtrasc <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q10_noindel_gtrasc.contree")
+all_q20_noindel.gtrasc <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q20_noindel_gtrasc.contree")
+all_q30_noindel.gtrasc <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q30_noindel_gtrasc.contree")
+all_q40_noindel.gtrasc <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q40_noindel_gtrasc.contree")
+
+all_q10.gtr <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q10_gtr.contree")
+all_q20.gtr <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q20_gtr.contree")
+all_q30.gtr <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q30_gtr.contree")
+all_q40.gtr <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q40_gtr.contree")
+
+all_q10_noindel.gtr <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q10_noindel_gtr.contree")
+all_q20_noindel.gtr <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q20_noindel_gtr.contree")
+all_q30_noindel.gtr <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q30_noindel_gtr.contree")
+all_q40_noindel.gtr <- read.tree("./Data/Iqtree/all_individuals_dn_sites_q40_noindel_gtr.contree")
 ```
 
+# Prepare tips for plotting
 ## Modify tip labels
 ```{r}
 cr2_stacks_q20.gtrasc$tip.label <- sub("_.*$", "", cr2_stacks_q20.gtrasc$tip.label)
 cr2_stacks_q20dp10.gtr$tip.label <- sub("_.*$", "", cr2_stacks_q20dp10.gtr$tip.label)
 cr2_stacks_q20dp10.gtrasc$tip.label <- sub("_.*$", "", cr2_stacks_q20dp10.gtrasc$tip.label)
 cr2_stacks_q30.gtrasc$tip.label <- sub("_.*$", "", cr2_stacks_q30.gtrasc$tip.label)
+
+all_q10.gtrasc$tip.label <- sub("_.*$", "", all_q10.gtrasc$tip.label)
+all_q20.gtrasc$tip.label <- sub("_.*$", "", all_q20.gtrasc$tip.label)
+all_q30.gtrasc$tip.label <- sub("_.*$", "", all_q30.gtrasc$tip.label)
+all_q40.gtrasc$tip.label <- sub("_.*$", "", all_q40.gtrasc$tip.label)
+
+all_q10_noindel.gtrasc$tip.label <- sub("_.*$", "", all_q10_noindel.gtrasc$tip.label)
+all_q20_noindel.gtrasc$tip.label <- sub("_.*$", "", all_q20_noindel.gtrasc$tip.label)
+all_q30_noindel.gtrasc$tip.label <- sub("_.*$", "", all_q30_noindel.gtrasc$tip.label)
+all_q40_noindel.gtrasc$tip.label <- sub("_.*$", "", all_q40_noindel.gtrasc$tip.label)
+
+all_q10.gtr$tip.label <- sub("_.*$", "", all_q10.gtr$tip.label)
+all_q20.gtr$tip.label <- sub("_.*$", "", all_q20.gtr$tip.label)
+all_q30.gtr$tip.label <- sub("_.*$", "", all_q30.gtr$tip.label)
+all_q40.gtr$tip.label <- sub("_.*$", "", all_q40.gtr$tip.label)
+
+all_q10_noindel.gtr$tip.label <- sub("_.*$", "", all_q10_noindel.gtr$tip.label)
+all_q20_noindel.gtr$tip.label <- sub("_.*$", "", all_q20_noindel.gtr$tip.label)
+all_q30_noindel.gtr$tip.label <- sub("_.*$", "", all_q30_noindel.gtr$tip.label)
+all_q40_noindel.gtr$tip.label <- sub("_.*$", "", all_q40_noindel.gtr$tip.label)
 ```
 
-
-## Plot
+# Plot
+## Plot CR2 stacks
 ```{r}
 cr2_stacks_q20.gtrasc %>%
   ggtree(layout = "roundrect", branch.length = 1) +
@@ -56,6 +99,182 @@ cr2_stacks_q30.gtrasc %>%
   ggtree(layout = "roundrect", branch.length = 1) +
   geom_tiplab(fontface = "bold") +
   geom_rootedge()
-ggsave("./Figures/Phylogeny/cr2_stacks_phylogeny_q30.pdf", height = 6, width = 12)
-ggsave("./Figures/Phylogeny/cr2_stacks_phylogeny_q30.png", height = 6, width = 12)
+# ggsave("./Figures/Phylogeny/cr2_stacks_phylogeny_q30.pdf", height = 6, width = 12)
+# ggsave("./Figures/Phylogeny/cr2_stacks_phylogeny_q30.png", height = 6, width = 12)
 ```
+
+## Plot gtr asc model
+```{r}
+all_q10.gtrasc %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge() +
+  geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+
+all_q20.gtrasc %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge() +
+  geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+
+all_q30.gtrasc %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge() +
+  geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+
+all_q40.gtrasc %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge() +
+  geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+
+all_q10_noindel.gtrasc %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge() +
+  geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+
+all_q20_noindel.gtrasc %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge() +
+  geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+
+all_q30_noindel.gtrasc %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge() +
+  geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+
+all_q40_noindel.gtrasc %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge() +
+  geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+```
+
+## Plot GTR Model
+```{r}
+all_q10.gtr %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge()+
+  geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+
+all_q20.gtr %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge()+
+  geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+
+all_q30.gtr %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge()+
+  geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+
+all_q40.gtr %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge()+
+  geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+
+all_q10_noindel.gtr %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge()+
+  geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+
+all_q20_noindel.gtr %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge()+
+  geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+
+all_q30_noindel.gtr %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge() +
+  geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+
+all_q40_noindel.gtr %>%
+  ggtree(layout = "roundrect", branch.length = 1) +
+  geom_tiplab(fontface = "bold") +
+  geom_rootedge() +
+geom_text2(aes(subset = !isTip, label = label),
+            hjust = -0.2, # Adjust horizontal position
+            vjust = 0.75, # Adjust vertical position
+            size = 3)
+```
+
+
+# Try phangorn package
+# Setup for phangorn
+## Functions
+```{r}
+snp_matrix <- function(vcf.data, qual){
+  
+  snp.matrix <- vcf.data %>%
+    filter(QUAL >= qual) %>%
+    select(Source, unique) %>%
+    mutate(present = 1) %>%
+    pivot_wider(names_from = unique, values_from = present, values_fill = list(present = 0))
+  
+  snp.matrix <- snp.matrix %>%
+    column_to_rownames("Source")
+
+  return(snp.matrix)
+}
+```
+
+## Read in data
+```{r}
+
+```
+

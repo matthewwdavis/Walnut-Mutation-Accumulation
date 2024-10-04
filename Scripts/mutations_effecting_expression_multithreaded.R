@@ -5,8 +5,8 @@ library(data.table)
 library(future.apply)
 
 ## Set multithreading rules
-plan(multicore, workers = 32)
-options(future.globals.maxSize = 128 * 1024^3)
+plan(multicore, workers = 64)
+options(future.globals.maxSize = 256 * 1024^3)
 
 ## Functions
 parse_columns <- function(table, sample){
@@ -41,7 +41,7 @@ parse_columns <- function(table, sample){
   return(final.table)
 }
 
-read_genes_gff <- function(file){
+read_rna_gff <- function(file){
   
   gff <- fread(file, skip = 3)
   
@@ -49,21 +49,15 @@ read_genes_gff <- function(file){
   
   # Parse the columns
   parse.table <- gff %>%
-    mutate(gene = sub(".*gene-([^=]+).*", "\\1", ATTRIBUTE),
-           POS = (STOP + START) / 2) %>%
-    select(-ATTRIBUTE) %>%
-    filter(!grepl(";", gene))
+    mutate(rna = sub("ID=rna-([^=]+).*", "\\1", ATTRIBUTE),
+           rna = gsub(";Parent", "", rna)) %>%
+    filter(!ID %in% c("gene", "exon", "CDS")) %>%
+    select(CHROM, START, STOP, ID, rna)
   
-  gff <- parse.table[grep("^NC_0499", parse.table$CHROM), ]
-  gff$CHROM <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", gff$CHROM))
+  gff_chr <- parse.table[grep("^NC_0499", parse.table$CHROM), ]
+  gff_chr$CHROM <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", gff_chr$CHROM))
   
-  gene_pos <- gff %>%
-    select(CHROM, START, STOP, gene)
-  
-  genes <- gene_pos %>%
-    mutate(gene = sub("_.*", "", gene))
-  
-  return(genes)  
+  return(gff_chr) 
 }
 
 ## Read in data
@@ -85,7 +79,7 @@ cr18a <- fread("./18A_abundance.tsv")
 cr18a1 <- fread("./18A1_abundance.tsv")
 
 # GFF
-genes <- read_genes_gff("./ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
+rna <- read_rna_gff("./ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
 
 ## Filter data for analysis
 # Get all unique snp values
@@ -143,7 +137,7 @@ snp_diff.df <- snp_pres.df %>%
 
 ## Find differences in expression due to SNPs
 # Merge gff and rna data
-all_rna <- left_join(all_rna, genes, by = join_by(CHROM, gene))
+all_rna <- left_join(all_rna, rna, by = join_by(CHROM, rna))
 
 
 # Look for difference in TPM where snps are present and where they are not present

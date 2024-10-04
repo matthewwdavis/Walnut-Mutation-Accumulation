@@ -40,15 +40,18 @@ grid.arrange(all, qual_5, ncol = 2)
 
 }
 
-point_plot <- function(vcf, het_color = "deepskyblue4", hom_color = "darksalmon",
-                       quality = 0, col_num = 1, samples = c("ref_chandler", "tree2", "cr2_hifi", "cr85", "cr10",
-                                                              "cr13", "cr22", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A",
-                                                              "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
-                                                              "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1")) {
+VAF_point_plot <- function(vcf, quality = 0, size  = 1, alpha = 1, 
+                           het_color = "deepskyblue4", hom_color = "darksalmon",
+                           col_num = 1, samples = c("ref_chandler", "tree2", "cr2_hifi", "cr85", "cr10",
+                                                    "cr13", "cr22", "cr21_1", "cr21_2", "cr2_11A","cr2_12A",
+                                                    "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                                                    "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1")) {
   
   # Select which sources to plot, heterozygous and homozygous sites, quality threshold
   vcf_filt <- vcf %>%
     filter(Source %in% samples) %>%
+    filter(str_length(REF) == 1) %>%
+    filter(str_length(ALT) == 1) %>%
     filter(GT %in% c("0/1", "1/1")) %>%
     filter(QUAL >= quality)
   
@@ -61,19 +64,157 @@ point_plot <- function(vcf, het_color = "deepskyblue4", hom_color = "darksalmon"
 
   #Plot the data
   plot <- vcf_tran %>%
+    ggplot(aes(x = POS/1000000, y = VAF, col = GT)) +
+    geom_point(size = size, alpha = alpha) +
+    facet_wrap(~ Source, ncol = col_num, scales = "free") +
+    scale_color_manual(values=c("0/1" = het_color, "1/1" = hom_color)) +
+    labs(x = "Position (Mb)",
+         y = "VAF",
+         color = "Genotype") +
+    theme_classic(base_size = 6) +
+    theme(legend.position = "bottom",
+          axis.title.x = element_text(face = "bold"),
+          axis.title.y = element_text(face = "bold"))
+
+  return(plot)
+}
+
+window_depth_plot <- function(vcf, window_size = 1e6, quality = 0, col_num = 1, 
+                              samples = c("ref_chandler", "tree2", "cr2_hifi", "cr85", "cr10",
+                                          "cr13", "cr22", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A",
+                                          "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                                          "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1")){
+  
+  # Define the window size
+window_size <- window_size
+
+# Create a new column to define windows based on the POS column
+vcf_windows <- vcf[, window := floor((POS - 1) / window_size) + 1, by = .(CHROM, Source)]
+
+# Select which sources to plot, heterozygous and homozygous sites, quality threshold
+  vcf_filt <- vcf_windows %>%
+    filter(Source %in% samples) %>%
+    filter(str_length(REF) == 1) %>%
+    filter(str_length(ALT) == 1) %>%
+    filter(GT %in% c("0/1", "1/1")) %>%
+    filter(QUAL >= quality)
+  
+  # Get log depth by Source
+  vcf_tran <- vcf_filt %>%
+    group_by(window) %>%
+    mutate(mean_DP = mean(DP)) %>%
+    mutate(DP_log = log(DP)) %>%
+    mutate(DP_log_mean = mean(DP_log)) %>%
+    ungroup()
+  
+  # Plot
+  plot <- vcf_tran %>%
+    ggplot(aes(x = window, y = mean_DP)) +
+    geom_line() +
+    facet_wrap(~ Source, ncol = col_num, scales = "free") +
+    labs(x = "Position (Windows)",
+         y = "Mean Depth in Windows") +
+    theme_classic(base_size = 6) +
+    theme(legend.position = "bottom",
+          axis.title.x = element_text(face = "bold"),
+          axis.title.y = element_text(face = "bold"))
+  
+  return(plot)
+}
+
+point_plot <- function(vcf, window_size = 1e6, het_color = "deepskyblue4", hom_color = "darksalmon",
+                       quality = 0, col_num = 1, size = 1, alpha = 1, samples = c("ref_chandler", "tree2", "cr2_hifi", "cr85", "cr10",
+                                                              "cr13", "cr22", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A",
+                                                              "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                                                              "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1")) {
+  
+   # Define the window size
+  window_size <- window_size
+
+  # Create a new column to define windows based on the POS column
+  vcf_windows <- vcf[, window := floor((POS - 1) / window_size) + 1, by = .(CHROM, Source)]
+
+# Select which sources to plot, heterozygous and homozygous sites, quality threshold
+  vcf_filt <- vcf_windows %>%
+    filter(Source %in% samples) %>%
+    filter(str_length(REF) == 1) %>%
+    filter(str_length(ALT) == 1) %>%
+    filter(GT %in% c("0/1", "1/1")) %>%
+    filter(QUAL >= quality)
+  
+  # # Select which sources to plot, heterozygous and homozygous sites, quality threshold
+  # vcf_filt <- vcf %>%
+  #   filter(Source %in% samples) %>%
+  #   filter(str_length(REF) == 1) %>%
+  #   filter(str_length(ALT) == 1) %>%
+  #   filter(GT %in% c("0/1", "1/1")) %>%
+  #   filter(QUAL >= quality)
+  
+  # Get log depth by Source
+  vcf_tran <- vcf_filt %>%
+    group_by(window) %>%
+    mutate(DP_log = log(DP)) %>%
+    mutate(DP_log_mean = mean(DP_log)) %>%
+    ungroup()
+
+  #Plot the data
+  plot <- vcf_tran %>%
     ggplot(aes(x = POS/1000000, y = DP_log, col = GT)) +
-    geom_point() +
-    geom_hline(aes(yintercept = DP_log_mean)) +
+    geom_point(size = size, alpha = alpha) +
+    geom_line(aes(y = DP_log_mean, x = window)) +
     scale_color_manual(values=c("0/1" = het_color, "1/1" = hom_color)) +
     facet_wrap(~ Source, ncol = col_num) +
     labs(x = "Position (Mb)",
          y = "Depth (natural log)",
          color = "Genotype") +
-    theme_classic() +
+    theme_classic(base_size = 6) +
     theme(legend.position = "bottom",
           axis.title.x = element_text(face = "bold"),
           axis.title.y = element_text(face = "bold"))
 
+  return(plot)
+}
+
+fraction_hom_plot <- function(vcf, window_size = 1e4, quality = 0, col_num = 1, low_color = "grey90",
+                              high_color = "red3", samples = c("ref_chandler", "tree2", "cr2_hifi", 
+                                                               "cr85", "cr10", "cr13", "cr22", "cr21_1",
+                                                               "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", 
+                                                               "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                                                               "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A",
+                                                               "cr2_18A1")){
+  
+  # Define the window size
+  window_size <- window_size
+
+  # Create a new column to define windows based on the POS column
+  vcf_windows <- vcf[, window := floor((POS - 1) / window_size) + 1, by = .(CHROM, Source)]
+
+# Select which sources to plot, heterozygous and homozygous sites, quality threshold
+  vcf_filt <- vcf_windows %>%
+    filter(Source %in% samples) %>%
+    filter(str_length(REF) == 1) %>%
+    filter(str_length(ALT) == 1) %>%
+    filter(GT %in% c("0/1", "1/1")) %>%
+    filter(QUAL >= quality)
+  
+  # Get log depth by Source
+  vcf_tran <- vcf_filt %>%
+    group_by(window) %>%
+    mutate(fraction_1_1 = sum(GT == "1/1") / n()) %>%
+    ungroup()
+  
+  # Plot
+  plot <- vcf_tran %>%
+    ggplot(aes(x = window, y = 1, fill = fraction_1_1)) +
+    geom_tile() + 
+    facet_wrap(~ Source, ncol = col_num, scales = "free" ) +
+    scale_fill_gradient(low = low_color, high = high_color) +
+    labs(x = "Position (Window)", y = element_blank(), fill = "Fraction of\nHomozygous Regions") +
+    theme_classic(base_size = 6) +
+    theme(axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank())
+  
   return(plot)
 }
 ```
@@ -93,18 +234,41 @@ quick_qual_dist(chr12_an)
 quick_qual_dist(chr16_an)
 ```
 
+# Look at VAF by position
+## Plot SNPs by VAF and position
+```{r}
+VAF_point_plot(chr11_an, quality = 30, alpha = 0.3, col_num = 2, samples = c("cr2_hifi", "cr2_16A", "cr2_16A1", "cr2_16A2",
+                                              "cr2_17A1", "cr2_17A2", "cr2_18A1"))
+
+VAF_point_plot(chr12_an, quality = 30, alpha = 0.3, samples = c("cr2_15A", "cr2_15A1"))
+
+VAF_point_plot(chr16_an, quality = 30, alpha = 0.3, col_num = 2, samples = c("cr2_hifi", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                                 "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1"))
+```
+# Look at average depth in windows
+## Plot
+```{r}
+window_depth_plot(chr11_an, col_num = 2, samples = c("cr2_hifi", "cr2_16A", "cr2_16A1", "cr2_16A2",
+                                                     "cr2_17A1", "cr2_17A2", "cr2_18A1"))
+
+window_depth_plot(chr12_an, samples = c("cr2_15A", "cr2_15A1"))
+
+window_depth_plot(chr16_an, col_num = 2, samples = c("cr2_hifi", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                                                     "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1"))
+```
+
 # Looking at position by depth by genotype
 ## Plot SNPs by position and depth, colored by genotype
 ```{r}
 # Plot individual chromosomes and affected samples
-point_plot(chr11_an, col_num = 2, samples = c("cr2_hifi", "cr2_16A", "cr2_16A1", "cr2_16A2",
+point_plot(chr11_an, quality = 30, col_num = 2, alpha = 0.3, samples = c("cr2_hifi", "cr2_16A", "cr2_16A1", "cr2_16A2",
                                               "cr2_17A1", "cr2_17A2", "cr2_18A1"))
 #ggsave("./Figures/Hemizygosity/chr11_position_depth_genotype.png", height = 5, width = 7)
 
-point_plot(chr12_an, samples = c("cr2_15A", "cr2_15A1"))
+point_plot(chr12_an, quality = 30, alpha = 0.3, samples = c("cr2_15A", "cr2_15A1"))
 #ggsave("./Figures/Hemizygosity/chr12_position_depth_genotype.png", height = 3, width = 4)
 
-point_plot(chr16_an, col_num = 2, samples = c("cr2_hifi", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+point_plot(chr16_an,  quality = 30, col_num = 2,  alpha = 0.3, samples = c("cr2_hifi", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
                                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1"))
 #ggsave("./Figures/Hemizygosity/chr16_position_depth_genotype.png", height = 5, width = 7)
 
@@ -133,6 +297,65 @@ dup_chr_snps  %>%
           axis.title.y = element_text(face = "bold"))
 # ggsave("./Figures/Hemizygosity/all_source_chr11_12_16_position_depth_genotype.png", height = 15, width = 9)
 ```
+
+# Find the fraction of homoozygous alternative calls by window
+## Generate plots
+```{r}
+fraction_hom_plot(chr11_an, window_size = 1e6, quality = 0, col_num = 2, samples = c("cr2_hifi","cr2_16A","cr2_16A1","cr2_16A2",
+                                                                   "cr2_17A1", "cr2_17A2","cr2_18A1"))
+
+fraction_hom_plot(chr12_an, window_size = 1e6, quality = 0, samples = c("cr2_15A", "cr2_15A1"))
+
+fraction_hom_plot(chr16_an,  window_size = 1e6, quality = 0, col_num = 2, samples = c("cr2_hifi","cr2_15A","cr2_15A1","cr2_16A",
+                                                                    "cr2_16A1","cr2_16A2","cr2_17A1",
+                                                                    "cr2_17A2","cr2_18A","cr2_18A1"))
+```
+
+
+## Generate the data
+```{r}
+
+quality = 0
+samples = c("cr2_hifi", "cr2_16A", "cr2_16A1", "cr2_16A2",
+                                              "cr2_17A1", "cr2_17A2", "cr2_18A1")
+   # Define the window size
+  window_size <- 1e4
+
+  # Create a new column to define windows based on the POS column
+  vcf_windows <- chr11_an[, window := floor((POS - 1) / window_size) + 1, by = .(CHROM, Source)]
+
+# Select which sources to plot, heterozygous and homozygous sites, quality threshold
+  vcf_filt <- vcf_windows %>%
+    filter(Source %in% samples) %>%
+    filter(str_length(REF) == 1) %>%
+    filter(str_length(ALT) == 1) %>%
+    filter(GT %in% c("0/1", "1/1")) %>%
+    filter(QUAL >= quality)
+  
+  # Get log depth by Source
+  vcf_tran <- vcf_filt %>%
+    group_by(window) %>%
+    mutate(fraction_1_1 = sum(GT == "1/1") / n()) %>%
+    ungroup()
+  
+  unique(vcf_tran$fraction_1_1)
+  
+  ggplot(vcf_tran, aes(x = window, y = 1, fill = fraction_1_1)) +
+    geom_tile() + 
+    facet_wrap(~Source, scales = "free") +
+    scale_fill_gradient(low = "grey90", high = "dodgerblue") +
+    labs(x = "Position (Window)", y = element_blank(), fill = "Fraction of\nHomozygous Regions") +
+    theme_classic(base_size = 6) +
+    theme(axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank())
+```
+
+## Plot the calls
+```{r}
+
+```
+
 
 # Work on creating a smooth line graph
 ## Create homozygous and heterozyogus files

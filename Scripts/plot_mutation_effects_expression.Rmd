@@ -21,11 +21,18 @@ library(tidyverse)
 df <- fread("./Data/Mutation_Expression/mutation_transcript_association.tsv")
 ```
 
+## Check for NAs
+```{r}
+sum(is.na(df$rna))
+sum(is.na(df$CHROM))
+sum(is.na(df$START))
+```
+
 ## Downsample data for script testing
 ```{r}
 set.seed(25)
 
-small_df <- df[sample(.N, 10000)]
+small_df <- df[sample(.N, 1e6)]
 ```
 
 
@@ -57,7 +64,7 @@ color_map <- setNames(colors, unique_chroms)
 ## Plot
 ```{r}
 small_df %>%
-  ggplot(aes(x=START/1e7, y=-log10(pvalue), color = factor(CHROM)))+
+  ggplot(aes(x=START/1e7, y= -log10(pvalue), color = factor(CHROM)))+
   geom_point(size = .5) +
   geom_hline(yintercept = p_threshold, linetype = "dotted", color = "grey30", linewidth = 0.5)+
   geom_hline(yintercept = bon_threshold, linetype = "dotted", color = "grey30", linewidth = 0.5)+
@@ -73,6 +80,6 @@ small_df %>%
         axis.text.x = element_text(angle = 45, hjust = 1))
 
 #ggsave("./mut_expression_effect_plot.pdf")
-ggsave("./mut_expression_effect_plot.png", height = 1, width = 4)
+ggsave("./mut_expression_effect_plot.png", height = 2, width = 6)
 ```
 

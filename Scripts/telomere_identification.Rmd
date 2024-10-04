@@ -113,12 +113,13 @@ telomere_plot <- function(plot_table, title = NULL, barcolor = "lightblue", dotc
   return(plot)
 }
 
-bp_correction <- function(df, name, bp_number){
+bp_correction <- function(df, name, bp_number, type){
   new_df <- df %>% 
     mutate(Corrected_Count = sum(V2)/(bp_number/21)) %>%
     mutate(ID = name) %>%
     mutate(Rounded_Corrected_Count = round(Corrected_Count, digits = 6)) %>%
     mutate(Scientific_Notation = format(Corrected_Count, scientific = TRUE, digits = 2)) %>%
+    mutate(Type = type) %>%
     rename(V1 = "Sequence", V2 = "Count")
   
   return(new_df)
@@ -567,5 +568,80 @@ ggplot(data = read_telomeres_cor_long_bp, aes(x = ID, fill = ID, y = Corrected_C
   theme(plot.title = element_text(hjust = 0.5), legend.position = "none")
 #ggsave("~/Desktop/long_read_telomere_counts_nuclear_reads_tall.png", height = 6, width = 5)
 #ggsave("~/Desktop/long_read_telomere_counts_nuclear_reads_tall.pdf", height = 6, width = 5)
+```
+
+## REad in short read telomeres
+```{r}
+cr2_11a <- fread("./Data/Telomeres/Short_Read/All_Reads/11A_telomere_21mer_AAACCCT.txt")
+cr2_12a <- fread("./Data/Telomeres/Short_Read/All_Reads/12A_telomere_21mer_AAACCCT.txt")
+cr2_13a <- fread("./Data/Telomeres/Short_Read/All_Reads/13A_telomere_21mer_AAACCCT.txt")
+cr2_15a <- fread("./Data/Telomeres/Short_Read/All_Reads/15A_telomere_21mer_AAACCCT.txt")
+cr2_15a1 <- fread("./Data/Telomeres/Short_Read/All_Reads/15A1_telomere_21mer_AAACCCT.txt")
+cr2_16a <- fread("./Data/Telomeres/Short_Read/All_Reads/16A_telomere_21mer_AAACCCT.txt")
+cr2_16a1 <- fread("./Data/Telomeres/Short_Read/All_Reads/16A1_telomere_21mer_AAACCCT.txt")
+cr2_16a2 <- fread("./Data/Telomeres/Short_Read/All_Reads/16A2_telomere_21mer_AAACCCT.txt")
+cr2_17a1 <- fread("./Data/Telomeres/Short_Read/All_Reads/17A1_telomere_21mer_AAACCCT.txt")
+cr2_17a2 <- fread("./Data/Telomeres/Short_Read/All_Reads/17A2_telomere_21mer_AAACCCT.txt")
+cr2_18a <- fread("./Data/Telomeres/Short_Read/All_Reads/18A_telomere_21mer_AAACCCT.txt")
+cr2_18a1 <- fread("./Data/Telomeres/Short_Read/All_Reads/18A1_telomere_21mer_AAACCCT.txt")
+
+cr21_1<- fread("./Data/Telomeres/Short_Read/All_Reads/CR21-1_telomere_21mer_AAACCCT.txt")
+cr21_2<- fread("./Data/Telomeres/Short_Read/All_Reads/CR21-2_telomere_21mer_AAACCCT.txt")
+
+cr85<- fread("./Data/Telomeres/Short_Read/All_Reads/CR85_telomere_21mer_AAACCCT.txt")
+cr10<- fread("./Data/Telomeres/Short_Read/All_Reads/CR10_telomere_21mer_AAACCCT.txt")
+cr13<- fread("./Data/Telomeres/Short_Read/All_Reads/CR13_telomere_21mer_AAACCCT.txt")
+cr22<- fread("./Data/Telomeres/Short_Read/All_Reads/CR22_telomere_21mer_AAACCCT.txt")
+```
+
+## Correct by numbers of bp
+```{r}
+cr2_11a_cor <- bp_correction(cr2_11a, "CR11A", 15071364946, type = "embryo")
+cr2_12a_cor <- bp_correction(cr2_12a, "CR12A", 16202438115, type = "embryo")
+cr2_13a_cor <- bp_correction(cr2_13a, "CR13A", 21009290321, type = "embryo")
+cr2_15a_cor <- bp_correction(cr2_15a, "CR15A", 20382198965, type = "embryo")
+cr2_15a1_cor <- bp_correction(cr2_15a1, "CR15A1", 15142360669, type = "embryo")
+cr2_16a_cor <- bp_correction(cr2_16a, "CR16A", 20345439863, type = "embryo")
+cr2_16a1_cor <- bp_correction(cr2_16a1, "CR16A1", 20678652237, type = "embryo")
+cr2_16a2_cor <- bp_correction(cr2_16a2, "CR16A2", 15299720269, type = "embryo")
+cr2_17a1_cor <- bp_correction(cr2_17a1, "CR17A1", 22869984970, type = "embryo")
+cr2_17a2_cor <- bp_correction(cr2_17a2, "CR17A2", 7953840373, type = "embryo")
+cr2_18a_cor <- bp_correction(cr2_18a, "CR18A", 22117388169, type = "embryo")
+cr2_18a1_cor <- bp_correction(cr2_18a1, "CR18A1", 25274119351, type = "embryo")
+
+cr21_1_cor <- bp_correction(cr21_1, "CR21-1", 16119266698, type = "embryo")
+cr21_2_cor <- bp_correction(cr21_2, "CR21-2", 14420943399, type = "embryo")
+
+cr85_cor <- bp_correction(cr85, "CR85", 22878748496, type = "shoot")
+cr10_cor <- bp_correction(cr10, "CR10", 22579064005, type = "shoot")
+cr13_cor <- bp_correction(cr13, "CR13", 22313583443, type = "shoot")
+cr22_cor <- bp_correction(cr22, "CR22", 22952704510, type = "shoot")
+```
+
+## Prepare data to plot
+```{r}
+short_read_tel <- rbind(cr2_11a_cor, cr2_12a_cor, cr2_13a_cor, cr2_15a_cor, cr2_15a1_cor, cr2_16a_cor, cr2_16a1_cor, cr2_16a2_cor, cr2_17a1_cor, cr2_17a2_cor, cr2_18a1_cor, cr21_1_cor, cr21_2_cor, cr85_cor, cr13_cor, cr22_cor)
+
+levels <- c("CR21-1", "CR21-2", "CR11A", "CR12A",
+            "CR13A", "CR15A", "CR15A1", "CR16A",
+            "CR16A1", "CR16A2", "CR17A1", "CR17A2",
+            "CR18A1",
+            "CR85", "CR13", "CR22")
+
+short_read_tel$ID <- factor(short_read_tel$ID, levels = levels)
+```
+
+## Plot data
+```{r}
+ggplot(data = short_read_tel, aes(x = ID, fill = Type, y = Corrected_Count)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Scientific_Notation), vjust = -0.7) +
+  scale_fill_manual(values = c("embryo" = "orangered",
+                               "shoot" = "dodgerblue")) + 
+  facet_grid(~Type, scales = "free", space = "free") +
+  labs(y = "Number of 21-mer telomere sequences \n(corrected with total bp/21)",
+       x = "", fill = "") +
+  theme_classic(base_size = 6) + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "none")
 ```
 
