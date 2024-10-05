@@ -1,0 +1,403 @@
+---
+title: "heatmap_of_individuals"
+author: "Matthew Davis"
+date: "2024-10-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Library
+```{r, message=FALSE}
+library(tidyverse)
+library(data.table)
+library(pbapply)
+library(gplots)
+library(RColorBrewer)
+
+## Maybe
+#library(future)
+#library(future.apply)
+```
+
+## Functions
+```{r}
+snp_matrix <- function(vcf.data, qual){
+  
+  snp.matrix <- vcf.data %>%
+    filter(QUAL >= qual) %>%
+    select(Source, unique) %>%
+    mutate(present = 1) %>%
+    pivot_wider(names_from = unique, values_from = present, values_fill = list(present = 0))
+  
+  snp.matrix <- snp.matrix %>%
+    column_to_rownames("Source")
+
+  return(snp.matrix)
+}
+
+dist_table <- function(dist.matrix, col1 = "sample1", col2 = "sample2", col3 = "dist"){
+  
+  dist.table <- as.data.frame(as.table(as.matrix(dist.matrix)))
+  colnames(dist.table) <- c(col1, col2, col3)
+  
+  return(dist.table)
+}
+
+shared_snps <- function(snp.matrix){
+  
+  # Convert snp.matrix to a long format
+  df_data <- rownames_to_column(snp.matrix, var = "Sample")
+
+  long_df_data <- df_data %>%
+    pivot_longer(cols = -Sample,
+                 names_to = "Site",
+                 values_to = "Value")
+  
+  # Get unique samples
+  unique_samples <- unique(long_df_data$Sample)
+
+  # Create a data frame with all combinations
+  sample_pairs <- expand.grid(sample1 = unique_samples, sample2 = unique_samples)
+
+  # Define a function to compute the matching instances
+  count_matching_instances <- function(index) {
+    
+    # Filter for the two samples
+    sample_pair <- sample_pairs[index, ]
+  
+    data1 <- long_df_data %>% filter(Sample == sample_pair$sample1)
+    data2 <- long_df_data %>% filter(Sample == sample_pair$sample2)
+  
+    # Join
+    matching_sites <- data1 %>%
+      inner_join(data2, by = "Site", suffix = c("_1", "_2")) %>%
+      filter(Value_1 == Value_2)
+  
+    # Count the number of matching instances
+    num_matching_instances <- nrow(matching_sites)
+  
+    return(data.table(sample1 = sample_pair$sample1, sample2 = sample_pair$sample2, count = num_matching_instances))
+    }
+
+# Apply the function to each row
+result_dt <- pblapply(1:nrow(sample_pairs), count_matching_instances) %>%
+  rbindlist()
+
+return(result_dt)
+}
+
+dendro_plot <- function(clust.data, clusters = 3, height = 3, color = "red", qual){
+  
+  main_title <- paste("Dendrogram -", qual)
+  plot(clust.data, main = main_title, xlab = "Sources", sub = "", cex = 0.6)
+  rect.hclust(clust.data , k = clusters, border = 2:6)
+  abline(h = height, col = color)
+}
+
+plot_heatmap <- function(plot.table, font = "Helvetica", dendrogram = "both", Rowv = TRUE, trace = "none", color_num = 9, color_pal = "Reds", 
+                         distfun = dist, hclustfun = hclust,  margin = c(5, 5), 
+                         key = TRUE, keysize = 1.5, cexRow = 0.6, cexCol = 0.6, density.info = "none", denscol = NULL, title = NULL) {
+  
+  # Convert data into a matrix
+  select.table <- plot.table %>%
+    select(sample1, sample2, dist)
+
+  wide.table <- select.table %>%
+    pivot_wider(names_from = sample2, values_from = dist)
+
+  data_matrix <- as.matrix(wide.table[,-1])
+  
+  rownames(data_matrix) <- wide.table[[1]]
+
+  # New labesl for plotting
+  sample_labels <- c("ref_chandler" = "Reference Tree", 
+              "tree2" = "Tree 2", 
+              "cr2_hifi" = "Embryo HiFi", 
+              "cr21_1" = "Embryo 1", 
+              "cr21_2" = "Embryo 2", 
+              "cr2_11A" = "11A", 
+              "cr2_12A" = "12A", 
+              "cr2_13A" = "13A", 
+              "cr2_15A" = "15A", 
+              "cr2_15A1" = "15A1", 
+              "cr2_16A" = "16A", 
+              "cr2_16A1" = "16A1", 
+              "cr2_16A2" = "16A2", 
+              "cr2_17A1" = "17A1", 
+              "cr2_17A2" = "17A2", 
+              "cr2_18A" = "18A", 
+              "cr2_18A1" = "18A1", 
+              "cr85" = "Chandler '85", 
+              "cr10" = "Chandler '10", 
+              "cr13" = "Chandler '13", 
+              "cr22" = "Chandler '22")
+
+  # Apply labels
+  rownames(data_matrix) <-sample_labels[rownames(data_matrix)]
+  colnames(data_matrix) <-sample_labels[colnames(data_matrix)]
+
+  # Change font
+  par(family = font)
+
+  # Set color pallette for heatmap
+  palette <- brewer.pal(color_num, color_pal)
+
+  # invert matrix to show similarity
+  invert_matrix <- 1 - data_matrix
+
+  
+  heatmap.2(invert_matrix, 
+            distfun = distfun,
+            hclustfun = hclustfun,
+            dendrogram = dendrogram, 
+            Rowv = Rowv, 
+            trace = trace, 
+            col = palette, 
+            margin = margin, 
+            key = key, 
+            keysize = keysize, 
+            cexRow = cexRow, 
+            cexCol = cexCol, 
+            density.info = density.info, 
+            denscol = denscol, 
+            main = title)
+}
+
+```
+
+## Read in files and create  chr 4 and 9 files
+```{r}
+dn_snps <- fread("./Data/VCFs/Filtered/all_dn_snps.vcf")
+
+chr4_dn_snps <- dn_snps %>%
+  filter(CHROM %in% 4) %>%
+  filter(!Source %in% c("ref_chandler", "tree2", "cr85", "cr10", "cr13", "cr22"))
+
+chr9_dn_snps <- dn_snps %>%
+  filter(CHROM %in% 9) %>%
+  filter(!Source %in% c("ref_chandler", "tree2", "cr85", "cr10", "cr13", "cr22"))
+
+chr11_dn_snps <- dn_snps %>%
+  filter(CHROM %in% 11) %>%
+  filter(!Source %in% c("ref_chandler", "tree2", "cr85", "cr10", "cr13", "cr22"))
+
+chr12_dn_snps <- dn_snps %>%
+  filter(CHROM %in% 12) %>%
+  filter(!Source %in% c("ref_chandler", "tree2", "cr85", "cr10", "cr13", "cr22"))
+
+chr16_dn_snps <- dn_snps %>%
+  filter(CHROM %in% 16) %>%
+  filter(!Source %in% c("ref_chandler", "tree2", "cr85", "cr10", "cr13", "cr22"))
+```
+
+# Prepare the data for plotting
+## Make SNP matrix
+```{r}
+# Create matrix
+#snp.matrix0 <- snp_matrix(dn_snps, qual = 0)
+snp.matrix20 <- snp_matrix(dn_snps, qual = 20)
+snp.matrix30 <- snp_matrix(dn_snps, qual = 30)
+snp.matrix40 <- snp_matrix(dn_snps, qual = 40)
+
+chr4_snp.matrix20 <- snp_matrix(chr4_dn_snps, qual = 20)
+chr9_snp.matrix20 <- snp_matrix(chr9_dn_snps, qual = 20)
+chr4_snp.matrix30 <- snp_matrix(chr4_dn_snps, qual = 30)
+chr9_snp.matrix30 <- snp_matrix(chr9_dn_snps, qual = 30)
+
+chr11_snp.matrix20 <- snp_matrix(chr11_dn_snps, qual = 20)
+chr12_snp.matrix20 <- snp_matrix(chr12_dn_snps, qual = 20)
+chr16_snp.matrix20 <- snp_matrix(chr16_dn_snps, qual = 20)
+chr11_snp.matrix30 <- snp_matrix(chr11_dn_snps, qual = 30)
+chr12_snp.matrix30 <- snp_matrix(chr12_dn_snps, qual = 30)
+chr16_snp.matrix30 <- snp_matrix(chr16_dn_snps, qual = 30)
+```
+
+## Calculate the binary distance between samples and make dataframes
+```{r}
+# Distance
+#dist.matrix0 <- dist(snp.matrix0, method = "binary")
+dist.matrix20 <- dist(snp.matrix20, method = "binary")
+dist.matrix30 <- dist(snp.matrix30, method = "binary")
+dist.matrix40 <- dist(snp.matrix40, method = "binary")
+
+chr4_dist.matrix20 <- dist(chr4_snp.matrix20, method = "binary")
+chr9_dist.matrix20 <- dist(chr9_snp.matrix20, method = "binary")
+chr4_dist.matrix30 <- dist(chr4_snp.matrix30, method = "binary")
+chr9_dist.matrix30 <- dist(chr9_snp.matrix30, method = "binary")
+
+chr11_dist.matrix20 <- dist(chr11_snp.matrix20, method = "binary")
+chr12_dist.matrix20 <- dist(chr12_snp.matrix20, method = "binary")
+chr16_dist.matrix20 <- dist(chr16_snp.matrix20, method = "binary")
+chr11_dist.matrix30 <- dist(chr11_snp.matrix30, method = "binary")
+chr12_dist.matrix30 <- dist(chr12_snp.matrix30, method = "binary")
+chr16_dist.matrix30 <- dist(chr16_snp.matrix30, method = "binary")
+
+# Creating data frames
+#dist.table0 <- dist_table(dist.matrix0)
+dist.table20 <- dist_table(dist.matrix20)
+dist.table30 <- dist_table(dist.matrix30)
+dist.table40 <- dist_table(dist.matrix40)
+
+chr4_dist.table20 <- dist_table(chr4_dist.matrix20)
+chr9_dist.table20 <- dist_table(chr9_dist.matrix20)
+chr4_dist.table30 <- dist_table(chr4_dist.matrix30)
+chr9_dist.table30 <- dist_table(chr9_dist.matrix30)
+
+chr11_dist.table20 <- dist_table(chr11_dist.matrix20)
+chr12_dist.table20 <- dist_table(chr12_dist.matrix20)
+chr16_dist.table20 <- dist_table(chr16_dist.matrix20)
+chr11_dist.table30 <- dist_table(chr11_dist.matrix30)
+chr12_dist.table30 <- dist_table(chr12_dist.matrix30)
+chr16_dist.table30 <- dist_table(chr16_dist.matrix30)
+```
+
+## Determine how many SNPs are shared in each sample combination
+```{r}
+#snps.count0 <- shared_snps(snp.matrix0)
+snps.count20 <- shared_snps(snp.matrix20)
+snps.count30 <- shared_snps(snp.matrix30)
+snps.count40 <- shared_snps(snp.matrix40)
+
+chr4_snps.count20 <- shared_snps(chr4_snp.matrix20)
+chr9_snps.count20 <- shared_snps(chr9_snp.matrix20)
+chr4_snps.count30 <- shared_snps(chr4_snp.matrix30)
+chr9_snps.count30 <- shared_snps(chr9_snp.matrix30)
+
+chr11_snps.count20 <- shared_snps(chr11_snp.matrix20)
+chr12_snps.count20 <- shared_snps(chr12_snp.matrix20)
+chr16_snps.count20 <- shared_snps(chr16_snp.matrix20)
+chr11_snps.count30 <- shared_snps(chr11_snp.matrix30)
+chr12_snps.count30 <- shared_snps(chr12_snp.matrix30)
+chr16_snps.count30 <- shared_snps(chr16_snp.matrix30)
+```
+
+## Join distance tables and shared_snps
+```{r}
+plot.table20 <- left_join(dist.table20, snps.count20, by = join_by(sample1, sample2))
+plot.table30 <- left_join(dist.table30, snps.count30, by = join_by(sample1, sample2))
+plot.table40 <- left_join(dist.table40, snps.count40, by = join_by(sample1, sample2))
+
+chr4_plot.table20 <- left_join(chr4_dist.table20, chr4_snps.count20, by = join_by(sample1, sample2))
+chr9_plot.table20 <- left_join(chr9_dist.table20, chr9_snps.count20, by = join_by(sample1, sample2))
+chr4_plot.table30 <- left_join(chr4_dist.table30, chr4_snps.count30, by = join_by(sample1, sample2))
+chr9_plot.table30 <- left_join(chr9_dist.table30, chr9_snps.count30, by = join_by(sample1, sample2))
+
+chr11_plot.table20 <- left_join(chr11_dist.table20, chr11_snps.count20, by = join_by(sample1, sample2))
+chr12_plot.table20 <- left_join(chr12_dist.table20, chr12_snps.count20, by = join_by(sample1, sample2))
+chr16_plot.table20 <- left_join(chr16_dist.table20, chr16_snps.count20, by = join_by(sample1, sample2))
+chr11_plot.table30 <- left_join(chr11_dist.table30, chr11_snps.count30, by = join_by(sample1, sample2))
+chr12_plot.table30 <- left_join(chr12_dist.table30, chr12_snps.count30, by = join_by(sample1, sample2))
+chr16_plot.table30 <- left_join(chr16_dist.table30, chr16_snps.count30, by = join_by(sample1, sample2))
+```
+
+# Plot
+## Plot heatmaps with dendrograms
+```{r}
+display.brewer.all()
+
+plot_heatmap(plot.table20)
+plot_heatmap(plot.table30)
+plot_heatmap(plot.table40)
+
+plot_heatmap(chr4_plot.table20)
+plot_heatmap(chr4_plot.table30)
+plot_heatmap(chr9_plot.table20)
+plot_heatmap(chr9_plot.table30)
+
+plot_heatmap(chr11_plot.table20)
+plot_heatmap(chr11_plot.table30)
+plot_heatmap(chr12_plot.table20)
+plot_heatmap(chr12_plot.table30)
+plot_heatmap(chr16_plot.table20)
+plot_heatmap(chr16_plot.table30)
+```
+
+## Set levels for plotting
+```{r}
+level <- c("ref_chandler","tree2","cr85","cr10","cr13","cr22","cr21_1","cr21_2","cr2_11A","cr2_12A","cr2_13A","cr2_15A","cr2_15A1","cr2_hifi","cr2_16A","cr2_16A1","cr2_16A2","cr2_17A1","cr2_17A2","cr2_18A","cr2_18A1")
+```
+
+## Plot heatmap
+```{r}
+ggplot(plot.table20, aes(x = factor(sample1, levels = level), 
+                         y = factor(sample2, levels = level),
+                         fill = (1- dist))) +
+  geom_tile() +
+  geom_text(aes(label = count), size = 2, col = "black")+
+  scale_fill_gradient2(low = "skyblue2", mid = "grey90", high = "firebrick2", midpoint = 0.5) +
+  #scale_fill_viridis_c(option = "viridis") +
+  labs(fill = "Shared\nSNPs") +  
+  theme_classic(base_size = 6) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+
+ggplot(chr4_plot.table20, aes(x = factor(sample1, levels = level), 
+                         y = factor(sample2, levels = level),
+                         fill = (1- dist))) +
+  geom_tile() +
+  geom_text(aes(label = count), size = 2, col = "black")+
+  scale_fill_gradient2(low = "skyblue2", mid = "grey90", high = "firebrick2", midpoint = 0.5) +
+  #scale_fill_viridis_c(option = "viridis") +
+  labs(fill = "Shared\nSNPs") +  
+  theme_classic(base_size = 6) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+
+ggplot(chr9_plot.table20, aes(x = factor(sample1, levels = level), 
+                         y = factor(sample2, levels = level),
+                         fill = (1- dist))) +
+  geom_tile() +
+  geom_text(aes(label = count), size = 2, col = "black")+
+  scale_fill_gradient2(low = "skyblue2", mid = "grey90", high = "firebrick2", midpoint = 0.5) +
+  #scale_fill_viridis_c(option = "viridis") +
+  labs(fill = "Shared\nSNPs") +  
+  theme_classic(base_size = 6) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+
+ggplot(chr11_plot.table20, aes(x = factor(sample1, levels = level), 
+                         y = factor(sample2, levels = level),
+                         fill = (1- dist))) +
+  geom_tile() +
+  geom_text(aes(label = count), size = 2, col = "black")+
+  scale_fill_gradient2(low = "skyblue2", mid = "grey90", high = "firebrick2", midpoint = 0.5) +
+  #scale_fill_viridis_c(option = "viridis") +
+  labs(fill = "Shared\nSNPs") +  
+  theme_classic(base_size = 6) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+
+ggplot(chr12_plot.table20, aes(x = factor(sample1, levels = level), 
+                         y = factor(sample2, levels = level),
+                         fill = (1- dist))) +
+  geom_tile() +
+  geom_text(aes(label = count), size = 2, col = "black")+
+  scale_fill_gradient2(low = "skyblue2", mid = "grey90", high = "firebrick2", midpoint = 0.5) +
+  #scale_fill_viridis_c(option = "viridis") +
+  labs(fill = "Shared\nSNPs") +  
+  theme_classic(base_size = 6) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+
+ggplot(chr16_plot.table20, aes(x = factor(sample1, levels = level), 
+                         y = factor(sample2, levels = level),
+                         fill = (1- dist))) +
+  geom_tile() +
+  geom_text(aes(label = count), size = 2, col = "black")+
+  scale_fill_gradient2(low = "skyblue2", mid = "grey90", high = "firebrick2", midpoint = 0.5) +
+  #scale_fill_viridis_c(option = "viridis") +
+  labs(fill = "Shared\nSNPs") +  
+  theme_classic(base_size = 6) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+```
