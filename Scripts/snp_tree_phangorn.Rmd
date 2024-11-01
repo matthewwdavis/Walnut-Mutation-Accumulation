@@ -1,0 +1,135 @@
+---
+title: "snp_tree_phangorn"
+author: "Matthew Davis"
+date: "2024-10-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r, message=FALSE}
+library(data.table)
+library(tidyverse)
+library(phangorn)
+```
+
+## Functions
+```{r}
+read_snps <- function(data){
+  
+  snps <- fread(data)
+  
+  bi_snps <- snps %>%
+    filter(str_length(REF) == 1) %>%
+    filter(str_length(ALT) == 1)
+  
+  return(bi_snps)
+}
+
+snp_matrix <- function(vcf.data, qual){
+  
+  snp.matrix <- vcf.data %>%
+    filter(QUAL >= qual) %>%
+    select(Source, unique) %>%
+    mutate(present = 1) %>%
+    pivot_wider(names_from = unique, values_from = present, values_fill = list(present = 0))
+  
+  snp.matrix <- snp.matrix %>%
+    column_to_rownames("Source")
+
+  return(snp.matrix)
+}
+
+alt_matrix <- function(vcf.data, qual){
+  
+  alt.matrix <- dn_snps %>%
+    filter(QUAL >= qual) %>%
+    select(Source, unique, ALT) %>%
+    pivot_wider(names_from = unique, values_from = ALT, values_fill = "-")
+  
+  alt.matrix <- alt.matrix %>%
+    column_to_rownames("Source")
+  
+  return(alt.matrix)
+}
+```
+
+## Read in SNPs
+```{r}
+dn_snps <- read_snps("./Data/VCFs/Filtered/all_dn_snps.vcf")
+```
+
+# Prepare data for tree building
+## Generate SNP matrices
+```{r}
+snp.matrix30 <- snp_matrix(dn_snps, qual = 30)
+alt.matrix30 <- alt_matrix(dn_snps, qual = 30)
+```
+
+## Check for all blank rows or columns
+```{r}
+# Check for entirely zero rows
+all_zero_rows_snp <- apply(snp.matrix30, 1, function(row) all(row == 0))
+all_zero_rows_alt <- apply(alt.matrix30, 1, function(row) all(row == "-"))
+
+sum(all_zero_rows_snp)
+sum(all_zero_rows_alt)
+
+sum(is.na(snp.matrix30))
+sum(is.na(alt.matrix30))
+```
+
+## Trying something else
+```{r}
+dist.gene(as.DNAbin(as.matrix(alt.matrix30)), method = "pairwise")
+
+dist.gene(alt.matrix30, method = "pairwise", variance = TRUE)
+
+```
+
+
+## Create the phylogeny object
+```{r}
+snp_phy.data <- phyDat(snp.matrix30, type = "USER", levels = c("0", "1"))
+alt_phy.data <- phyDat(alt.matrix30, type = "DNA")
+
+#test <- modelTest(alt_phy.data, model = c("JC", "F81", "GTR"))
+min(test$AIC)
+min(test$BIC)
+which.min(test$AIC)
+which.min(test$BIC)
+```
+
+## Check for NAs
+```{r}
+sum(is.na(snp_phy.data))
+sum(is.na(alt_phy.data))
+```
+
+```{r}
+plot()
+```
+
+
+## Calculate Distance
+```{r}
+snp.dist <- dist.ml(snp_phy.data, model = "F81")
+alt.dist <- dist.ml(alt_phy.data, model = "F81")
+```
+
+## Check for NAs
+```{r}
+any(is.nan(snp.dist))
+any(is.nan(alt.dist))
+```
+
+
+## Create neighborjoining trees
+```{r}
+NJ(alt.dist)
+```
+

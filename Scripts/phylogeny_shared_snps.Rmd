@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Setup
 ## Library
-```{r}
+```{r, message=FALSE}
 library(data.table)
 library(tidyverse)
 library(pbapply)
@@ -59,7 +59,8 @@ unique_shared_snps <- function(snp.matrix, samples){
   
   # Create a list of dfs specifying samples
     for (sample in samples) {
-    data_list[[sample]] <- long_df_data %>% filter(Sample == sample)
+    data_list[[sample]] <- long_df_data %>% 
+      filter(Sample == sample)
   }
   
   # extract first df as starting point
@@ -69,7 +70,7 @@ unique_shared_snps <- function(snp.matrix, samples){
   results_list <- list()
   
   # Loop through list of dfs joining them
-  for (sample in samples[-1]) {
+  for (sample in samples) {
     matching_sites <- first.df %>%
       inner_join(data_list[[sample]], by = "Site", suffix = c("1", "2")) %>%
       filter(Value1 == Value2)
@@ -90,10 +91,18 @@ unique_shared_snps <- function(snp.matrix, samples){
     filter(Value == 1)
 
   # Find the SNPs that do not exist in any other sample
-  unique_shared.snps <- variable_snps %>%
+  shared.snps <- variable_snps %>%
     filter(!(Site %in% other_snps$Site))
   
-    return(unique_shared.snps)
+  # Only keep one entry for each shared unique snp
+  unique_shared.snps <- shared.snps %>%
+    distinct(Site, .keep_all = TRUE)
+  
+  # Filter for only site information
+  unique_shared.sites <- unique_shared.snps %>%
+    select(Site, Value1)
+  
+    return(unique_shared.sites)
 }
 ```
 
@@ -119,6 +128,8 @@ unique_shared_snps(snp.matrix30, c("ref_chandler", "tree2", "cr85", "cr10", "cr1
 unique_shared_snps(snp.matrix30, c("ref_chandler", "tree2"))
 # Shoots
 unique_shared_snps(snp.matrix30, c("cr85", "cr10", "cr13", "cr22"))
+## Shoots Subclade 1
+unique_shared_snps(snp.matrix30, c("cr13", "cr22"))
 
 # Embryos
 unique_shared_snps(snp.matrix30, c("cr21_1","cr21_2","cr2_11A","cr2_12A","cr2_13A","cr2_15A","cr2_15A1","cr2_hifi","cr2_16A","cr2_16A1","cr2_16A2","cr2_17A1","cr2_17A2","cr2_18A","cr2_18A1"))
@@ -133,15 +144,19 @@ unique_shared_snps(snp.matrix30, c("cr2_11A", "cr2_13A"))
 # Embryo Clade 2
 unique_shared_snps(snp.matrix30, c("cr2_15A","cr2_15A1","cr2_hifi","cr2_16A","cr2_16A1","cr2_16A2","cr2_17A1","cr2_17A2","cr2_18A","cr2_18A1"))
 ## Embryo Subclade 2.1
-test <- unique_shared_snps(snp.matrix30,  c("cr2_15A", "cr2_15A1", "cr2_18A"))
+unique_shared_snps(snp.matrix30,  c("cr2_15A", "cr2_15A1", "cr2_18A"))
 ### Embryo Subclade 2.1.1
 unique_shared_snps(snp.matrix30,  c("cr2_15A", "cr2_15A1"))
 ## Embryo Subclade 2.2
 unique_shared_snps(snp.matrix30, c("cr2_hifi","cr2_16A","cr2_16A1","cr2_16A2","cr2_17A1","cr2_17A2","cr2_18A1"))
 ### Embryo Subclade 2.2.1
-unique_shared_snps(snp.matrix30, c("cr2_16A","cr2_16A1","cr2_16A2","cr2_17A1","cr2_18A1"))
+unique_shared_snps(snp.matrix30, c("cr2_16A","cr2_16A1","cr2_16A2","cr2_17A1","cr2_17A2","cr2_18A1"))
 #### Embryo Subclade 2.2.1.1
+unique_shared_snps(snp.matrix30, c("cr2_16A","cr2_16A1","cr2_16A2","cr2_17A1","cr2_18A1"))
+##### Embryo Subclade 2.2.1.1.1
+unique_shared_snps(snp.matrix30, c("cr2_17A1", "cr2_16A1","cr2_16A2"))
+###### Embryo Subclade 2.2.1.1.1.1
 unique_shared_snps(snp.matrix30, c("cr2_16A", "cr2_18A1"))
-#### Embryo Subclade 2.2.1.2
+###### Embryo Subclade 2.2.1.1.1.2
 unique_shared_snps(snp.matrix30, c("cr2_16A1","cr2_16A2"))
 ```

@@ -1,0 +1,84 @@
+---
+title: "Tree"
+output: html_document
+date: "2024-07-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# libraries
+```{r}
+library(seqinr)
+library(ape)
+library(msa)
+library(ggtree)
+```
+
+# msa
+```{r}
+#5455
+file_5455 <- "~/Projects/Walnut/Mutation-Accumulation/Data/SV/sv5455.fasta"
+Sequence5455 <- readDNAStringSet(file_5455)
+selected_sequence5455 <- Sequence5455[c(1, 8, 12)]
+rc_selected_sequence5455 <- reverseComplement(selected_sequence5455)
+writeXStringSet(rc_selected_sequence5455, '~/Projects/Walnut/Mutation-Accumulation/Data/SV/5455rc.fasta')
+Sequence5455 <- readDNAStringSet("~/Projects/Walnut/Mutation-Accumulation/Data/SV/sv5455.fasta")
+notrc_sequence5455 <- Sequence5455[-c(1, 8, 12)]
+rc_sequence5455 <- readDNAStringSet('~/Projects/Walnut/Mutation-Accumulation/Data/SV/5455rc.fasta')
+combines_sequence5455 <- c(notrc_sequence5455, rc_sequence5455)
+#899
+Sequence899 <- readDNAStringSet("~/Projects/Walnut/Mutation-Accumulation/Data/SV/sv899.fasta")
+selected_sequence899 <- Sequence899[c(3, 6, 7, 8, 10, 11, 14, 15, 17)]
+rc_selected_sequence899 <- reverseComplement(selected_sequence899)
+writeXStringSet(rc_selected_sequence899, '~/Projects/Walnut/Mutation-Accumulation/Data/SV/899rc.fasta')
+Sequence899 <- readDNAStringSet("~/Projects/Walnut/Mutation-Accumulation/Data/SV/sv899.fasta")
+notrc_sequence899 <- Sequence899[-c(3, 6, 7, 8, 10, 11, 14, 15, 17)]
+rc_sequence899 <- readDNAStringSet('~/Projects/Walnut/Mutation-Accumulation/Data/SV/899rc.fasta')
+combined_sequence899 <- c(notrc_sequence899, rc_sequence899)
+#5453
+Sequence5453 <- readDNAStringSet("~/Projects/Walnut/Mutation-Accumulation/Data/SV/sv5453.fasta")
+selected_sequence5453 <- Sequence5453[c(12, 17, 5, 10, 11, 13, 8, 16, 6, 20)]
+rc_selected_sequence5453 <- reverseComplement(selected_sequence5453)
+writeXStringSet(rc_selected_sequence5453, '~/Projects/Walnut/Mutation-Accumulation/Data/SV/5453rc.fasta')
+Sequence5453 <- readDNAStringSet("~/Projects/Walnut/Mutation-Accumulation/Data/SV/sv5453.fasta")
+notrc_sequence5453 <- Sequence5453[-c(12, 17, 5, 10, 11, 13, 8, 16, 6, 20)]
+rc_sequence5453 <- readDNAStringSet('~/Projects/Walnut/Mutation-Accumulation/Data/SV/5453rc.fasta')
+combined_sequence5453 <- c(notrc_sequence5453, rc_sequence5453)
+#5454
+Sequence5454 <- readDNAStringSet("~/Projects/Walnut/Mutation-Accumulation/Data/SV/sv5454.fasta")
+selected_sequence5454 <- Sequence5454[c(2, 4, 5, 8)]
+rc_selected_sequence5454 <- reverseComplement(selected_sequence5454)
+writeXStringSet(rc_selected_sequence5454, '~/Projects/Walnut/Mutation-Accumulation/Data/SV/5454rc.fasta')
+Sequence5454 <- readDNAStringSet("~/Projects/Walnut/Mutation-Accumulation/Data/SV/sv5454.fasta")
+notrc_sequence5454 <- Sequence5454[-c(2, 4, 5, 8)]
+rc_sequence5454 <- readDNAStringSet('~/Projects/Walnut/Mutation-Accumulation/Data/SV/5454rc.fasta')
+combined_sequence5454 <- c(notrc_sequence5454, rc_sequence5454)
+
+megacombined <- c(combined_sequence899, combined_sequence5453, combined_sequence5454, combines_sequence5455)
+
+Alignment <- msa(megacombined, order = "input")
+```
+```{r}
+print(combined_sequence899@ranges@NAMES)
+```
+
+# distance matrix
+```{r}
+alignment_sequence <- msaConvert(Alignment, type="seqinr::alignment")
+distance_alignment <- dist.alignment(alignment_sequence)
+```
+
+# tree
+```{r}
+Tree <- bionj(distance_alignment)
+
+# labeling nodes by the insertion length
+ggtree(Tree, branch.length = "none") + geom_tiplab(offset = 0.3) + geom_text(aes(label=node), hjust=-.3) + geom_hilight(node = 81, fill = "gold") + geom_hilight(node = 49, fill = "gold") + geom_hilight(node = 50, fill = "gold") + geom_hilight(node = 51, fill = "gold") + geom_hilight(node = 52, fill = "gold") + geom_hilight(node = 108, fill = "gold") + geom_hilight(node = 64, fill = "purple") + geom_hilight(node = 87, fill = "purple") + geom_hilight(node = 55, fill = "purple") + geom_hilight(node = 75, fill = "green3") + geom_hilight(node = 26, fill = "green3") + geom_hilight(node = 76, fill = "green3") + geom_hilight(node = 106, fill = "green3") + geom_hilight(node = 77, fill = "green3") + geom_hilight(node = 84, fill = "green3") + geom_hilight(node = 31, fill = "green3") + geom_hilight(node = 32, fill = "green3") + geom_hilight(node = 99, fill = "green3") + geom_hilight(node = 36, fill = "green3") + geom_hilight(node = 38, fill = "green3") + geom_hilight(node = 40, fill = "green3") + geom_hilight(node = 46, fill = "green3") + geom_hilight(node = 109, fill = "cyan3") + geom_cladelabel(node = 109, label = 899, color = "cyan3", offset = 1.5, align = TRUE) + geom_cladelabel(node = 108, label = 5454, color = "gold", offset = 1.5, align = TRUE) + geom_cladelabel(node = 87, label = 5455, color = "purple", offset = 1.5, align = TRUE) + geom_cladelabel(node = 106, label = 5453, color = "green3", offset = 1.5, align = TRUE) + geom_cladelabel(node = 51, label = 5454, color = "gold", offset = 1.5, align = TRUE) + geom_cladelabel(node = 46, label = 5453, color = "green3", offset = 1.5, align = TRUE) + geom_cladelabel(node = 81, label = 5454, color = "gold", offset = 1.5, align = TRUE) + geom_cladelabel(node = 31, label = 5453, color = "green3", offset = 1.5, align = TRUE) + geom_cladelabel(node = 75, label = 5453, color = "green3", offset = 1.5, align = TRUE) + geom_cladelabel(node = 76, label = 5453, color = "green3", offset = 1.5, align = TRUE) + geom_cladelabel(node = 38, label = 5453, color = "green3", offset = 1.5, align = TRUE) + geom_cladelabel(node = 50, label = 5454, color = "gold", offset = 1.5, align = TRUE) + geom_cladelabel(node = 40, label = 5453, color = "green3", offset = 1.5, align = TRUE) + geom_cladelabel(node = 49, label = 5454, color = "gold", offset = 1.5, align = TRUE) + geom_cladelabel(node = 55, label = 5455, color = "purple", offset = 1.5, align = TRUE) + geom_cladelabel(node = 99, label = 5453, color = "green3", offset = 1.5, align = TRUE) + geom_cladelabel(node = 77, label = 5453, color = "green3", offset = 1.5, align = TRUE) + geom_cladelabel(node = 32, label = 5453, color = "green3", offset = 1.5, align = TRUE) + geom_cladelabel(node = 84, label = 5453, color = "green3", offset = 1.5, align = TRUE) + geom_cladelabel(node = 36, label = 5453, color = "green3", offset = 1.5, align = TRUE) + geom_cladelabel(node = 52, label = 5454, color = "gold", offset = 1.5, align = TRUE)
+# gold is 5454
+# purple is 5455
+# green is 5453
+```
+
+

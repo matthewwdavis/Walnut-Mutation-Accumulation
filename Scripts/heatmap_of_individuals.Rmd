@@ -100,7 +100,7 @@ dendro_plot <- function(clust.data, clusters = 3, height = 3, color = "red", qua
 
 plot_heatmap <- function(plot.table, font = "Helvetica", dendrogram = "both", Rowv = TRUE, trace = "none", color_num = 9, color_pal = "Reds", 
                          distfun = dist, hclustfun = hclust,  margin = c(5, 5), 
-                         key = TRUE, keysize = 1.5, cexRow = 0.6, cexCol = 0.6, density.info = "none", denscol = NULL, title = NULL) {
+                         key = TRUE, keysize = 1.5, key_title= NA, cexRow = 0.5, cexCol = 0.5, row_space = 0.5, col_space = 0.5,density.info = "none", denscol = NULL, title = NULL) {
   
   # Convert data into a matrix
   select.table <- plot.table %>%
@@ -160,11 +160,15 @@ plot_heatmap <- function(plot.table, font = "Helvetica", dendrogram = "both", Ro
             margin = margin, 
             key = key, 
             keysize = keysize, 
+            key.title = key_title,
             cexRow = cexRow, 
-            cexCol = cexCol, 
+            cexCol = cexCol,
+            offsetRow = row_space,
+            offsetCol = col_space,
             density.info = density.info, 
             denscol = denscol, 
             main = title)
+  
 }
 
 ```
@@ -315,6 +319,40 @@ plot_heatmap(chr12_plot.table30)
 plot_heatmap(chr16_plot.table20)
 plot_heatmap(chr16_plot.table30)
 ```
+
+## Print Heatmaps with dendrograms
+```{r, eval=FALSE}
+png(file = "./Figures/Heatmaps/all_individual_dn_snps_q30.png", width = 3, height = 3, units = "in", res = 600)
+par(mar = c(.1, .1, .1, .1), oma = c(.1, .1, .1, .1))
+plot_heatmap(plot.table30, margin = c(3,3), key= F, row_space = -.4, col_space = -.4)
+dev.off()
+
+png(file = "./Figures/Heatmaps/chr4_dn_snps_q30.png", width = 3, height = 3, units = "in", res = 600)
+par(mar = c(.1, .1, .1, .1), oma = c(.1, .1, .1, .1))
+plot_heatmap(chr4_plot.table30, margin = c(3,3), key= F, row_space = -.4, col_space = -.4)
+dev.off()
+
+png(file = "./Figures/Heatmaps/chr9_dn_snps_q30.png", width = 3, height = 3, units = "in", res = 600)
+par(mar = c(.1, .1, .1, .1), oma = c(.1, .1, .1, .1))
+plot_heatmap(chr9_plot.table30, margin = c(3,3), key= F, row_space = -.4, col_space = -.4)
+dev.off()
+
+png(file = "./Figures/Heatmaps/chr11_dn_snps_q30.png", width = 3, height = 3, units = "in", res = 600)
+par(mar = c(.1, .1, .1, .1), oma = c(.1, .1, .1, .1))
+plot_heatmap(chr11_plot.table30, margin = c(3,3), key= F, row_space = -.4, col_space = -.4)
+dev.off()
+
+png(file = "./Figures/Heatmaps/chr12_dn_snps_q30.png", width = 3, height = 3, units = "in", res = 600)
+par(mar = c(.1, .1, .1, .1), oma = c(.1, .1, .1, .1))
+plot_heatmap(chr12_plot.table30, margin = c(3,3), key= F, row_space = -.4, col_space = -.4)
+dev.off()
+
+png(file = "./Figures/Heatmaps/chr16_dn_snps_q30.png", width = 3, height = 3, units = "in", res = 600)
+par(mar = c(.1, .1, .1, .1), oma = c(.1, .1, .1, .1))
+plot_heatmap(chr16_plot.table30, margin = c(3,3), key= F, row_space = -.4, col_space = -.4)
+dev.off()
+```
+
 
 ## Set levels for plotting
 ```{r}
