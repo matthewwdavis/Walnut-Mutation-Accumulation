@@ -1,0 +1,83 @@
+---
+title: "snp_vaf_analysis"
+author: "Matthew Davis"
+date: "2024-11-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(data.table)
+```
+
+## Functions
+```{r}
+vaf_density_plot <- function(vcf_data, culturetype = c("tree", "shoot", "embryo"), qualfilt = 25, dpfilt = 10, mapp = TRUE, snp = TRUE, linewide = 1, legendsize = .5, legendpos = "bottom", treecolor = "darkseagreen4", shootcolor = "darkseagreen2", embryocolor = "goldenrod1"){
+  
+  plot <- vcf_data %>%
+    filter(CULTURETYPE %in% culturetype,
+           medQUAL >= qualfilt, DPREAL >= dpfilt, MAPP == mapp, SNP == snp) %>%
+    ggplot(aes(x = VAFREAL, color = CULTURETYPE)) +
+    geom_density(linewidth = linewide) +
+    labs(x = "Variant Allele Frequency", y = "Density") +
+    scale_color_manual(values=c("tree" = treecolor, "shoot" = shootcolor, "embryo" = embryocolor),
+                       labels = c("tree" = "Tree", "shoot" = "Shoot", "embryo" = "Embryo"),
+                       guide = guide_legend(title = NULL)
+    ) +
+    ylim(0, 7) +
+    xlim(0, 1) +
+    theme_classic(base_size = 6) + 
+    theme(legend.position = legendpos,
+          legend.key.size = unit(legendsize, "cm"))
+  
+  return(plot)
+}
+```
+
+
+## Read in mutation data
+```{r}
+mutations <- fread("./Data/VCFs/Parsed/mutations.tsv")
+```
+
+# Plot
+## Set levels
+```{r}
+levels <- c("tree", "shoot", "embryo")
+
+mutations$CULTURETYPE <- factor(mutations$CULTURETYPE, levels = levels)
+```
+
+## Look at VAF distributions
+```{r}
+vaf_density_plot(mutations, legendsize = 0.2, legendpos = c(0.85,0.85))
+ggsave("./Figures/VAF_Analysis/vaf_density_all.pdf", height = 1.05, width = 1.75)
+ggsave("./Figures/VAF_Analysis/vaf_density_all.png", height = 1.05, width = 1.75)
+
+vaf_density_plot(mutations, culturetype = c("tree", "embryo"), legendsize = 0.2) +
+  geom_vline(xintercept = 0.5, linetype = "dashed")
+ggsave("./Figures/VAF_Analysis/vaf_density_tree_embryo.pdf", height = 2, width = 3)
+ggsave("./Figures/VAF_Analysis/vaf_density_tree_embryo.png", height = 2, width = 3)
+
+vaf_density_plot(mutations, culturetype = c("shoot", "embryo"),legendsize = 0.2) +
+  geom_vline(xintercept = 0.5, linetype = "dashed")
+ggsave("./Figures/VAF_Analysis/vaf_density_shoot_embryo.pdf", height = 2, width = 3)
+ggsave("./Figures/VAF_Analysis/vaf_density_shoot_embryo.png", height = 2, width = 3)
+
+vaf_density_plot(mutations, culturetype = c("tree", "shoot"),legendsize = 0.2) +
+  geom_vline(xintercept = 0.5, linetype = "dashed")
+ggsave("./Figures/VAF_Analysis/vaf_density_tree_shoot.pdf", height = 2, width = 3)
+ggsave("./Figures/VAF_Analysis/vaf_density_tree_shoot.png", height = 2, width = 3)
+
+vaf_density_plot(mutations, culturetype = c("embryo"),legendsize = 0.2) +
+  geom_vline(xintercept = 0.5, linetype = "dashed")
+ggsave("./Figures/VAF_Analysis/vaf_density_embryo.pdf", height = 2, width = 3)
+ggsave("./Figures/VAF_Analysis/vaf_density_embryo.png", height = 2, width = 3)
+```
+

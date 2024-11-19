@@ -1,0 +1,236 @@
+---
+title: "telomeres_all_samples"
+author: "Matthew Davis"
+date: "2024-11-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Library
+```{r, message=FALSE}
+library(data.table)
+library(tidyverse)
+```
+
+## Functions
+```{r}
+kmc_tels <- function(path, source, bp = 1){
+  
+  kmers <- fread(path)
+  
+  # KMC seems to only count in one direction, it does not have separate entries for complimentary sequenced. I needed to check each sequence to see if this was the sequence, or if its compliment was the one that was counted.
+  tel_kmers <- kmers %>%
+    rename("KMER" = "V1", "COUNT" = "V2") %>%
+    mutate(SOURCE = source) %>%
+    arrange(desc(COUNT)) %>%
+    filter(KMER == "CCCTAAA") %>%
+    #filter(KMER == "CCCTAAA" | KMER == "AAATCCC") %>%
+    # filter(KMER == "CCCTAAA" | KMER == "CCTAAAC" | KMER == "CTAAACC" | KMER == "TAAACCC" | KMER == "AAACCCT" | KMER == "AACCCTA" | KMER == "ACCCTAA" |
+    #          KMER == "AAATCCC" | KMER == "AATCCCA" | KMER == "ATCCCAA" | KMER == "TCCCAAA" | KMER == "CCCAAAT" | KMER == "CCAAATC" | KMER == "CAAATCC") %>%
+    mutate(TOTAL_TEL = sum(COUNT)) %>%
+    mutate(TEL_BP = TOTAL_TEL*7) %>%
+    mutate(BP = bp) %>%
+    mutate(NORM_TEL = TEL_BP/BP) %>%
+    pivot_wider(names_from = KMER, values_from = COUNT)
+  
+  return(tel_kmers)
+}
+```
+
+## Calculate mean of bp length for paired end reads
+```{r}
+bp_em1 <- mean(c(28904600661, 28640448817))
+bp_em2 <- mean(c(25813005495, 25577847923))
+bp_11a <- mean(c(27561976968, 27382881567))
+bp_12a <- mean(c(29647761068, 29373582161))
+bp_13a <- mean(c(39270975454, 39011619325))
+bp_15a <- mean(c(36265369459, 35901413684))
+bp_15a1 <- mean(c(27696446689, 27429710828))
+bp_16a <- mean(c(37280712768, 36897474820))
+bp_16a1 <- mean(c(36551770121, 36185351819))
+bp_16a2 <- mean(c(27621458033, 27247480072))
+bp_17a1 <- mean(c(42343681450, 42234422208))
+bp_17a2 <- mean(c(14439527393, 14281148716))
+bp_18a <- mean(c(39396691876, 39043800398))
+bp_18a1 <- mean(c(46112666189, 45545996032))
+
+bp_cr85 <- mean(c(43620200413, 42922487979))
+bp_cr10 <- mean(c(42054991590, 41107672689))
+bp_cr13 <- mean(c(42445551538, 41811938393))
+bp_cr22 <- mean(c(43879551902, 43074039731))
+```
+
+
+## Read in telomere counts
+```{r}
+# hifi
+ref <- kmc_tels("./Data/KMC/ref_chandler_hifi_7mer.txt", "ref_chandler", 26611245231) 
+tree2 <- kmc_tels("./Data/KMC/term_chandler_hifi_7mer.txt", "tree2", 40655690976)
+cr2_hifi <- kmc_tels("./Data/KMC/cr2_hifi_7mer.txt", "cr2_hifi", 26567382075)
+
+# short read embryos
+cr2_em1 <- kmc_tels("./Data/KMC/CR21-1_S7_7mer.txt", "cr21_1", bp = bp_em1)
+cr2_em2 <- kmc_tels("./Data/KMC/CR21-2_S8_7mer.txt", "cr21_2", bp = bp_em2)
+cr2_11a <- kmc_tels("./Data/KMC/11A_I2_S157_7mer.txt", "cr2_11A", bp = bp_11a)
+cr2_12a <- kmc_tels("./Data/KMC/12A_I2_S158_7mer.txt", "cr2_12A", bp = bp_12a)
+cr2_13a <- kmc_tels("./Data/KMC/13A_I1_S159_7mer.txt", "cr2_13A", bp = bp_13a)
+cr2_15a <- kmc_tels("./Data/KMC/15A_I1_S160_7mer.txt", "cr2_15A", bp = bp_15a)
+cr2_15a1 <- kmc_tels("./Data/KMC/15A1_I1_S161_7mer.txt", "cr2_15A1", bp = bp_15a1)
+cr2_16a <- kmc_tels("./Data/KMC/16A_I2_S162_7mer.txt", "cr2_16A", bp = bp_16a)
+cr2_16a1 <- kmc_tels("./Data/KMC/16A1_I1_S151_7mer.txt", "cr2_16A1", bp = bp_16a1)
+cr2_16a2 <- kmc_tels("./Data/KMC/16A2_I2_S152_7mer.txt", "cr2_16A2", bp = bp_16a2)
+cr2_17a1 <- kmc_tels("./Data/KMC/17A1_I2_S153_7mer.txt", "cr2_17A1", bp = bp_17a1)
+cr2_17a2 <- kmc_tels("./Data/KMC/17A2_I2_S154_7mer.txt", "cr2_17A2", bp = bp_17a2)
+cr2_18a <- kmc_tels("./Data/KMC/18A_I2_S155_7mer.txt", "cr2_18A", bp = bp_18a)
+cr2_18a1 <- kmc_tels("./Data/KMC/18A1_I1_S156_7mer.txt", "cr2_18A1", bp = bp_18a1)
+
+# short read shoots
+cr85 <- kmc_tels("./Data/KMC/CR85_S28_7mer.txt", "cr85", bp = bp_cr85)
+cr10 <- kmc_tels("./Data/KMC/CR10_S29_7mer.txt", "cr10", bp = bp_cr10)
+cr13 <- kmc_tels("./Data/KMC/CR13_S30_7mer.txt", "cr13", bp = bp_cr13)
+cr22 <- kmc_tels("./Data/KMC/CR22_S31_7mer.txt", "cr22", bp = bp_cr22)
+```
+
+# Prepare data
+## Combine data
+```{r}
+all_tel <- rbind(ref, tree2, cr2_hifi, cr2_em1, cr2_em2, cr2_11a, cr2_12a,
+                 cr2_13a, cr2_15a, cr2_15a1, cr2_16a, cr2_16a1, cr2_16a2,
+                 cr2_17a1, cr2_17a2, cr2_18a, cr2_18a1, cr85, cr10, cr13,
+                 cr22)
+all_tel
+```
+
+## Set levels and add types
+```{r}
+levels <- c("ref_chandler", "tree2", "cr2_hifi",
+            "cr21_1", "cr21_2", "cr2_11A", "cr2_12A",
+            "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A",
+            "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
+            "cr2_18A", "cr2_18A1",
+            "cr85", "cr10", "cr13", "cr22")
+
+all_tel$SOURCE <- factor(all_tel$SOURCE, levels = levels)
+
+all_tel <- all_tel %>%
+  mutate(TYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    SOURCE %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "Short Read Embryo",
+    SOURCE %in% c("cr85", "cr10", "cr13", "cr22") ~ "Short Read Shoot")) %>%
+  mutate(TYPE = factor(TYPE, levels = c("HiFi", "Short Read Embryo", "Short Read Shoot")))
+
+all_tel <- all_tel %>%
+  mutate(CULTURETYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2") ~ "tree",
+    SOURCE %in% c("cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A",
+                  "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
+                  "cr2_18A", "cr2_18A1") ~ "embryo",
+    SOURCE %in% c("cr85", "cr10", "cr13", "cr22") ~ "shoot")) %>%
+  mutate(SEQTYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "long_read",
+    SOURCE %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", 
+                  "cr2_16A", "cr2_16A1","cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A",
+                  "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ "short_read"))
+```
+
+## Add average normalized length per culture type
+```{r}
+mean_tel <- all_tel %>%
+  group_by(CULTURETYPE) %>%
+  summarise(
+    ALL_TEL_COUNT = sum(TOTAL_TEL),
+    ALL_TEL_BP = sum(TEL_BP),
+    ALL_BP = sum(BP),
+    NORM_TEL_COUNT = (ALL_TEL_COUNT/ALL_BP),
+    NORM_TEL_BP = (ALL_TEL_BP/ALL_BP)
+  )
+
+levels <- c("tree", "embryo", "shoot")
+
+mean_tel$CULTURETYPE <- factor(mean_tel$CULTURETYPE, levels = levels)
+```
+
+# Plot data
+## Bar plot
+```{r}
+all_tel %>%
+  ggplot(aes(x = SOURCE, y = NORM_TEL, fill = CULTURETYPE)) +
+  geom_bar(stat = "identity", width = .9) +
+  facet_grid(~TYPE, scales = "free", space = "free") +
+  labs(y = "Normalized telomere counts") +
+  scale_fill_manual(values=c("tree" = "darkseagreen4", "shoot" = "darkseagreen", "embryo" = "goldenrod1"),
+                    labels = c("tree" = "Tree", "shoot" = "Shoot", "embryo" = "Embryo")) +
+  scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
+                              "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
+                              "cr2_11A" = "11A", "cr2_12A" = "12A", "cr2_13A" = "13A",
+                              "cr2_15A" = "15A", "cr2_15A1" = "15A1", "cr2_16A" = "16A",
+                              "cr2_16A1" = "16A1", "cr2_16A2" = "16A2", "cr2_17A1" = "17A1",
+                              "cr2_17A2" = "17A2", "cr2_18A" = "18A", "cr2_18A1" = "18A1",
+                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
+                              "cr22" = "Chandler '22")) +
+  theme_classic( base_size = 6) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        legend.title = element_blank(),
+        legend.position = "bottom",
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.key.size = unit(0.2, "cm"))
+ggsave("./Figures/Telomeres_Reads/all_telomere_from_read_bar.pdf", height = 2, width = 4)
+ggsave("./Figures/Telomeres_Reads/all_telomere_from_read_bar.png", height = 2, width = 4)
+```
+
+## Scatterplot
+```{r}
+all_tel %>%
+  ggplot(aes(x = SOURCE, y = NORM_TEL, color = CULTURETYPE)) +
+  geom_point(size = 2.5) +
+  facet_grid(~TYPE, scales = "free", space = "free") +
+  labs(y = "Normalized telomere counts") +
+  scale_color_manual(values=c("tree" = "darkseagreen4", "shoot" = "darkseagreen", "embryo" = "goldenrod1"),
+                     labels = c("tree" = "Tree", "shoot" = "Shoot", "embryo" = "Embryo")) +
+  scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
+                              "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
+                              "cr2_11A" = "11A", "cr2_12A" = "12A", "cr2_13A" = "13A",
+                              "cr2_15A" = "15A", "cr2_15A1" = "15A1", "cr2_16A" = "16A",
+                              "cr2_16A1" = "16A1", "cr2_16A2" = "16A2", "cr2_17A1" = "17A1",
+                              "cr2_17A2" = "17A2", "cr2_18A" = "18A", "cr2_18A1" = "18A1",
+                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
+                              "cr22" = "Chandler '22")) +
+  theme_classic( base_size = 6) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        legend.title = element_blank(),
+        legend.position = "bottom",
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.key.size = unit(0.2, "cm"))
+ggsave("./Figures/Telomeres_Reads/all_telomere_from_read_point.pdf", height = 2, width = 4)
+ggsave("./Figures/Telomeres_Reads/all_telomere_from_read_point.png", height = 2, width = 4)
+```
+
+## Plot Means
+```{r}
+mean_tel %>%
+  ggplot(aes(x = CULTURETYPE, y = NORM_TEL_COUNT, fill = CULTURETYPE)) +
+  geom_bar(stat = "identity", width = .9) +
+  labs(y = "Average normalized telomere counts") +
+  scale_fill_manual(values=c("tree" = "darkseagreen4", "shoot" = "darkseagreen", "embryo" = "goldenrod1"),
+                    labels = c("tree" = "Tree", "shoot" = "Shoot", "embryo" = "Embryo")) +
+  theme_classic( base_size = 6) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        legend.title = element_blank(),
+        legend.position = "bottom",
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        legend.key.size = unit(0.2, "cm"))
+ggsave("./Figures/Telomeres_Reads/means_telomere_from_read_point.pdf", height = 3, width = 2.5)
+ggsave("./Figures/Telomeres_Reads/means_telomere_from_read_point.png", height = 3, width = 2.5)
+```
+

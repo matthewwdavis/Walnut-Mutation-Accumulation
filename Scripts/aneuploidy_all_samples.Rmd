@@ -1,0 +1,155 @@
+---
+title: "aneuploidy_all_samples"
+author: "Matthew Davis"
+date: "2024-11-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r, message=FALSE}
+library(data.table)
+library(tidyverse)
+library(ggpubr)
+```
+
+## Functions
+```{r}
+read.ANC <- function(path){
+  
+  snps <- fread(path)
+  
+  snps$SNP <- nchar(snps$REF) == 1 & nchar(snps$ALT) == 1
+  
+  het_snps <- snps %>%
+    rename("SOURCE" = "Source") %>%
+    filter(SNP == TRUE)
+  
+  het_snps <- het_snps %>%
+    group_by(SOURCE) %>%
+    mutate(DPNORM = log(DP / mean(DP, na.rm = TRUE))) %>%
+    ungroup()
+  
+  small_snps <- het_snps %>%
+    select(CHROM, QUAL, DPNORM, SOURCE)
+  
+  return(small_snps)
+}
+```
+
+## Read in data
+```{r}
+##dn_mutations <- fread("./Data/VCFs/Parsed/mutations.tsv")
+
+chr1 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_1.vcf")
+chr2 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_2.vcf")
+chr3 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_3.vcf")
+chr4 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_4.vcf")
+chr5 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_5.vcf")
+chr6 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_6.vcf")
+chr7 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_7.vcf")
+chr8 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_8.vcf")
+chr9 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_9.vcf")
+chr10 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_10.vcf")
+chr11 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_11.vcf")
+chr12 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_12.vcf")
+chr13 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_13.vcf")
+chr14 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_14.vcf")
+chr15 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_15.vcf")
+chr16 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_16.vcf")
+
+an_snps <- rbind(chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16)
+rm(chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16)
+```
+
+# Prepare dat
+## Add groups for duplciations and homozygous regions
+```{r}
+ # dn_mutations <- dn_mutations %>%
+ #  mutate(Dup_Group = case_when(
+ #    CHROM == 4 ~ "chr_4",
+ #    CHROM == 9 ~ "chr_9",
+ #    TRUE ~ "Other")) %>%
+ #  mutate(Hom_Group = case_when(
+ #    CHROM == 11 ~ "chr_11",
+ #    CHROM == 12 ~ "chr_12",
+ #    CHROM == 16 ~ "chr_16",
+ #    TRUE ~ "Other"))
+
+ an_snps <- an_snps %>%
+  mutate(Dup_Group = case_when(
+    CHROM == 4 ~ "chr_4",
+    CHROM == 9 ~ "chr_9",
+    TRUE ~ "Other")) %>%
+  mutate(Hom_Group = case_when(
+    CHROM == 11 ~ "chr_11",
+    CHROM == 12 ~ "chr_12",
+    CHROM == 16 ~ "chr_16",
+    TRUE ~ "Other"))
+```
+
+## SEt comparisons to make
+```{r}
+comparisons <- list(c("chr_4", "Other"), c("chr_9", "Other"))
+```
+
+## Set levels
+```{r}
+
+grp_levels <- c("Other", "chr_4", "chr_9")
+# dn_mutations$Dup_Group <- factor(dn_mutations$Dup_Group, levels = grp_levels)
+
+an_snps$Dup_Group <- factor(an_snps$Dup_Group, levels = grp_levels)
+```
+
+
+# Plot
+## Depth
+```{r}
+# Ancestral SNPs did not solve
+
+an_snps %>%
+  filter(SOURCE %in% c("cr2_18A1", "cr2_16A")) %>%
+  #filter(QUAL >= 30) %>%
+  ggplot(aes(x = Dup_Group, y = DPNORM, fill = Dup_Group)) + 
+  geom_boxplot() +
+  facet_grid(~ SOURCE, scales = "free", space = "free") +
+  scale_fill_manual(values = c("chr_4" = "firebrick", "chr_9" = "firebrick", "Other" = "gray90")) +
+  scale_x_discrete(labels = c("Other" = "Others", "chr_4" = "4", "chr_9" = "9")) +
+  labs(x = "Chromosome", y = "Normalized Depth") +
+  stat_compare_means(method = "t.test", comparisons = comparisons, label = "p.signif", bracket.size = .3, size = 2) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = "none",
+        axis.title = element_text(face = "bold"),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"))
+
+## I think I need to use ancestral snps
+
+dn_mutations %>%
+  filter(SOURCE %in% c("cr2_18A1", "cr2_16A")) %>%
+  ggplot(aes(x = Dup_Group, y = DPNORM_REAL, fill = Dup_Group)) + 
+  geom_boxplot() +
+  facet_grid(~ SOURCE, scales = "free", space = "free") +
+  scale_fill_manual(values = c("chr_4" = "firebrick", "chr_9" = "firebrick", "Other" = "gray90")) +
+  scale_x_discrete(labels = c("Other" = "Others", "chr_4" = "4", "chr_9" = "9")) +
+  labs(x = "Chromosome", y = "Normalized Depth") +
+  stat_compare_means(method = "t.test", comparisons = comparisons, label = "p.signif", bracket.size = .3, size = 2) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = "none",
+        axis.title = element_text(face = "bold"),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"))
+
+dn_mutations %>%
+  filter(CHROM == 4 & CULTURETYPE == "embryo") %>%
+  ggplot(aes(x = SOURCE, y = DPNORM_REAL)) +
+  geom_boxplot()+
+  facet_grid(~ CULTURETYPE, scales = "free", space = "free") +
+  theme_classic()
+```
+

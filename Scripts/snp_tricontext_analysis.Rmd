@@ -1,0 +1,64 @@
+---
+title: "snp_tricontext_analysis"
+author: "Matthew Davis"
+date: "2024-11-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r, message=FALSE}
+library(polymorphology2)
+library(tidyverse)
+```
+
+## Functions
+```{r}
+fasta_trimer_freq<-function(fasta, stop = NULL){
+  fasta_windows<-rbindlist(lapply(1:length(fasta), function(i){
+    data.table(CHROM=names(fasta)[i], START=1, STOP=length(fasta[[i]]), ID=i)
+    data.table(CHROM=names(fasta)[i], START=1, STOP=ifelse(is.null(stop), length(fasta[[i]]), stop), ID=i)
+    
+  }))[!is.na(CHROM)]
+  trimer_freq<-Nmerfrequency(features = fasta_windows, fasta=fasta, Nmer = 3, mode="counts")
+  trimer_freq<-rbindlist(lapply(1:ncol(trimer_freq), function(i){
+    data.table(TRI=names(trimer_freq)[i], N=sum(trimer_freq[[i]]))
+  }))
+  
+  trimer_freq<-trimer_freq[!grepl("ID|N|V", TRI)]
+}
+```
+
+## Read in SNPs
+```{r}
+mutations <- fread("./Data/VCFs/Parsed/mutations.tsv")
+```
+
+# Prepare data
+## Filter for SNPs
+```{r}
+snps <- mutations %>%
+  filter(SNP == TRUE, MAPP == TRUE, QUAL >= 25, DPREAL >= 10)
+```
+
+## Generate trimer frequency
+```{r}
+# Need to figure out if this is necessary
+#trimer_freq <- fasta_trimer_freq("../Data/Fastas/ref_chandler_primary_default_scaffold.fasta", stop=1e6)
+```
+
+
+# Plotting data
+## Polymorphlolgy plotting funciton
+```{r}
+plot_tricontexts(snps[CULTURETYPE=="tree",.(UNIQUE, TRICONTEXT)]$TRICONTEXT, full=T,  x_text = F)
+ggsave("./Figures/Tricontext/tree_tricontext.pdf", height = .75, width = 2.5)
+plot_tricontexts(snps[CULTURETYPE=="embryo",.(UNIQUE, TRICONTEXT)]$TRICONTEXT, full=T, x_text = F)
+ggsave("./Figures/Tricontext/embryo_tricontext.pdf", height = .75, width = 2.5)
+plot_tricontexts(snps[CULTURETYPE=="shoot",.(UNIQUE, TRICONTEXT)]$TRICONTEXT, full=T,  x_text = F)
+ggsave("./Figures/Tricontext/shoot_tricontext.pdf", height = .75, width = 2.5)
+```

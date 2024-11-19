@@ -1,0 +1,237 @@
+---
+title: "sv_combohap"
+author: "Matthew Davis"
+date: "2024-11-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Setup
+## Libraries
+```{r, message=FALSE}
+library(data.table)
+library(tidyverse)
+library(polymorphology2)
+library(ggVennDiagram)
+```
+
+## Functions
+```{r}
+read.PBSV <- function(data_path){
+  
+  sv.vcf <- fread(data_path, skip = "#CHROM")
+  
+  sv.vcf <- sv.vcf %>%
+    rename("#CHROM" = "CHROM", "UnnamedSample" = "SAMPLE")
+  
+  sv.vcf <- sv.vcf %>%
+    separate(SAMPLE, c("GT", "AD", "DP", "SAC"), sep = ":", fill = "right") %>%
+    separate(AD, c("REFDP", "ALTDP")) %>%
+    mutate(DP = as.numeric(DP),
+           REFDP = as.numeric(REFDP),
+           ALTDP = as.numeric(ALTDP),
+           DPREAL = (REFDP + ALTDP),
+           VAF = (ALTDP/DPREAL),
+           SVTYPE = str_extract(INFO, "(?<=SVTYPE=)[^;]+"),
+           END = str_extract(INFO, "(?<=END=)[^;]+"),
+           SVLEN = str_extract(INFO, "(?<=SVLEN=)[^;]+"),
+           CIPOS = str_extract(INFO, "(?<=CIPOS=)[^;]+"),
+           MATEID = str_extract(INFO, "(?<=MATEID=)[^;]+"),
+           SVLEN = as.numeric(SVLEN)) %>%
+    dplyr::select(c(CHROM, ID, POS, END, SVTYPE, SVLEN,  QUAL, FILTER, GT, DP, DPREAL, REFDP, ALTDP, VAF, SAC, CIPOS, MATEID, REF, ALT))
+  
+  return(sv.vcf)
+}
+
+rename_chr_haps <- function(pbsv){
+  
+  pbsv$CHROM <- gsub("NC_0499(..).1_RagTag_(hap.)", "\\1_\\2", pbsv$CHROM)
+  
+  pbsv <- pbsv %>% 
+    filter(!grepl("h1t", CHROM)) %>%
+    filter(!grepl("h2t", CHROM)) %>%
+    filter(!grepl("NW_", CHROM))
+  
+  return(pbsv)
+}
+
+```
+
+## Read in data
+```{r}
+cr2sv <- read.PBSV("./Data/VCFs/SV_VCF/cr2_combohap.sv.vcf")
+refsv <- read.PBSV("./Data/VCFs/SV_VCF/ref_chandler_combohap.sv.vcf")
+termsv <- read.PBSV("./Data/VCFs/SV_VCF/term_chandler_combohap.sv.vcf")
+```
+
+# Filtering data
+## Select for chromosomes and rename
+```{r}
+cr2sv <- rename_chr_haps(cr2sv)
+refsv <- rename_chr_haps(refsv)
+termsv <- rename_chr_haps(termsv)
+```
+
+## Create UNIQUE column
+```{r}
+cr2sv <- cr2sv %>%
+  mutate(UNIQUE = paste(CHROM,POS, sep = "_"))
+
+refsv <- refsv %>%
+  mutate(UNIQUE = paste(CHROM,POS, sep = "_"))
+
+termsv <- termsv %>%
+  mutate(UNIQUE = paste(CHROM,POS, sep = "_"))
+```
+
+## Look at overlap of structural variants
+```{r}
+## Make a list
+sv_list <- list(
+    cr2 = cr2sv$UNIQUE,
+    ref = refsv$UNIQUE,
+    term = termsv$UNIQUE
+)
+
+# Create the Venn diagram
+ggVennDiagram(sv_list)
+```
+
+## Find denovo sites in cr2
+```{r}
+dn_cr2sv <- cr2sv %>%
+  anti_join(refsv, by = "UNIQUE") %>%
+  anti_join(termsv, by = "UNIQUE")
+```
+
+# Look at distributions
+## VAF density
+```{r}
+# All VAF
+dn_cr2sv %>%
+  ggplot(aes(x = VAF)) +
+  geom_density() +
+  theme_classic(base_size = 6)
+
+# VAF by type
+dn_cr2sv %>%
+  ggplot(aes(x = VAF, color = SVTYPE)) +
+  geom_density(linewidth = 1.5) +
+  theme_classic(base_size = 6)
+
+# Only deletions and insertions
+dn_cr2sv %>%
+  filter(SVTYPE %in% c("INS", "DEL")) %>%
+  ggplot(aes(x = VAF, color = SVTYPE)) +
+  geom_density(linewidth = 1.5) +
+  theme_classic(base_size = 6)
+```
+
+## Distributions of lengths
+```{r}
+# All lengths
+dn_cr2sv %>%
+  ggplot(aes(x = SVLEN)) +
+  geom_density() +
+  theme_classic(base_size = 6)
+
+# By SVTYPE
+dn_cr2sv %>%
+  ggplot(aes(x = abs(SVLEN), color = SVTYPE)) +
+  geom_density(linewidth = 1.5) +
+  xlim(0,1000) +
+  theme_classic(base_size = 6)
+
+# Vast majority of SVs are very small. A filter of >= 50 drops the SV count in half
+
+dn_cr2sv %>% 
+  filter(abs(SVLEN) >= 50) %>%
+  ggplot(aes(x = abs(SVLEN), color = SVTYPE)) +
+  geom_density(linewidth = 1.5) +
+  theme_classic(base_size = 6)
+
+# Looking at the 5453 BP Insertion
+dn_cr2sv %>% 
+  filter(abs(SVLEN) >= 4000 & abs(SVLEN) <= 6000) %>%
+  ggplot(aes(x = abs(SVLEN), fill = SVTYPE)) +
+  geom_histogram(alpha = .5) +
+  scale_x_continuous(breaks = seq(4000, 6000, by = 100)) +
+  theme_classic(base_size = 6)
+
+# Shrink the region
+dn_cr2sv %>% 
+  filter(abs(SVLEN) >= 5450 & abs(SVLEN) <= 5460) %>%
+  ggplot(aes(x = abs(SVLEN), fill = SVTYPE)) +
+  geom_histogram(binwidth = 5, alpha = .5) +
+  scale_x_continuous(breaks = seq(5450, 5460, by = 1)) +
+  theme_classic(base_size = 6)
+```
+## which length occurs the most often?
+```{r}
+# Look at SV >= 500. 5453 is still by far the most common
+dn_cr2sv %>%
+  group_by(SVLEN_abs = abs(SVLEN)) %>%  # Rename the grouping column
+  summarise(Count = n()) %>%            # Count occurrences
+  arrange(desc(Count)) %>%               # Arrange by count
+  filter(SVLEN_abs >= 500)               # Filter based on the new column name
+
+
+# Look at separation of DEL and INS
+dn_cr2sv %>%
+  group_by(SVLEN) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count)) %>%
+  filter(SVLEN >= 500 | SVLEN <= -500)
+
+# Zoom into the 5453 region
+dn_cr2sv %>%
+  group_by(SVLEN) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count)) %>%
+  filter(SVLEN >= 5450 & SVLEN <= 5460)
+```
+
+## Look at VAF of the 5453 bp
+```{r}
+dn_cr2sv %>%
+  filter(SVLEN >= 5450 & SVLEN <= 5460) %>% 
+  ggplot(aes(x = VAF)) +
+  geom_histogram() +
+  coord_cartesian(xlim = c(0.0, 1.0)) +
+  theme_classic()
+
+
+dn_cr2sv %>%
+  filter(SVLEN == 5453) %>% 
+  ggplot(aes(x = VAF, fill = ifelse(VAF == 1.0, "red", "grey50"))) +
+  geom_histogram(bins = 10, show.legend = FALSE) +
+  scale_fill_identity() +
+  labs(x = "Variant Allele Frequency", y = "Number of Variants") + 
+  coord_cartesian(xlim = c(0.0, 1.0)) +
+  theme_classic(base_size = 6)
+ggsave("./Figures/VAF_Analysis/vaf_ins_5453_high.pdf", height = 1, width = 2)
+ggsave("./Figures/VAF_Analysis/vaf_ins_5453_high.png", height = 1, width = 2)
+
+dn_cr2sv %>%
+  filter(SVLEN == 5453) %>% 
+  ggplot(aes(x = VAF, fill = ifelse(VAF < 1.0, "red", "grey50"))) +
+  geom_histogram(bins = 10, show.legend = FALSE) +
+  scale_fill_identity() +
+  labs(x = "Variant Allele Frequency", y = "Number of Variants") + 
+  coord_cartesian(xlim = c(0.0, 1.0)) +
+  theme_classic(base_size = 6)
+ggsave("./Figures/VAF_Analysis/vaf_ins_5453_low.pdf", height = 1, width = 2)
+ggsave("./Figures/VAF_Analysis/vaf_ins_5453_low.png", height = 1, width = 2)
+```
+
+# Regions to extract for IGV
+```{r}
+dn_cr2sv %>%
+  filter(SVLEN == 5453 & VAF == 1.0 & DP >= 10) 
+
+dn_cr2sv %>%
+  filter(SVLEN == 5453 & VAF >=0.2 & VAF <= 0.3 & DP >= 10)
+```
+

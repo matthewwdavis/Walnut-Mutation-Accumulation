@@ -1,0 +1,150 @@
+---
+title: "snp_pca_analysis"
+author: "Matthew Davis"
+date: "2024-11-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(data.table)
+```
+
+## Functions
+```{r}
+snp_matrix <- function(mutations){
+  
+  # Create a data frame with occurrences for each combination of UNIQUE and SOURCE
+  mutation_occur <- mutations %>%
+    count(UNIQUE, SOURCE) 
+  
+  # Pivot the data to wide format
+  mutations_matrix <- mutation_occur %>%
+    pivot_wider(names_from = UNIQUE, values_from = n, values_fill = list(n = 0))
+  
+  # Remove the SOURCE column and set row names
+  matrix <- mutations_matrix %>%
+    column_to_rownames("SOURCE")
+  
+  return(matrix)
+}
+```
+
+## Read in data
+```{r}
+mutations <- fread("./Data/VCFs/Parsed/mutations.tsv")
+```
+
+# Prepare data
+## Filter for SNPs
+```{r}
+snps <- mutations %>%
+  filter(medQUAL >= 25, medDPREAL >= 10, MAPP == T, SNP == T)
+```
+
+## Create snp matrix
+```{r}
+matrix <- snp_matrix(snps)
+```
+
+## Calculate PCs
+```{r}
+pca_snp <- prcomp(matrix, scale. = T)
+
+summary(pca_snp)
+```
+
+## Variance explained by each pc
+```{r}
+summary(pca_snp)$importance[2,] * 100
+```
+
+
+## Extract PCs and add back to data
+```{r}
+source_pcs <- data.frame(pca_snp$x)
+
+source_pcs <- source_pcs %>%
+   rownames_to_column("SOURCE")
+```
+
+## Add CULTURETYPE and SEQTYPE to table
+```{r}
+source_pcs <- source_pcs %>%
+  mutate(CULTURETYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2") ~ "tree",
+    SOURCE %in% c("cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A",
+                  "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
+                  "cr2_18A", "cr2_18A1") ~ "embryo",
+    SOURCE %in% c("cr85", "cr10", "cr13", "cr22") ~ "shoot")) %>%
+  mutate(SEQTYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "long_read",
+    SOURCE %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", 
+                  "cr2_16A", "cr2_16A1","cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A",
+                  "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ "short_read"))
+```
+
+
+# Plot PCA
+## Scree plot
+```{r}
+plot(pca_snp)
+```
+
+## biplot
+```{r}
+biplot(pca_snp)
+```
+
+## Plot PCs
+### Culture Type
+```{r}
+source_pcs %>%
+  ggplot(aes(x = PC1, y = PC2, color = CULTURETYPE)) +
+  geom_point() +
+  scale_color_manual(values=c("tree" = "darkseagreen4", "shoot" = "darkseagreen2", "embryo" = "goldenrod1"),
+                       labels = c("tree" = "Tree", "shoot" = "Shoot", "embryo" = "Embryo")) +
+  labs(x = "PC1 (25.8%)", y = "PC2 (17.7%)") + 
+  theme_classic(base_size = 6) +
+  theme(legend.title = element_blank(),
+        legend.position = c(.85,.85),
+        legend.key.size = unit(0.2, "cm"))
+ggsave("./Figures/SNP_PCA/snps_pc1_pc2.pdf", height = 1.05, width = 1.75)
+ggsave("./Figures/SNP_PCA/snps_pc1_pc2.png", height = 1.05, width = 1.75)
+
+source_pcs %>%
+  ggplot(aes(x = PC3, y = PC2, color = CULTURETYPE)) +
+  geom_point() +
+  scale_color_manual(values=c("tree" = "darkseagreen4", "shoot" = "darkseagreen2", "embryo" = "goldenrod1"),
+                       labels = c("tree" = "Tree", "shoot" = "Shoot", "embryo" = "Embryo")) +
+  labs(x = "PC3 (12.3%)", y = "PC2 (17.7%)") + 
+  theme_classic(base_size = 6) +
+  theme(legend.title = element_blank(),
+        legend.position = c(.95,.9),
+        legend.key.size = unit(0.25, "cm"))
+
+source_pcs %>%
+  ggplot(aes(x = PC3, y = PC4, color = CULTURETYPE)) +
+  geom_point() +
+  scale_color_manual(values=c("tree" = "darkseagreen4", "shoot" = "darkseagreen2", "embryo" = "goldenrod1"),
+                       labels = c("tree" = "Tree", "shoot" = "Shoot", "embryo" = "Embryo")) +
+  labs(x = "PC3 (12.3%)", y = "PC4 (9.06%)") + 
+  theme_classic(base_size = 6) +
+  theme(legend.title = element_blank(),
+        legend.position = c(.95,.9),
+        legend.key.size = unit(0.25, "cm"))
+```
+
+### Sequence Type
+```{r}
+source_pcs %>%
+  ggplot(aes(x = PC1, y = PC2, color = SEQTYPE)) +
+  geom_point() +
+  theme_classic()
+```

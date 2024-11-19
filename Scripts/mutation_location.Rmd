@@ -31,9 +31,9 @@ read_gff <- function(file){
   return(gff)  
 }
 
-vcf_feature_select <- function(all_denovo.table, Culture_Type, Sequence_Type = NULL, quality = 0) {
+vcf_feature_select <- function(all_denovo.table, Culture_Type, Sequence_Type = NULL, quality = 0, depth = 0) {
   table <- all_denovo.table %>%
-    filter(Type == Culture_Type, QUAL >= quality) %>%
+    filter(CULTURETYPE == Culture_Type, QUAL >= quality, DPREAL >= depth) %>%
     mutate(START = POS, STOP = POS, ID = paste0(CHROM, "_", POS))
 
   if (!is.null(Sequence_Type)) {
@@ -161,7 +161,7 @@ ref_pri.gff <- read_gff("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primar
 
 ## Load in data
 ```{r}
-all_dn.df <- fread("./Data/VCFs/Filtered/all_dn.vcf")
+all_dn.df <- fread("./Data/VCFs/Parsed/mutations.tsv")
 ```
 
 
@@ -178,7 +178,7 @@ gene.windows$CHROM <- as.numeric(gene.windows$CHROM)
 ## Finding overlaps of SNPs in Windows
 ```{r}
 # Embryo
-all_embryo.vcf <- vcf_feature_select(all_dn.df, Culture_Type = "Embryo")
+all_embryo.vcf <- vcf_feature_select(all_dn.df, Culture_Type = "embryo")
 all_embryo.finf <- features_in_features(features = gene.windows, features2 = all_embryo.vcf,
                                         mode = "counts") #CHROM needs to be numeric=
 all_embryo.table <- left_join(all_embryo.finf, gene.windows, by = "ID")
@@ -219,6 +219,20 @@ all_embryo_q30.result <- plot_feature_windows(feature_windows = all_embryo_q30.t
                                           bold_axis_titles = TRUE,
                                           variable = "counts", mode = "mean",
                                           feature_color = "orangered")
+
+all_embryo_q25dp15.vcf <- vcf_feature_select(all_dn.df, Culture_Type = "Embryo", quality = 25, depth = 15)
+all_embryo_q25dp15.finf <- features_in_features(features = gene.windows, features2 = all_embryo_q25dp15.vcf,
+                                        mode = "counts") #CHROM needs to be numeric=
+all_embryo_q25dp15.table <- left_join(all_embryo_q25dp15.finf, gene.windows, by = "ID")
+all_embryo_q25dp15.result <- plot_feature_windows(feature_windows = all_embryo_q25dp15.table, 
+                                          feature_linewidth = 1, 
+                                          plot_title = "Embryo Mutation QUAL >= 25 DEPTH >= 15",
+                                          x_axis_title = "Gene body position",
+                                          y_axis_title = "Mean mutations in windows",
+                                          upstream_label = "-5kb", downstream_label = "+5kb",
+                                          bold_axis_titles = TRUE,
+                                          variable = "counts", mode = "mean",
+                                          feature_color = "goldenrod1")
 
 # Shoots
 all_shoot.vcf <- vcf_feature_select(all_dn.df, Culture_Type = "Shoot")
@@ -315,6 +329,8 @@ all_embryo.result$plot
 #ggsave("./Figures/Mutation_Features/gene_body_mutation_all_embryos.png", height = 2, width = 4)
 all_embryo_q20.result$plot
 all_embryo_q30.result$plot
+
+all_embryo_q25dp15.result$plot
 
 all_shoot.result$plot
 #ggsave("./Figures/Mutation_Features/gene_body_mutation_all_shoots.pdf", height = 2, width = 4)

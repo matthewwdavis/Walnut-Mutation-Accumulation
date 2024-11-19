@@ -1,0 +1,314 @@
+---
+title: "aneuploidy_depth"
+author: "Matthew Davis"
+date: "2024-11-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Library
+```{r, message=FALSE}
+library(data.table)
+library(tidyverse)
+```
+
+## Functions
+```{r}
+read.ANC <- function(path) {  
+  # Load data
+  snps <- fread(path)
+  
+  setnames(snps, "Source", "SOURCE")
+  
+  
+  # Identify SNPs with single-character REF and ALT
+  snps[, SNP := nchar(REF) == 1 & nchar(ALT) == 1]
+  
+  # Filter SNPs with heterozygous genotype and calculate DPNORM by SOURCE
+  het_snps <- snps[SNP == TRUE & GT == "0/1"]
+  
+  # Select relevant columns
+  small_snps <- het_snps[, .(CHROM, POS, REF, ALT, AD, DP, QUAL, SOURCE)]
+  
+  # Split AD column into REFDP and ALTDP
+  small_snps[, c("REFDP", "ALTDP") := tstrsplit(AD, ",", type.convert = TRUE)]
+  
+  # Normalize REFDP and ALTDP within each SOURCE
+  small_snps[, `:=`(
+    REFDP_NORM = REFDP / mean(REFDP, na.rm = TRUE),
+    ALTDP_NORM = ALTDP / mean(ALTDP, na.rm = TRUE),
+    DPNORM = DP / mean(DP, na.rm = TRUE)
+  ), by = SOURCE]
+  
+  # Drop the original AD column
+  small_snps[, AD := NULL]
+  
+  return(small_snps)
+}
+
+```
+
+## Read in data
+```{r}
+chr1 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_1.vcf")
+chr2 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_2.vcf")
+chr3 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_3.vcf")
+chr4 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_4.vcf")
+chr5 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_5.vcf")
+chr6 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_6.vcf")
+chr7 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_7.vcf")
+chr8 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_8.vcf")
+chr9 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_9.vcf")
+chr10 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_10.vcf")
+chr11 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_11.vcf")
+chr12 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_12.vcf")
+chr13 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_13.vcf")
+chr14 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_14.vcf")
+chr15 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_15.vcf")
+chr16 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_16.vcf")
+
+an_snps <- rbind(chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16)
+rm(chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16)
+
+gen_map <- fread("./Data/Linkage_Maps/map_LBF2411_RefChandlerPrimaryYesOmniC_no_genos.csv")
+setnames(gen_map, old = c("chr", "bp", "hap1", "hap2"), new = c("CHROM", "POS", "Hap1", "Hap2"))
+```
+
+# Making new labels
+```{r}
+new_labels = c("ref_chandler" = "Reference", "tree2" = "Tree 2",
+               "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
+               "cr2_11A" = "Embryo 11A", "cr2_12A" = "Embryo 12A", "cr2_13A" = "Embryo 13A",
+               "cr2_15A" = "Embryo 15A", "cr2_15A1" = "Embryo 15A1", "cr2_16A" = "Embryo 16A",
+               "cr2_16A1" = "Embryo 16A1", "cr2_16A2" = "Embryo 16A2", "cr2_17A1" = "Embryo 17A1",
+               "cr2_17A2" = "Embryo 17A2", "cr2_18A" = "Embryo 18A", "cr2_18A1" = "Embryo 18A1",
+               "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
+               "cr22" = "Chandler '22")
+
+an_snps <- an_snps %>%
+  mutate(CULTURETYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2") ~ "tree",
+    SOURCE %in% c("cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A",
+                  "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
+                  "cr2_18A", "cr2_18A1") ~ "embryo",
+    SOURCE %in% c("cr85", "cr10", "cr13", "cr22") ~ "shoot")) %>%
+  mutate(SEQTYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "long_read",
+    SOURCE %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", 
+                  "cr2_16A", "cr2_16A1","cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A",
+                  "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ "short_read"))
+```
+
+## Combine data
+```{r}
+phased_snps <- inner_join(an_snps, gen_map, by = c("CHROM", "POS"))
+
+phased_snps <- phased_snps %>%
+  mutate(Variant_is_hap1 = case_when(ALT == Hap1 ~ TRUE, TRUE ~ FALSE)) %>%
+  mutate(Variant_is_hap2 = case_when(ALT == Hap2 ~ TRUE, TRUE ~ FALSE))
+
+phased_snps <- phased_snps %>%
+  mutate(haplotype = if_else(Variant_is_hap1 == FALSE, "hap1", "hap2"))
+
+phased_snps
+
+phased_snps %>%
+  pivot_longer(cols = c(REFDP_NORM, ALTDP_NORM), 
+               names_to = "Type", 
+               values_to = "Combined_DP")
+```
+
+
+
+## Plot
+```{r}
+hap1 <- phased_snps %>%
+  select(-c(ALT, ALTDP, ALTDP_NORM)) %>%
+  filter(Variant_is_hap1 == FALSE) %>%
+  mutate(Haplotype = "hap1") %>%
+  mutate(Interaction_Column = interaction(SOURCE, Haplotype)) %>%
+  mutate(ALT = NA) %>%
+  mutate(ALTDP = NA) %>%
+  mutate(ALTDP_NORM = NA)
+
+hap2 <- phased_snps %>%
+  select(-c(REF, REFDP, REFDP_NORM)) %>%
+  filter(Variant_is_hap2 == TRUE) %>%
+  mutate(Haplotype = "hap2") %>%
+  mutate(Interaction_Column = interaction(SOURCE, Haplotype)) %>%
+  mutate(REF = NA) %>%
+  mutate(REFDP = NA) %>%
+  mutate(REFDP_NORM = NA)
+
+hap1 %>%
+  ggplot(aes(x = factor(CHROM), y = REFDP_NORM, fill = interaction(SOURCE, Haplotype))) +
+  geom_boxplot(outlier.size = 0, outlier.color = NA) +
+  theme_classic() +
+  theme(strip.background = element_blank(), legend.position = "bottom",
+        axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+        strip.text.x = element_text(face = "bold"),
+        axis.title = element_text(face = "bold")) +
+  labs(x = "Chromosome", y = "Scaled Haplotype 1 Depth", fill = "Group") +
+  facet_grid(~CHROM, scales = "free_x", space = "free") +
+  #scale_fill_brewer(palette = "Dark2", labels = c("Somatic Embryo Culture\nHaplotype 1", "Tree 1\nHaplotype 1", "Tree 2\nHaplotype 1")) +
+  labs(fill = NULL)
+
+hap2 %>%
+  ggplot(aes(x = factor(CHROM), y = ALTDP_NORM, fill = interaction(SOURCE, Haplotype))) +
+  geom_boxplot(outlier.size = 0, outlier.color = NA) +
+  theme_classic() +
+  theme(strip.background = element_blank(), legend.position = "bottom",
+        axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+        strip.text.x = element_text(face = "bold"),
+        axis.title = element_text(face = "bold")) +
+  labs(x = "Chromosome", y = "Scaled Haplotype 2 Depth", fill = "Group") +
+  facet_grid(~CHROM, scales = "free_x", space = "free") +
+  #scale_fill_brewer(palette = "Dark2", labels = c("Somatic Embryo Culture\nHaplotype 2", "Tree 1\nHaplotype 2", "Tree 2\nHaplotype 2")) +
+  labs(fill = NULL)
+
+# edit_hap1 <- unique_hap1 %>%
+#   mutate(Interaction_Column = interaction(REF_DP_Source, Haplotype)) %>%
+#   mutate(ALT = NA) %>%
+#   mutate(Scaled_ALT_DP = NA) %>%
+#   mutate(ALT_DP_Source = NA)
+# 
+# edit_hap2 <- unique_hap2 %>%
+#   mutate(Interaction_Column = interaction(ALT_DP_Source, Haplotype)) %>%
+#   mutate(REF = NA) %>%
+#   mutate(Scaled_REF_DP = NA) %>%
+#   mutate(REF_DP_Source = NA)
+
+
+combo_haps <- rbind(hap1, hap2)
+
+combo_haps <- combo_haps %>%
+  mutate(Combined_Scaled_DP = coalesce(REFDP_NORM, ALTDP_NORM))
+
+combo_haps <- combo_haps %>%
+  mutate(Combined_AD = coalesce(REFDP, ALTDP))
+
+combo_haps <- combo_haps %>%
+  group_by(SOURCE) %>%
+  mutate(AD_Scale = Combined_AD/mean(Combined_AD)) 
+
+combo_haps %>%
+  filter(SOURCE %in% c("cr2_hifi", "ref_chandler", "tree2", "cr85", "cr10", "cr13", "cr22")) %>%
+  ggplot(aes(x = factor(CHROM), y = AD_Scale, fill = CULTURETYPE)) +
+  labs(x = "Chromosome", y = "Scaled Depth") +
+  facet_grid(~CHROM + Haplotype, scales = "free_x", space = "free") +
+  geom_boxplot(outlier.size = 0, outlier.color = NA) +
+  scale_fill_manual(values = c("embryo" = "goldenrod1", "tree" = "darkseagreen4",
+                               "shoot" = "darkseagreen2"),
+                    name = NULL,
+                    #breaks = c("cr2_Scaled_REF_DP.hap1", "ref_Scaled_REF_DP.hap1", "term_Scaled_REF_DP.hap1"),
+                    labels = c("Embryo HiFi", "Shoots", "Trees")) +
+  ylim(0,3) +
+  theme_classic(base_size = 6) +
+  theme(strip.background = element_blank(),
+        strip.text.x = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.key.size = unit(0.25, "cm"),
+        legend.position = c(.95,.9))
+ggsave("./Figures/Aneuploidy_Depth/depth_per_chr_hap.pdf", height = 3, width = 7)
+ggsave("./Figures/Aneuploidy_Depth/depth_per_chr_hap.png", height = 3, width = 7)
+
+
+combo_haps %>%
+  ggplot(aes(x = factor(CHROM), y = AD_Scale, fill = Interaction_Column)) +
+  labs(x = "Chromosome", y = "Scaled Depth") +
+  facet_grid(~CHROM + Haplotype, scales = "free_x", space = "free") +
+  geom_boxplot(outlier.size = 0, outlier.color = NA) +
+  theme(strip.background = element_blank(), legend.position = "bottom",
+        strip.text.x = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  theme_classic(base_size = 6)
+
+```
+
+## Try mean plotting
+```{r}
+combo_means <- combo_haps %>%
+  group_by(Interaction_Column, CHROM) %>%
+  reframe(
+    MEAN_ADSCALE = mean(AD_Scale),
+    SE_ADSCALE = sd(AD_Scale)/sqrt(length((AD_Scale))),
+    SOURCE = SOURCE,
+    Haplotype = Haplotype,
+    CULTURETYPE = CULTURETYPE
+    
+  )
+
+combo_means %>%
+  ggplot(aes(x = SOURCE, y = MEAN_ADSCALE, fill = CULTURETYPE)) +
+  labs(x = "Chromosome", y = "Scaled Depth") +
+  facet_grid(~CHROM + Haplotype, scales = "free_x", space = "free") +
+  geom_point(position = position_dodge(width = 0.5)) +
+  ylim(0.7,2.2) +
+  scale_fill_manual(values = c("embryo" = "goldenrod1", "tree" = "darkseagreen4",
+                               "shoot" = "darkseagreen2"),
+                    name = NULL,
+                    #breaks = c("cr2_Scaled_REF_DP.hap1", "ref_Scaled_REF_DP.hap1", "term_Scaled_REF_DP.hap1"),
+                    labels = c("Embryo", "Reference", "Tree 2")) +
+  theme_classic(base_size = 6) +
+  theme(strip.background = element_blank(), legend.position = "none",
+        strip.text.x = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+combo_means %>%
+  ggplot(aes(x = MEAN_ADSCALE, y = SOURCE, fill = CULTURETYPE)) +
+  #labs(x = "Chromosome", y = "Scaled Depth") +
+  facet_grid(~CHROM + Haplotype) +
+  geom_bar(stat = "identity") +
+  #xlim(0.7,2.2) +
+  scale_fill_manual(values = c("embryo" = "goldenrod1", "tree" = "darkseagreen4",
+                               "shoot" = "darkseagreen2"),
+                    name = NULL,
+                    #breaks = c("cr2_Scaled_REF_DP.hap1", "ref_Scaled_REF_DP.hap1", "term_Scaled_REF_DP.hap1"),
+                    labels = c("Embryo", "Reference", "Tree 2")) +
+  theme_classic(base_size = 6) +
+  theme(strip.background = element_blank(), legend.position = "none",
+        strip.text.x = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+combo_means$SOURCE <- factor(combo_means$SOURCE, levels = c("cr85", "cr10", "cr13", "cr22", "tree2", "ref_chandler",
+                                                            "cr2_11A", "cr2_13A", "cr2_12A",  "cr21_1", "cr21_2",
+                                                            "cr2_18A", "cr2_15A", "cr2_15A1", "cr2_hifi", "cr2_16A",
+                                                            "cr2_18A1", "cr2_17A1", "cr2_17A2", "cr2_16A1", "cr2_16A2"))
+
+combo_means %>%
+  ggplot(aes(x = 1, y = SOURCE, fill = MEAN_ADSCALE)) +
+  facet_grid(~CHROM + Haplotype, space = "free", scales = "free") +
+  geom_tile() +
+  scale_fill_gradientn(colors = c("white", "orangered")) + 
+  scale_y_discrete(labels = new_labels) +
+  labs(fill = "Scaled\nDepth") +
+  theme_classic(base_size = 6) +
+  theme(strip.background = element_blank(),
+        legend.position = "bottom",
+        #legend.key.size = unit(.2, "cm"),
+        #strip.text.x = element_text(face = "bold"),
+        axis.title = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+            # axis.text.y = element_text(color = c("cr85" = "darkseagreen2", "cr10" = "darkseagreen2", "cr13" = "darkseagreen2", "cr22" = "darkseagreen2",
+            #       "tree2" = "darkseagreen4", "ref_chandler" = "darkseagreen4",
+            #                                                 "cr2_11A" = "goldenrod1", "cr2_13A" = "goldenrod1", "cr2_12A" = "goldenrod1",  "cr21_1" = "goldenrod1", "cr21_2" = "goldenrod1",
+            #                                                 "cr2_18A" = "goldenrod1", "cr2_15A" = "goldenrod1", "cr2_15A1" = "goldenrod1", "cr2_hifi" = "goldenrod1", "cr2_16A" = "goldenrod1",
+            #                                                 "cr2_18A1" = "goldenrod1", "cr2_17A1" = "goldenrod1", "cr2_17A2" = "goldenrod1", "cr2_16A1" = "goldenrod1", "cr2_16A2" = "goldenrod1"))
+)
+ggsave("./Figures/Aneuploidy_Depth/depth_all_samples.pdf", height = 3, width = 6.5)
+```
+

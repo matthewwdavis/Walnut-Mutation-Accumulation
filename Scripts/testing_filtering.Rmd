@@ -419,27 +419,30 @@ unique_snps_hifivshort.list <- list("embryo hifi" = embryos_snps_unique_hifi$uni
 # unique_snps.df <- rbind(trees_snps_unique, shoots_snps_unique, embryos_snps_unique)
 ggVennDiagram(x = unique_snps_hifivshort.list,
               category.names = c("Embryo HiFi", "Embryo Short", "Shoots","Trees"),
-              set_color = c("goldenrod1","goldenrod3", "darkseagreen","darkseagreen4"),
+              set_color = c("goldenrod1","goldenrod3", "darkseagreen2","darkseagreen4"),
               edge_size = 2,
               label = "percent",
               label_percent_digit = 1,
               label_alpha = 0,
               label_color = "black") +
   scale_fill_distiller(palette = "Greys", direction = 1)
-ggsave("~/Desktop/venndiagram_hifi_vs_short_snps.pdf", height = 5, width = 7)
-ggsave("~/Desktop/venndiagram_hifi_vs_short_snps.png", height = 5, width = 7)
+# ggsave("~/Desktop/venndiagram_hifi_vs_short_snps.pdf", height = 5, width = 7)
+# ggsave("~/Desktop/venndiagram_hifi_vs_short_snps.png", height = 5, width = 7)
 
 ggVennDiagram(x = unique_snps.list,
               category.names = c("Embryos","Shoots","Trees"),
-              set_color = c("goldenrod1","darkseagreen","darkseagreen4"),
-              edge_size = 2,
+              set_color = c("goldenrod1","darkseagreen2","darkseagreen4"),
+              set_size = 2,
+              label_size = 2,
+              edge_size = 1,
               label = "percent",
               label_percent_digit = 1,
               label_alpha = 0,
               label_color = "black") +
-  scale_fill_distiller(palette = "Greys", direction = 1)
-ggsave("~/Desktop/venndiagram_all_snps.pdf", height = 5, width = 7)
-ggsave("~/Desktop/venndiagram_all_snps.png", height = 5, width = 7)
+  scale_fill_distiller(palette = "Greys", direction = 1) +
+  theme(legend.position = "none")
+ggsave("~/Desktop/venndiagram_all_snps.pdf", height = 1.2, width = 1.25)
+ggsave("~/Desktop/venndiagram_all_snps.png", height = 1.2, width = 1.25)
 ```
 
 ## Identifying snps in the intersections of the venn diagram

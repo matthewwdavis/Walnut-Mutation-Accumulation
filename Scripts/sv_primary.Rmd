@@ -1,0 +1,169 @@
+---
+title: "sv_primary"
+author: "Matthew Davis"
+date: "2024-11-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r, message=FALSE}
+library(data.table)
+library(tidyverse)
+library(polymorphology2)
+```
+
+## Functions
+```{r}
+read.PBSV <- function(data_path){
+  
+  sv.vcf <- fread(data_path, skip = "#CHROM")
+  
+  sv.vcf <- sv.vcf %>%
+    rename("#CHROM" = "CHROM", "UnnamedSample" = "SAMPLE")
+  
+  sv.vcf <- sv.vcf %>%
+    separate(SAMPLE, c("GT", "AD", "DP", "SAC"), sep = ":", fill = "right") %>%
+    separate(AD, c("REFDP", "ALTDP")) %>%
+    mutate(DP = as.numeric(DP),
+           REFDP = as.numeric(REFDP),
+           ALTDP = as.numeric(ALTDP),
+           DPREAL = (REFDP + ALTDP),
+           VAF = (ALTDP/DPREAL),
+           SVTYPE = str_extract(INFO, "(?<=SVTYPE=)[^;]+"),
+           END = str_extract(INFO, "(?<=END=)[^;]+"),
+           SVLEN = str_extract(INFO, "(?<=SVLEN=)[^;]+"),
+           CIPOS = str_extract(INFO, "(?<=CIPOS=)[^;]+"),
+           MATEID = str_extract(INFO, "(?<=MATEID=)[^;]+"),
+           SVLEN = as.numeric(SVLEN)) %>%
+    dplyr::select(c(CHROM, ID, POS, END, SVTYPE, SVLEN,  QUAL, FILTER, GT, DP, DPREAL, REFDP, ALTDP, VAF, SAC, CIPOS, MATEID, REF, ALT))
+  
+  return(sv.vcf)
+}
+
+```
+
+## Read in data and rename chromosomes
+```{r}
+sv <- read.PBSV("./Data/VCFs/SV_VCF/cr2_primary.sv.vcf")
+```
+
+## Select for CHR and rename
+```{r}
+# Warning is expected. It is for non-chromosome contigs
+sv$CHROM<-as.numeric(gsub("NC_0499(..).1_RagTag", "\\1", sv$CHROM))
+
+sv <- sv %>%
+  filter(!is.na(CHROM))
+
+unique(sv$CHROM)
+```
+
+# Look at distributions
+## VAF density
+```{r}
+# All VAF
+sv %>%
+  ggplot(aes(x = VAF)) +
+  geom_density() +
+  theme_classic(base_size = 6)
+
+# VAF by type
+sv %>%
+  ggplot(aes(x = VAF, color = SVTYPE)) +
+  geom_density(linewidth = 1.5) +
+  theme_classic(base_size = 6)
+
+# Only deletions and insertions
+sv %>%
+  filter(SVTYPE %in% c("INS", "DEL")) %>%
+  ggplot(aes(x = VAF, color = SVTYPE)) +
+  geom_density(linewidth = 1.5) +
+  theme_classic(base_size = 6)
+```
+
+## Distributions of lengths
+```{r}
+# All lengths
+sv %>%
+  ggplot(aes(x = SVLEN)) +
+  geom_density() +
+  theme_classic(base_size = 6)
+
+# By SVTYPE
+sv %>%
+  ggplot(aes(x = abs(SVLEN), color = SVTYPE)) +
+  geom_density(linewidth = 1.5) +
+  xlim(0,1000) +
+  theme_classic(base_size = 6)
+
+# Vast majority of SVs are very small. A filter of >= 50 drops the SV count in half
+
+sv %>% 
+  filter(abs(SVLEN) >= 50) %>%
+  ggplot(aes(x = abs(SVLEN), color = SVTYPE)) +
+  geom_density(linewidth = 1.5) +
+  theme_classic(base_size = 6)
+
+# Looking at the 5453 BP Insertion
+sv %>% 
+  filter(abs(SVLEN) >= 4000 & abs(SVLEN) <= 6000) %>%
+  ggplot(aes(x = abs(SVLEN), fill = SVTYPE)) +
+  geom_histogram(alpha = .5) +
+  scale_x_continuous(breaks = seq(4000, 6000, by = 100)) +
+  theme_classic(base_size = 6)
+
+# Shrink the region
+sv %>% 
+  filter(abs(SVLEN) >= 5450 & abs(SVLEN) <= 5460) %>%
+  ggplot(aes(x = abs(SVLEN), fill = SVTYPE)) +
+  geom_histogram(binwidth = 5, alpha = .5) +
+  scale_x_continuous(breaks = seq(5450, 5460, by = 10)) +
+  theme_classic(base_size = 6)
+```
+## which length occurs the most often?
+```{r}
+# Look at SV >= 500. 5453 is still by far the most common
+sv %>%
+  group_by(abs(SVLEN)) %>%
+  summarise(Count = n()) %>%
+  rename("abs(SVLEN)" = "SVLEN") %>%
+  arrange(desc(Count)) %>%
+  filter(SVLEN >= 500)
+
+# Look at separation of DEL and INS
+sv %>%
+  group_by(SVLEN) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count)) %>%
+  filter(SVLEN >= 500 | SVLEN <= -500)
+
+# Zoom into the 5453 region
+sv %>%
+  group_by(SVLEN) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count)) %>%
+  filter(SVLEN >= 5450 & SVLEN <= 5460)
+```
+
+## Look at VAF of the 5453 bp
+```{r}
+sv %>%
+  filter(SVLEN >= 5450 & SVLEN <= 5460) %>% 
+  ggplot(aes(x = VAF)) +
+  geom_histogram() +
+  theme_classic()
+
+
+sv %>%
+  filter(SVLEN == 5453) %>% 
+  ggplot(aes(x = VAF)) +
+  geom_histogram() +
+  coord_cartesian(xlim = c(0.0, 1.0)) +
+  theme_classic()
+```
+

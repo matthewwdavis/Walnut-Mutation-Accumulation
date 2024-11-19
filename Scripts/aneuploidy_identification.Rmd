@@ -512,7 +512,7 @@ long_dp %>%
   labs(fill = NULL)
 
 # Assigning a haplotype
-linkage.map <- fread("./Data/Linkage_Maps/map_LBF2401_RefChandlerPrimary.csv")
+linkage.map <- fread("./Data/Linkage_Maps/map_LBF2411_RefChandlerPrimaryYesOmniC_no_genos.csv")
 setnames(linkage.map, old = c("chr", "bp", "hap1", "hap2"), new = c("CHROM", "POS", "Hap1", "Hap2"))
 
 long_dp_haps <- merge(long_dp, linkage.map, by = c("CHROM", "POS"), all = FALSE) %>%
@@ -590,24 +590,25 @@ combo_haps <- combo_haps %>%
 combo_haps %>%
   ggplot(aes(x = factor(CHROM), y = Combined_Scaled_DP, fill = Interaction_Column)) +
   geom_boxplot(outlier.size = 0, outlier.color = NA) +
-  theme_classic() +
+  theme_classic(base_size =6) +
   theme(strip.background = element_blank(), legend.position = "bottom",
         strip.text.x = element_text(face = "bold"),
         axis.title = element_text(face = "bold"),
         axis.text.x = element_blank(),
-        axis.ticks.x = element_blank()) +
+        axis.ticks.x = element_blank(),
+        legend.key.size = unit(0.5,"cm")) +
   labs(x = "Chromosome", y = "Scaled Depth") +
   facet_grid(~CHROM + Haplotype, scales = "free_x", space = "free") +
-  scale_fill_manual(values = c("cr2_Scaled_REF_DP.hap1" = "orangered", "ref_Scaled_REF_DP.hap1" = "seagreen",
-                               "term_Scaled_REF_DP.hap1" = "seagreen", "cr2_Scaled_ALT_DP.hap2" = "orangered",
-                               "ref_Scaled_ALT_DP.hap2" = "seagreen", "term_Scaled_ALT_DP.hap2" = "seagreen"),
+  scale_fill_manual(values = c("cr2_Scaled_REF_DP.hap1" = "goldenrod1", "ref_Scaled_REF_DP.hap1" = "darkseagreen4",
+                               "term_Scaled_REF_DP.hap1" = "darkseagreen4", "cr2_Scaled_ALT_DP.hap2" = "goldenrod1",
+                               "ref_Scaled_ALT_DP.hap2" = "darkseagreen4", "term_Scaled_ALT_DP.hap2" = "darkseagreen4"),
                       name = NULL,
                       breaks = c("cr2_Scaled_REF_DP.hap1", "ref_Scaled_REF_DP.hap1", "term_Scaled_REF_DP.hap1"),
-                      labels = c("HiFi Embryo", "Reference Tree", "Tree 2"))
+                      labels = c("HiFi Embryo", "Reference", "Tree 2"))
 
 
-#ggsave("./Figures/Aneuploidy_Identification/depth_boxplots_by_haplotype.pdf", height = 4, width = 12)
-#ggsave("./Figures/Aneuploidy_Identification/depth_boxplots_by_haplotype.png", height = 4, width = 12)
+ggsave("./Figures/Aneuploidy_Identification/depth_boxplots_by_haplotype.pdf", height = 2.5, width =7)
+ggsave("./Figures/Aneuploidy_Identification/depth_boxplots_by_haplotype.png", height = 4, width = 6)
 ```
 
 
