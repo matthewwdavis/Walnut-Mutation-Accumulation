@@ -1,0 +1,450 @@
+---
+title: "aneuploidy_vaf"
+author: "Matthew Davis"
+date: "2024-12-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r, message=FALSE}
+library(ggenomics)
+library(ggpubr)
+```
+
+## Read in data
+```{r}
+an_snps <- fread("./Data/VCFs/Ancestral_SNPs/ancestral_snps_smaller.tsv")
+```
+
+# Prepared data
+## Making new labels for the data and setting levels
+```{r}
+an_snps$SOURCE <- factor(an_snps$SOURCE, levels = c("cr2_16A2","cr2_16A1","cr2_17A2","cr2_17A1",
+                                                    "cr2_18A1","cr2_16A","cr2_hifi","cr2_15A1",
+                                                    "cr2_15A","cr2_18A", "cr21_2","cr21_1",
+                                                    "cr2_12A","cr2_13A","cr2_11A", "cr85", "cr10",
+                                                    "cr13", "cr22", "tree2", "ref_chandler"))
+
+new_labels = c("ref_chandler" = "Reference", "tree2" = "Tree",
+               "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+               "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
+               "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
+               "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
+               "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
+               "cr85" = "S 1985", "cr10" = "S 2010",
+               "cr13" = "S 2013", "cr22" = "S 2022")
+
+an_snps <- an_snps %>%
+  mutate(CULTURETYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2") ~ "tree",
+    SOURCE %in% c("cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A",
+                  "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
+                  "cr2_18A", "cr2_18A1") ~ "embryo",
+    SOURCE %in% c("cr85", "cr10", "cr13", "cr22") ~ "shoot")) %>%
+  mutate(SEQTYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "long_read",
+    SOURCE %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", 
+                  "cr2_16A", "cr2_16A1","cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A",
+                  "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ "short_read")) %>%
+  mutate(PLOIDS = case_when(CHROM %in% c(4,9) ~ "dup",
+                            CHROM %in% c(11,16) ~ "sr",
+                            CHROM %in% 12 ~ "del"))
+
+```
+
+# Normalize VAF and DEPTH by mean of the data
+## Find mean of VAF and DP
+```{r}
+setDT(an_snps)
+an_snps[, MEANVAF := mean(VAF)]
+an_snps[, MEANREALDP := mean(REALDP)]
+```
+
+## Normalize VAF and DP
+```{r}
+an_snps[, NORMVAF := VAF/MEANVAF]
+an_snps[, NORMREALDP := REALDP/MEANREALDP]
+```
+
+# Summarize larger portions of chromosomes
+## Create windows
+```{r}
+an_snps[, SEGMENT := cut(1:.N, breaks = 5, labels = FALSE), by = c("SOURCE", "CHROM")]
+```
+
+## Summarize by windows
+```{r}
+an_snps[, mean_VAF_Segment := mean(VAF), by = c("SOURCE", "CHROM", "SEGMENT")]
+an_snps[, mean_NORMVAF_Segment := mean(NORMVAF), by = c("SOURCE", "CHROM", "SEGMENT")]
+```
+
+# explore data
+## plotting depth of all togehter
+```{r}
+an_snps %>%
+  filter(QUAL >= 25, REALDP >= 10) %>%
+  slice_sample(n = 1e4) %>%
+  ggplot(aes(x = VAF, y = REALDP, color = PLOIDS)) +
+  geom_point() +
+  theme_classic(base_size = 6)
+# ggsave("./Figures/Aneuploidy_VAF/all_samples_an_snps_vaf.pdf", height = 3, width = 6)
+# ggsave("./Figures/Aneuploidy_VAF/all_samples_an_snps_vaf.png", height = 3, width = 6)
+```
+
+## Faceted scatterplot
+```{r}
+an_snps %>%
+  filter(QUAL >= 25, REALDP >= 10) %>%
+  slice_sample(n = 1e4) %>%
+  ggplot(aes(x = VAF, y = NORMREALDP, color = PLOIDS)) +
+  geom_point() +
+  facet_grid(~PLOIDS) +
+  theme_classic(base_size = 6)
+```
+
+## Density plot
+```{r}
+an_snps %>%
+  filter(QUAL >= 25, REALDP >= 10) %>%
+  slice_sample(n = 1e6) %>%
+  ggplot(aes(x = VAF, y = NORMREALDP)) +
+  geom_density_2d() +
+  facet_grid(~PLOIDS) +
+  theme_classic(base_size = 6)
+```
+
+## Faceting by CHROM
+```{r}
+an_snps %>%
+  filter(QUAL >= 25, REALDP >= 10) %>%
+  slice_sample(n = 1e4) %>%
+  ggplot(aes(x = NORMVAF, y = NORMREALDP, color = PLOIDS)) +
+  geom_point() +
+  facet_grid(~CHROM) +
+  theme_classic(base_size = 6)
+```
+
+## Plotting boxplots of VAF by chromosome
+```{r}
+an_snps %>%
+  filter(QUAL >= 25, REALDP >= 10) %>%
+  slice_sample(n = 1e4) %>%
+  ggplot(aes(x = VAF, y = NORMREALDP, color = PLOIDS)) +
+  geom_boxplot() +
+  facet_grid(~CHROM) +
+  theme_classic(base_size = 6)
+```
+
+## Incorporate position into the point plots
+```{r}
+an_snps %>%
+  filter(QUAL >= 25, REALDP >= 10) %>%
+  slice_sample(n = 1e5) %>%
+  ggplot(aes(x = POS, y = VAF, color = VAF)) +
+  geom_point() +
+  scale_color_gradientn(colors = c("royalblue", "grey100", "grey95", "orangered2")) +
+  facet_grid(SOURCE~CHROM, scales = "free", space = "free") +
+  theme_classic(base_size = 6)
+# ggsave("./Figures/Aneuploidy_VAF/all_samples_an_snps_vaf_pointfacet.pdf", height = 4, width = 7)
+# ggsave("./Figures/Aneuploidy_VAF/all_samples_an_snps_vaf_pointfacet.png", height = 4, width = 7)
+```
+
+# VAF Heatmap
+## Filter to create smaller data frame
+```{r}
+sum_table <- unique(an_snps, by = c("SOURCE", "CHROM", "mean_VAF_Segment", "SEGMENT"))
+sum_table <- sum_table[CULTURETYPE == "embryo"]
+```
+
+## Try VAF heatmap
+```{r}
+sum_table %>%
+  ggplot(aes(x = SEGMENT, y = SOURCE, fill = mean_VAF_Segment)) +
+  geom_tile() +
+  scale_fill_gradientn(colors = c("grey97", "grey95", "grey93", "orangered", "orangered2")) +
+  scale_y_discrete(labels = new_labels) +
+  facet_grid(SOURCE~CHROM, scales = "free", space = "free") +
+  theme_classic(base_size = 6) +
+  theme(strip.background = element_blank(),
+        strip.text.y = element_blank(),
+        legend.position = "none",
+        legend.key.size = unit(.2, "cm"),
+        strip.text.x = element_text(margin = margin(t = 0, b = 0)),
+        axis.title = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
+        axis.ticks.length.y = unit(0.5, "cm"),
+        axis.text.y = element_blank(),
+        axis.line.y = element_blank(),
+        panel.border = element_rect(fill = NA),
+        panel.spacing.y = unit(0.05, "cm"),
+        panel.spacing.x = unit(0.05, "cm"),
+        plot.margin = margin(t = 0, r = 0.05, b = 0, l = 0, unit = "cm")
+  )
+ggsave("./Figures/Aneuploidy_VAF/all_samples_an_snps_vaf_tilefacet_5_windows_per_chr.pdf", height = 1.85, width = 2.8)
+ggsave("./Figures/Aneuploidy_VAF/all_samples_an_snps_vaf_tilefacet_5_windows_per_chr.png", height = 1.85, width = 2.8)
+```
+
+# Plotting VAF of duplicated chromosomes using phasing
+## read in genetic map
+```{r}
+gen_map <- fread("./Data/Linkage_Maps/map_LBF2411_RefChandlerPrimaryYesOmniC_no_genos.csv")
+setnames(gen_map, old = c("chr", "bp", "hap1", "hap2"), new = c("CHROM", "POS", "Hap1", "Hap2"))
+```
+
+## Phase snps
+```{r}
+# Look back through this to make sure nothing funky is happening in this parsing
+phased_snps <- inner_join(an_snps, gen_map, by = c("CHROM", "POS"))
+
+phased_snps <- phased_snps %>%
+  mutate(Variant_is_hap1 = case_when(ALT == Hap1 ~ TRUE, TRUE ~ FALSE)) %>%
+  mutate(Variant_is_hap2 = case_when(ALT == Hap2 ~ TRUE, TRUE ~ FALSE))
+
+phased_snps <- phased_snps %>%
+  mutate(Haplotype = if_else(Variant_is_hap1 == TRUE, "hap1", "hap2"))
+
+phased_snps_small <- phased_snps %>%
+  select(CHROM, POS, VAF, Haplotype, SOURCE)
+```
+
+## Create the reciprocal dataset
+I am only worrying about VAF now, but I will need to do this with a more sophisticated analysis later.
+This seems to have messed something up.
+```{r}
+flip_phased_snps_small <- phased_snps_small %>%
+  mutate(Haplotype = ifelse(Haplotype == "hap1", "hap2", "hap1")) %>%
+  mutate(VAF = 1 - VAF)
+
+flip_phased_snps_small
+```
+
+## Combine the two back together.
+```{r}
+full_phased_snps <- rbind(phased_snps_small, flip_phased_snps_small)
+full_phased_snps <- full_phased_snps %>%
+  arrange(CHROM, POS, SOURCE)
+```
+
+
+## Plot each snp
+```{r}
+# Close. Better to phase the SNPs to remove confusion on switching
+full_phased_snps %>%
+  filter(CHROM == c(4,9)) %>%
+  #slice_sample(n = 1e4) %>%
+  ggplot(aes(x = POS, y = VAF, color = VAF > 0.5)) +
+  geom_point() +
+  geom_hline(yintercept = 0.5, linetype = 3) +
+  facet_grid(SOURCE~CHROM + Haplotype, scales = "free", space = "free") +
+  scale_color_manual(values = c("TRUE" = "orangered2", "FALSE" = "dodgerblue1")) +
+  theme_classic(base_size = 6) +
+  theme(strip.background = element_blank())
+ggsave("./Figures/Aneuploidy_VAF/phased_vaf_dup_chrom.pdf", height = 5, width = 10)
+```
+
+## Make smoother by using windows
+```{r}
+setDT(full_phased_snps)
+
+
+full_phased_snps[, SEGMENT := cut(1:.N, breaks = 50, labels = FALSE), by = c("SOURCE", "CHROM", "Haplotype")]
+```
+
+## Summarize VAF by segment
+```{r}
+sum_vaf <- full_phased_snps %>%
+  group_by(SOURCE, CHROM, Haplotype, SEGMENT) %>%
+  summarise(
+    MEANVAFSEG = mean(VAF)
+  )
+```
+
+## change haplotype names
+```{r}
+sum_vaf$Haplotype <- gsub("hap1", "A", sum_vaf$Haplotype)
+sum_vaf$Haplotype <- gsub("hap2", "B", sum_vaf$Haplotype)
+```
+
+## Plot windows
+```{r}
+sum_vaf %>%
+  ggplot(aes(x = SEGMENT, y = MEANVAFSEG, color = MEANVAFSEG > 0.5)) +
+  geom_point(size = 0.1) +
+  geom_hline(yintercept = 0.5, linetype = 3) +
+  facet_grid(SOURCE~CHROM + Haplotype, space = "free", switch = "y") +
+  scale_color_manual(values = c("TRUE" = "orangered2", "FALSE" = "dodgerblue1")) +
+  scale_y_continuous(breaks = c(0.5), position = "right") +
+  labs(x = "Position", y = "Allele Frequency") +
+  theme_linedraw(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text.x = element_text(color = "black", margin = margin(t = 0, b = 0)),
+    strip.text.y = element_blank(),
+    panel.border = element_rect(fill = NA),
+    panel.spacing.y = unit(0.05, "cm"),
+    panel.spacing.x = unit(0.05, "cm"),
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.y = element_blank(),
+    plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+  )
+ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_per_chr.pdf", height = 3.2, width = 6)
+ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_per_chr.png", height = 3.2, width = 6)
+```
+
+## Select for duplicate chromosomes
+```{r}
+sum_vaf %>%
+  filter(CHROM %in% c(4,9)) %>%
+  ggplot(aes(x = SEGMENT, y = MEANVAFSEG, color = MEANVAFSEG > 0.5)) +
+  geom_point(size = 0.5) +
+  geom_hline(yintercept = 0.5, linetype = 3) +
+  facet_grid(SOURCE~CHROM + Haplotype, space = "free", switch = "y") +
+  scale_color_manual(values = c("TRUE" = "orangered2", "FALSE" = "dodgerblue1")) +
+  scale_y_continuous( breaks = (c(0, 0.5, 1)), position = "right") +
+  labs(x = "Position", y = "Allele Frequency") +
+  theme_linedraw(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text.x = element_text(color = "black", margin = margin(t = 0, b = 0)),
+    strip.text.y = element_blank(),
+    panel.border = element_rect(fill = NA),
+    panel.spacing.y = unit(0.05, "cm"),
+    panel.spacing.x = unit(0.05, "cm"),
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.y = element_text(size = 2),
+    plot.margin = margin(t = 0, r = 0.01, b = 0, l = 0.05, unit = "cm")
+  )
+ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_chr_49.pdf", height = 3.1, width = 2.5)
+ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_chr_49.png", height = 3.1, width = 2.5)
+```
+
+## Select for deleted chromosomes
+```{r}
+sum_vaf %>%
+  filter(CHROM %in% c(12)) %>%
+  ggplot(aes(x = SEGMENT, y = MEANVAFSEG, color = MEANVAFSEG > 0.5)) +
+  geom_point(size = 0.5) +
+  geom_hline(yintercept = 0.5, linetype = 3) +
+  facet_grid(SOURCE~CHROM + Haplotype, space = "free", switch = "y") +
+  scale_color_manual(values = c("TRUE" = "orangered2", "FALSE" = "dodgerblue1")) +
+  scale_y_continuous( breaks = (c(0, 0.5, 1)), position = "right") +
+  labs(x = "Position", y = "Allele Frequency") +
+  theme_linedraw(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text.x = element_text(color = "black", margin = margin(t = 0, b = 0)),
+    strip.text.y = element_blank(),
+    panel.border = element_rect(fill = NA),
+    panel.spacing.y = unit(0.05, "cm"),
+    panel.spacing.x = unit(0.05, "cm"),
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.y = element_text(size = 2),
+    plot.margin = margin(t = 0, r = 0.01, b = 0, l = 0.05, unit = "cm")
+  )
+ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_chr_12.pdf", height = 3.1, width = 2)
+ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_chr_12.png", height = 3.1, width = 2)
+```
+
+## Select for sr chromosomes
+```{r}
+sum_vaf %>%
+  filter(CHROM %in% c(11,16)) %>%
+  ggplot(aes(x = SEGMENT, y = MEANVAFSEG, color = MEANVAFSEG > 0.5)) +
+  geom_point(size = 0.5) +
+  geom_hline(yintercept = 0.5, linetype = 3) +
+  facet_grid(SOURCE~CHROM + Haplotype, space = "free", switch = "y") +
+  scale_color_manual(values = c("TRUE" = "orangered2", "FALSE" = "dodgerblue1")) +
+  scale_y_continuous( breaks = (c(0, 0.5, 1)), position = "right") +
+  labs(x = "Position", y = "Allele Frequency") +
+  theme_linedraw(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text.x = element_text(color = "black", margin = margin(t = 0, b = 0)),
+    strip.text.y = element_blank(),
+    panel.border = element_rect(fill = NA),
+    panel.spacing.y = unit(0.05, "cm"),
+    panel.spacing.x = unit(0.05, "cm"),
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.y = element_text(size = 2),
+    plot.margin = margin(t = 0, r = 0.01, b = 0, l = 0.05, unit = "cm")
+  )
+ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_chr_1116.pdf", height = 3.1, width = 2.5)
+ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_chr_1116.png", height = 3.1, width = 2.5)
+```
+
+## Use more windows for chrom 9
+```{r}
+setDT(phased_snps)
+phased_snps[, SEGMENT := cut(1:.N, breaks = 100, labels = FALSE), by = c("SOURCE", "CHROM", "Haplotype")]
+```
+
+## Summarize VAF by segment
+```{r}
+sum_vaf <- phased_snps %>%
+  group_by(SOURCE, CHROM, Haplotype, SEGMENT) %>%
+  summarise(
+    MEANVAFSEG = mean(VAF)
+  )
+```
+
+## change haplotype names
+```{r}
+sum_vaf$Haplotype <- gsub("hap1", "A", sum_vaf$Haplotype)
+sum_vaf$Haplotype <- gsub("hap2", "B", sum_vaf$Haplotype)
+```
+
+## Select for chromosome 9 (SR and Dup)
+```{r}
+sum_vaf %>%
+  filter(CHROM %in% c(9) & SOURCE == "cr2_16A1") %>%
+  ggplot(aes(x = SEGMENT, y = MEANVAFSEG, color = MEANVAFSEG > 0.5)) +
+  geom_point(size = .1) +
+  geom_hline(yintercept = 0.5, linetype = 3) +
+  facet_grid(SOURCE~CHROM + Haplotype, space = "free", switch = "y") +
+  scale_color_manual(values = c("TRUE" = "orangered2", "FALSE" = "dodgerblue1")) +
+  scale_y_continuous( breaks = (c(0, 0.5, 1)), position = "right") +
+  labs(x = "Position", y = "Allele Frequency") +
+  theme_linedraw(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text.x = element_blank(),
+    strip.text.y = element_blank(),
+    panel.border = element_rect(fill = NA),
+    panel.spacing.y = unit(0.05, "cm"),
+    panel.spacing.x = unit(0.05, "cm"),
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title = element_blank(),
+    plot.margin = margin(t = 0, r = 0.01, b = 0, l = 0.05, unit = "cm")
+  )
+ggsave("./Figures/Aneuploidy_VAF/VAF_in_100_windows_chr_9.pdf", height = .25, width = .71)
+ggsave("./Figures/Aneuploidy_VAF/VAF_in_100_windows_chr_9.png", height = .25, width = .71)
+```

@@ -296,20 +296,31 @@ cr18a <- fread("./Data/Kallisto/18A_abundance.tsv")
 cr18a1 <- fread("./Data/Kallisto/18A1_abundance.tsv")
 ```
 
+new_labels = c(
+  "ref_chandler" = "Reference", "tree2" = "Tree",
+  "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+  "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
+  "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
+  "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
+  "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
+  "cr85" = "S 1985", "cr10" = "S 2010",
+  "cr13" = "S 2013", "cr22" = "S 2022"
+)
+
 ## Parse column information and create large data frame
 ```{r}
-cr11a <- parse_columns(cr11a, "11A")
-cr12a <- parse_columns(cr12a, "12A")
-cr13a <- parse_columns(cr13a, "13A")
-cr15a <- parse_columns(cr15a, "15A")
-cr15a1 <- parse_columns(cr15a1, "15A1")
-cr16a <- parse_columns(cr16a, "16A")
-cr16a1 <- parse_columns(cr16a1, "16A1")
-cr16a2 <- parse_columns(cr16a2, "16A2")
-cr17a1 <- parse_columns(cr17a1, "17A1")
-cr17a2 <- parse_columns(cr17a2, "17A2")
-cr18a <- parse_columns(cr18a, "18A")
-cr18a1 <- parse_columns(cr18a1, "18A1")
+cr11a <- parse_columns(cr11a, "E 14")
+cr12a <- parse_columns(cr12a, "E 12")
+cr13a <- parse_columns(cr13a, "E 13")
+cr15a <- parse_columns(cr15a, "E 8")
+cr15a1 <- parse_columns(cr15a1, "E 7")
+cr16a <- parse_columns(cr16a, "E 6")
+cr16a1 <- parse_columns(cr16a1, "E 2")
+cr16a2 <- parse_columns(cr16a2, "E 1")
+cr17a1 <- parse_columns(cr17a1, "E 4")
+cr17a2 <- parse_columns(cr17a2, "E 3")
+cr18a <- parse_columns(cr18a, "E 9")
+cr18a1 <- parse_columns(cr18a1, "E 5")
 
 all_counts <- rbind(cr11a, cr12a, cr13a, cr15a, cr15a1, cr16a, cr16a1, cr16a2, cr17a1, cr17a2, cr18a, cr18a1)
 ```
@@ -415,8 +426,8 @@ chr.table %>%
   labs(x = "Chromosome", y = "Mean Length") +
   theme_classic() +
   theme(legend.position = "none")
-ggsave("./Figures/RNA_Sequencing/kallisto_mean_length_per_chr.pdf", height = 8, width = 12)
-ggsave("./Figures/RNA_Sequencing/kallisto_mean_length_per_chr.png", height = 8, width = 12)
+# ggsave("./Figures/RNA_Sequencing/kallisto_mean_length_per_chr.pdf", height = 8, width = 12)
+# ggsave("./Figures/RNA_Sequencing/kallisto_mean_length_per_chr.png", height = 8, width = 12)
 
 
 all_counts %>%
@@ -469,9 +480,9 @@ all_counts %>%
 # Plot to compare all chr to 4 and 9
 ```{r}
 # Set levels
-levels <- c("11A", "12A", "13A", "15A",
-            "15A1", "16A1", "16A2", "17A1",
-            "17A2", "18A", "16A", "18A1")
+levels <- c("E 1", "E 2", "E 3", "E 4", "E 5", "E 6",
+            "E 7", "E 8", "E 9", 
+            "E 12", "E 13", "E 14")
 grp_levels <- c("Other", "chr_4", "chr_9")
 all_counts$Source <- factor(all_counts$Source, levels = levels)
 all_counts$Dup_Group <- factor(all_counts$Dup_Group, levels = grp_levels)
@@ -513,20 +524,84 @@ all_counts %>%
 all_counts %>% 
   filter(tpm > 1.0) %>%
   ggplot(aes(x = Dup_Group, y = log(tpm), fill = Dup_Group)) + 
-  geom_boxplot() +
+  geom_boxplot(outlier.shape = NA) +
   facet_grid(~ Source, scales = "free") +
   scale_fill_manual(values = c("chr_4" = "firebrick", "chr_9" = "firebrick", "Other" = "gray90")) +
   scale_x_discrete(labels = c("Other" = "Others", "chr_4" = "4", "chr_9" = "9")) +
+  coord_cartesian(ylim = c(0,9)) +
   labs(x = "Chromosome", y = "Natural Log TPM") +
-  stat_compare_means(method = "t.test", comparisons = comparisons, label = "p.signif", bracket.size = .3, size = 2) +
+  stat_compare_means(method = "t.test", comparisons = comparisons, label = "p.signif", bracket.size = .3, size = 2, label.y = c(7,8)) +
   theme_classic(base_size = 6) +
   theme(legend.position = "none",
-        axis.title = element_text(face = "bold"),
+        #axis.title = element_text(face = "bold"),
         strip.background = element_blank(),
-        strip.text = element_text(face = "bold"))
-#ggsave("./Figures/RNA_Sequencing/compare_chr_49_to_all_ttest.pdf", height = 2.2, width = 5.8)
-#ggsave("./Figures/RNA_Sequencing/compare_chr_49_to_all_ttest.png", height = 2.2, width = 5.8)
+        strip.text = element_text(face = "bold"),
+        plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+        )
 ```
+
+## Plot comapring expression in chromosomes with log
+```{r}
+all_counts %>%
+  filter(tpm > 1.0) %>%
+  mutate(
+    fill_color = case_when(
+      Dup_Group %in% c("chr_4") & Source %in% c("E 5", "E 6") ~ "gray80",
+      Dup_Group %in% c("chr_4", "chr_9") ~ "orangered2",
+      TRUE ~ "gray80"
+    )
+  ) %>%
+  ggplot(aes(x = Dup_Group, y = log(tpm), fill = fill_color, group = Dup_Group)) +  # Explicit grouping by Dup_Group
+  geom_boxplot(outlier.shape = NA) +
+  facet_grid(~ Source, scales = "free") +
+  scale_fill_identity() +
+  scale_x_discrete(labels = c("Other" = "All", "chr_4" = "4", "chr_9" = "9")) +
+  coord_cartesian(ylim = c(0, 9)) +
+  labs(x = "Chromosome", y = "Natural Log TPM") +
+  stat_compare_means(method = "t.test", comparisons = comparisons, label = "p.signif", bracket.size = 0.3, size = 2, label.y = c(7, 8)) +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.position = "none",
+    strip.background = element_blank(),
+    #strip.text = element_text(face = "bold"),
+    plot.margin = margin(t = -0, r = -0, b = -0, l = -0, unit = "cm")
+  )
+ggsave("./Figures/RNA_Sequencing/compare_chr_49_to_all_ttest_log.pdf", height = 1.8, width = 5.5)
+ggsave("./Figures/RNA_Sequencing/compare_chr_49_to_all_ttest_log.png", height = 1.8, width = 5.5)
+```
+
+## Plot comapring expression in chromosomes
+```{r}
+all_counts %>%
+  filter(tpm > 1.0) %>%
+  mutate(
+    fill_color = case_when(
+      Dup_Group %in% c("chr_4") & Source %in% c("E 5", "E 6") ~ "gray80",
+      Dup_Group %in% c("chr_4", "chr_9") ~ "orangered2",
+      TRUE ~ "gray80"
+    )
+  ) %>%
+  ggplot(aes(x = Dup_Group, y = tpm, fill = fill_color, group = Dup_Group)) +  # Explicit grouping by Dup_Group
+  geom_boxplot(outlier.shape = NA) +
+  facet_grid(~ Source, scales = "free") +
+  scale_fill_identity() +
+  scale_x_discrete(labels = c("Other" = "All", "chr_4" = "4", "chr_9" = "9")) +
+  coord_cartesian(ylim = c(0, 125)) +
+  labs(x = "Chromosome", y = "TPM") +
+  stat_compare_means(method = "t.test", comparisons = comparisons, label = "p.signif", bracket.size = 0.3, size = 2) +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.position = "none",
+    strip.background = element_blank(),
+    #strip.text = element_text(face = "bold"),
+    plot.margin = margin(t = -0, r = -0, b = -0, l = -0, unit = "cm")
+  )
+ggsave("./Figures/RNA_Sequencing/compare_chr_49_to_all_ttest.pdf", height = 1.8, width = 5.5)
+ggsave("./Figures/RNA_Sequencing/compare_chr_49_to_all_ttest.png", height = 1.8, width = 5.5)
+```
+
+
+
 
 ## Look at homozygous regions of the genome
 ```{r}
@@ -565,14 +640,14 @@ gene_pos <- gene_pos %>%
   mutate(gene = sub("_.*", "", gene))
 
 all_counts <- all_counts %>%
-  rename(CHROM = seq_id)
+  dplyr::rename(CHROM = seq_id)
 
 all_counts <- left_join(all_counts, gene_pos)
 
 
 all_counts %>%
   filter(tpm > 1.0) %>%
-  filter(Source == "12A") %>%
+  filter(Source == "E 3") %>%
   ggplot(aes(x = POS, y = tpm)) + 
   geom_point() +
   facet_wrap(~ CHROM, scales = "free") +
@@ -595,32 +670,389 @@ window_size <- 1e6
 trial[, window := floor((POS - 1) / window_size) + 1, by = CHROM]
 
 # Calculate the mean TPM for each window for every chromosome, keeping the Source information
-mean_tpm_windows <- trial[, .(mean_tpm = mean(tpm, na.rm = TRUE)), by = .(CHROM, window, Source)]
+med_tpm_windows <- trial[, .(med_tpm = median(tpm, na.rm = TRUE)), by = .(CHROM, window, Source)]
 
 # Add a group column
-mean_tpm_windows <- mean_tpm_windows %>%
+med_tpm_windows <- med_tpm_windows %>%
     mutate(Dup_Group = case_when(
       CHROM == 4 ~ "chr_4",
       CHROM == 9 ~ "chr_9",
       TRUE ~ "Other"))
 
 # Plotting
-mean_tpm_windows %>%
-  ggplot(aes(x = window, y = log(mean_tpm), color = Source)) + 
+med_tpm_windows %>%
+  ggplot(aes(x = window, y = log(med_tpm), color = Source)) + 
   geom_line() +
   facet_wrap(~ CHROM, scales = "free") +
   labs(x = "Position", y = "Log TPM") +
-  scale_color_manual(values = c("16A" = "firebrick", "18A1" = "gold")) +
+  scale_color_manual(values = c("E 5" = "firebrick", "E 6" = "gold")) +
   theme_classic(base_size = 6) +
   theme()
 
-mean_tpm_windows %>%
-  ggplot(aes(x = window, y = log(mean_tpm), color = Source)) + 
+med_tpm_windows %>%
+  ggplot(aes(x = window, y = log(med_tpm), color = Source)) + 
   geom_point() +
   facet_wrap(~ CHROM, scales = "free") +
   labs(x = "Position", y = "Log TPM") +
-  scale_color_manual(values = c("16A" = "firebrick", "18A1" = "gold")) +
+  scale_color_manual(values = c("E 5" = "firebrick", "E 6" = "gold")) +
   theme_classic(base_size = 6) +
   theme()
+```
+
+# Plot a geom_tile representation of TPM in windows
+## Normalization data
+```{r}
+library(ggenomics)
+counts.genes <- all_counts %>%
+  filter(tpm > 1, !is.na(POS))
+
+colnames(counts.genes)[colnames(counts.genes) == "Source"] <- "SOURCE"
+
+counts.genes <- sliding_window_table(counts.genes, window_size = 1e8, slide_size = 1e8)
+
+counts.genes <- counts.genes %>%
+  group_by(SOURCE, CHROM, POS_WINDOW) %>%
+  mutate(med_tpm_window = median(tpm))
+
+counts.genes <- counts.genes %>%
+  group_by(SOURCE) %>%
+  mutate(mean_tpm_sample = mean(med_tpm_window))
+
+counts.genes <- counts.genes %>%
+  mutate(norm_tpm = med_tpm_window/mean_tpm_sample)
+```
+
+## Plot Counts genes
+```{r}
+counts.genes %>%
+  mutate(SOURCE = forcats::fct_rev(SOURCE)) %>% # reverse levels
+  ggplot(aes(x = POS_WINDOW, y = SOURCE, fill = norm_tpm)) +
+  geom_tile() +
+  scale_fill_gradientn(colours = c("grey97", "grey95","grey95","grey93","orangered", "orangered2","orangered3","orangered4")) +
+  #  viridis::scale_fill_viridis(option = "turbo") + 
+  facet_grid(SOURCE~CHROM, scales = "free", space = "free") +
+  theme_classic(base_size = 6) +
+  theme(strip.background = element_blank(),
+        strip.text.x = element_text(margin = margin(t = 1, b = 1, unit = "pt")),
+        strip.text.y = element_blank(),  
+        legend.position = "none",
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
+        axis.ticks.length.y = unit(0.5, "cm"),
+        axis.text.y = element_blank(),
+        axis.title.x = element_blank(),
+        #axis.line.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.border = element_rect(fill = NA),
+        panel.spacing.y = unit(0.05, "cm"),
+        panel.spacing.x = unit(0.05, "cm"),
+        plot.margin = margin(t = 0, r = 0.1, b = 0, l = -0, unit = "cm")
+        )
+ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups.pdf", height = 1.5, width = 2.3)
+ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups.png", height = 1.5, width = 2.3)
+```
+
+## Try windows of gene numbers
+```{r}
+setDT(counts.genes)
+setorder(counts.genes, CHROM, POS)
+
+counts.genes[, GENEWINDOW := (1:.N - 1) %/% 5000 + 1, by = CHROM]
+
+counts.genes %>%
+  group_by(CHROM) %>%
+  summarise(num_windows = length(unique(GENEWINDOW)))
+
+counts.genes <- counts.genes %>%
+  group_by(SOURCE, CHROM, GENEWINDOW) %>%
+  mutate(med_tpm_genewindow = median(tpm))
+
+counts.genes <- counts.genes %>%
+  group_by(SOURCE) %>%
+  mutate(genemean_tpm_sample = mean(med_tpm_genewindow))
+
+counts.genes <- counts.genes %>%
+  mutate(genenorm_tpm = med_tpm_genewindow/genemean_tpm_sample)
+```
+
+## Plot gene windows
+```{r}
+counts.genes %>%
+  mutate(SOURCE = forcats::fct_rev(SOURCE)) %>% # reverse levels
+  ggplot(aes(x = GENEWINDOW, y = SOURCE, fill = genenorm_tpm)) +
+  geom_tile() +
+  scale_fill_gradientn(colours = c("royalblue", "white", "lightyellow", "lightyellow", "orangered1",  "orangered1")) +
+  facet_grid(SOURCE~CHROM, scales = "free", space = "free") +
+  theme_classic(base_size = 6) +
+  theme(strip.background = element_blank(),
+        strip.text.x = element_text(margin = margin(t = 1, b = 1, unit = "pt")),
+        strip.text.y = element_blank(),  
+        legend.position = "none",
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
+        axis.ticks.length.y = unit(0.5, "cm"),
+        axis.text.y = element_blank(),
+        axis.title.x = element_blank(),
+        #axis.line.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.border = element_rect(fill = NA),
+        panel.spacing.y = unit(0.05, "cm"),
+        panel.spacing.x = unit(0.05, "cm"),
+        plot.margin = margin(t = 0, r = 0.1, b = 0, l = -0, unit = "cm")
+        )
+```
+
+## Try even segments
+```{r}
+setDT(counts.genes)
+
+counts.genes[, SEGMENT := cut(1:.N, breaks = 5, labels = FALSE), by = c("SOURCE", "CHROM")]
+
+#counts.genes[, SEGMENT := 1, by = c("SOURCE", "CHROM")]
+# whole chromosome isn't enough to tell the expression difference
+
+counts.genes <- counts.genes %>%
+  group_by(SOURCE, CHROM, SEGMENT) %>%
+  mutate(med_tpm_segment = median(tpm))
+
+counts.genes <- counts.genes %>%
+  group_by(SOURCE, CHROM, SEGMENT) %>%
+  mutate(mean_tpm_segment = mean(tpm))
+
+counts.genes <- counts.genes %>%
+  group_by(SOURCE) %>%
+  mutate(segmean_tpm_sample = mean(med_tpm_segment))
+
+counts.genes <- counts.genes %>%
+  group_by(SOURCE) %>%
+  mutate(segmean_meantpm_sample = mean(mean_tpm_segment))
+
+counts.genes <- counts.genes %>%
+  mutate(segnorm_tpm = med_tpm_segment/segmean_tpm_sample)
+
+counts.genes <- counts.genes %>%
+  mutate(segnorm_meantpm = mean_tpm_segment/segmean_meantpm_sample)
+
+range(counts.genes$segnorm_tpm)
+```
+
+## plot segments
+```{r}
+counts.genes %>%
+  mutate(SOURCE = forcats::fct_rev(SOURCE)) %>% # reverse levels
+  ggplot(aes(x = SEGMENT, y = SOURCE, fill = log(segnorm_tpm))) +
+  geom_tile() +
+  viridis::scale_fill_viridis(option = "turbo") +
+   # scale_fill_gradientn(
+   # colours = c("royalblue1", "royalblue", "white","white","white", "white","white","white","white","white","white","white","orangered", "orangered","orangered","orangered","orangered"),
+   # values = scales::rescale(c(0.62, 0.65, 0.67, 0.68, 0.69, 0.7, 0.71, 0.72, 0.73, 0.74, .75, 1.2, 1.25,1.3, 1.5, 1.6, 1.7, 1.8)) # Specify explicit mapping
+  #limits = c(0, 1.6), # Ensure your range covers all values
+  #oob = scales::squish # Handle out-of-bounds values
+  # #scale_fill_gradientn() 
+  #   scale_fill_gradient2(
+  #   low = "blue", 
+  #   mid = "white", 
+  #   high = "brown", 
+  #   midpoint = 1
+   #) +
+  facet_grid(SOURCE~CHROM, scales = "free", space = "free") +
+  theme_classic(base_size = 6) +
+  theme(strip.background = element_blank(),
+        strip.text.x = element_text(margin = margin(t = 1, b = 1, unit = "pt")),
+        strip.text.y = element_blank(),  
+        legend.position = "right",
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
+        axis.ticks.length.y = unit(0.5, "cm"),
+        axis.text.y = element_blank(),
+        axis.title.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.line.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.border = element_rect(fill = NA),
+        panel.spacing.y = unit(0.05, "cm"),
+        panel.spacing.x = unit(0.05, "cm"),
+        plot.margin = margin(t = 0, r = 0.1, b = 0, l = -0, unit = "cm")
+        )
+ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_5seg.pdf", height = 1.5, width = 2.3)
+ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_5seg.png", height = 1.5, width = 2.3)
+```
+
+# Try comparing mean of each window to every other window in the sample
+```{r}
+# Function to calculate and compare medians
+test <-  counts.genes %>%
+  # Calculate SEGMENT median
+  group_by(SOURCE, CHROM, SEGMENT) %>%
+  summarise(SEGMENT_MEDIAN = median(tpm)) %>%
+  # Calculate SOURCE median excluding CHROMs 4, 9, 12
+  left_join(
+    counts.genes %>%
+      #filter(!CHROM %in% c(4, 9, 11, 12, 16)) %>%
+      group_by(SOURCE) %>%
+      summarise(SOURCE_MEDIAN = median(tpm)),
+    by = "SOURCE"
+  ) %>%
+  # Divide SEGMENT_MEDIAN by SOURCE_MEDIAN
+  mutate(
+    RATIO = SEGMENT_MEDIAN / SOURCE_MEDIAN,
+    FLAG = ifelse(RATIO > 1, "Higher", ifelse(RATIO < 1, "Lower", "Equal")),
+    LOGRAT = log(RATIO)
+  )
+
+test
+```
+
+## Try plotting
+This is the closest I've gotten
+```{r}
+range(test$LOGRAT)
+test %>%
+  ggplot(aes(x = SEGMENT, y = SOURCE, fill = LOGRAT)) +
+  geom_tile() +
+  #viridis::scale_fill_viridis(option = "turbo") +
+  scale_fill_gradientn(colours = c("royalblue1", "royalblue2", "royalblue", "white","gray98", "gray96", "gray94", "gray92", "grey90","orangered", "orangered2", "orangered3"),
+                       #values = scales::rescale(c(-0.86, -0.8, -.6, -.4, 0, .15, .25, .35, .45, .6))
+                       )+
+  facet_grid(SOURCE~CHROM, scales = "free", space = "free") +
+  theme_classic(base_size = 6)
+```
+
+# Calculate if there is a difference between expression of each gene and everyother in the individual
+## 
+```{r}
+library(dplyr)
+library(purrr)
+library(broom)
+
+# Define a function for pairwise comparison
+compare_tpm <- function(data) {
+  data %>%
+    mutate(pvalue = map_dbl(tpm, ~ {
+      # Exclude the current tpm value
+      others <- tpm[tpm != .x]
+      if (length(others) > 1) {
+        # Perform Wilcoxon test
+        wilcox.test(c(.x), others, exact = FALSE)$p.value
+      } else {
+        NA  # Not enough data for testing
+      }
+    }))
+}
+```
+
+## Test functino
+```{r}
+# Group by SOURCE and apply the function
+genes_pvals <- counts.genes %>%
+  ungroup() %>%
+  #slice_sample(n = 1e4) %>%
+  group_by(SOURCE) %>%
+  group_modify(~ compare_tpm(.x)) %>%
+  ungroup()
+
+genes_pvals <- genes_pvals %>%
+  dplyr::select(-c(Dup_Group, Hom_Group, POS, POS_WINDOW, WINDOW_START, WINDOW_END, med_tpm_window, mean_tpm_sample, norm_tpm, SEGMENT, med_tpm_segment, segmean_tpm_sample, segnorm_tpm, mean_tpm_segment, segmean_meantpm_sample, segnorm_meantpm))
+
+#fwrite(genes_pvals, "./Data/RNASeq_Counts/all_sample_kallisto_counts_w_pvalue.csv")
+
+range(genes_pvals$pvalue)
+```
+
+## Compare Chromosomes
+```{r}
+compare_chromosomes_by_source <- function(data) {
+  data %>%
+    group_by(SOURCE, CHROM) %>%
+    summarize(
+      # Extract the TPM values for the current chromosome
+      current_chr_tpm = list(tpm[CHROM == first(CHROM)]),
+      # Extract the TPM values for all other chromosomes
+      other_chr_tpm = list(tpm[CHROM != first(CHROM)]),
+      # Perform the Wilcoxon test if there are sufficient points
+      pvalue = {
+        current_chr = unlist(current_chr_tpm)
+        other_chr = unlist(other_chr_tpm)
+        
+        if (length(current_chr) > 1 && length(other_chr) > 1) {
+          wilcox.test(current_chr, other_chr, exact = FALSE)$p.value
+        } else {
+          NA  # Not enough data for testing
+        }
+      },
+      .groups = "drop"  # Remove grouping from the output
+    )
+}
+
+
+# Apply the function
+genes_pvals_chr <- counts.genes %>%
+  ungroup() %>%
+  group_by("SOURCE") %>%
+  group_modify(~ compare_chromosomes_by_source(.x)) %>%
+  ungroup()
+```
+
+## Another way to test
+```{r}
+library(dplyr)
+
+# Function to calculate p-values for each CHROM
+calculate_pvalues <- function(df) {
+  df %>%
+    group_by(SOURCE, CHROM) %>%
+    summarise(
+      pvalue = {
+        current_chrom <- tpm
+        other_chrom <- df %>% filter(SOURCE == first(as.character(SOURCE)) & CHROM != first(CHROM)) %>% pull(tpm)
+        wilcox.test(current_chrom, other_chrom)$p.value
+      },
+      .groups = "drop"
+    )
+}
+
+# Apply the function and join the p-values back to the original data
+result <- counts.genes %>%
+  group_split(SOURCE) %>%
+  purrr::map_dfr(calculate_pvalues) %>%
+  right_join(data, by = c("SOURCE", "CHROM"))
+
+# View the result
+head(result)
+
+
+```
+
+```{r}
+library(dplyr)
+library(purrr)
+
+# Function to calculate p-values for each CHROM
+calculate_pvalues <- function(df) {
+  df %>%
+    group_by(CHROM) %>%
+    summarise(
+      pvalue = {
+        current_chrom <- tpm
+        other_chrom <- df %>% filter(CHROM != cur_group_id()$CHROM) %>% pull(tpm)
+        wilcox.test(current_chrom, other_chrom)$p.value
+      },
+      .groups = "drop"
+    )
+}
+
+# Group by SOURCE and calculate p-values for each CHROM
+result <- counts.genes %>%
+  group_split(SOURCE, keep = TRUE) %>%
+  map_dfr(~ calculate_pvalues(.x) %>%
+            mutate(SOURCE = unique(.x$SOURCE))) %>%
+  right_join(counts.genes, by = c("SOURCE", "CHROM"))
+
+# View the result
+head(result)
+
 ```
 

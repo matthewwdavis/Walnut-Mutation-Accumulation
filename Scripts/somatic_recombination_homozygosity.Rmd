@@ -1,0 +1,211 @@
+---
+title: "somatic_recombination_homozygosity"
+author: "Matthew Davis"
+date: "2024-11-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Stay up to date ggnomics
+```{r, message=FALSE, eval=FALSE}
+if (!requireNamespace("devtools", quietly = TRUE)) {
+  install.packages("devtools")
+}
+
+devtools::install_github("matthewwdavis/ggnomics")
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggnomics)
+```
+
+## Functions
+```{r}
+read.ANC <- function(path, genotype = c("0/0","0/1","1/1")) {  
+  # Load data
+  snps <- fread(path)
+  
+  setnames(snps, "Source", "SOURCE")
+  
+  # Identify SNPs with single-character REF and ALT
+  snps[, SNP := nchar(REF) == 1 & nchar(ALT) == 1]
+  
+  # Filter SNPs with heterozygous genotype and calculate DPNORM by SOURCE
+  het_snps <- snps[SNP == TRUE & GT %in% genotype]
+  
+  # Select relevant columns
+  small_snps <- het_snps[, .(CHROM, POS, REF, GT, ALT, AD, DP, QUAL, SOURCE)]
+  
+  # Split AD column into REFDP and ALTDP
+  small_snps[, c("REFDP", "ALTDP") := tstrsplit(AD, ",", type.convert = TRUE)]
+  
+  # Create REALDP Column
+  small_snps[, REALDP := REFDP + ALTDP]
+  
+  # Normalize REFDP and ALTDP within each SOURCE
+  small_snps[, `:=`(
+    REFDP_NORM = REFDP / mean(REFDP, na.rm = TRUE),
+    ALTDP_NORM = ALTDP / mean(ALTDP, na.rm = TRUE),
+    REAL_DPNORM = REALDP / mean(REALDP, na.rm = TRUE)
+  ), by = SOURCE]
+  
+  # Drop the original AD column
+  small_snps[, AD := NULL]
+  small_snps[, DP := NULL]
+  
+  return(small_snps)
+}
+```
+
+## Read in data and combine
+```{r}
+chr1 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_1.vcf")
+chr2 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_2.vcf")
+chr3 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_3.vcf")
+chr4 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_4.vcf")
+chr5 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_5.vcf")
+chr6 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_6.vcf")
+chr7 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_7.vcf")
+chr8 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_8.vcf")
+chr9 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_9.vcf")
+chr10 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_10.vcf")
+chr11 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_11.vcf")
+chr12 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_12.vcf")
+chr13 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_13.vcf")
+chr14 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_14.vcf")
+chr15 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_15.vcf")
+chr16 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_16.vcf")
+
+an_snps <- rbind(chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16)
+rm(chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16)
+```
+
+## Create windows
+```{r}
+an_snps <- sliding_window_table(an_snps, window_size = 1e6, slide_size = 5e5)
+```
+
+# Begin summarizing data
+## Percent homozygosity in windows
+```{r}
+hom_windows <- an_snps %>%
+  group_by(SOURCE, CHROM, POS_WINDOW) %>%
+  summarise(HOM_FRACTION = sum(GT %in% "1/1") / (sum(GT %in% "0/0") + sum(GT %in% "0/1") + sum(GT %in% "1/1")))
+```
+
+## Assign names and levels
+```{r}
+levels <- c( "ref_chandler", "tree2",
+            "cr85", "cr10", "cr13", "cr22",
+            "cr2_11A",
+            "cr2_12A", "cr2_13A", "cr21_1", "cr21_2",
+            "cr2_18A", "cr2_15A", "cr2_15A1", "cr2_hifi", 
+            "cr2_16A","cr2_18A1", "cr2_17A1", "cr2_17A2",
+            "cr2_16A1", "cr2_16A2")
+
+hom_windows$SOURCE <- factor(hom_windows$SOURCE, levels = levels)
+
+hom_windows <- hom_windows %>%
+  mutate(TYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    SOURCE %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "Short Read Embryo",
+    SOURCE %in% c("cr85", "cr10", "cr13", "cr22") ~ "Short Read Shoot")) %>%
+  mutate(TYPE = factor(TYPE, levels = c("HiFi", "Short Read Embryo", "Short Read Shoot")))
+
+hom_windows <- hom_windows %>%
+  mutate(CULTURETYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2") ~ "tree",
+    SOURCE %in% c("cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A",
+                  "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
+                  "cr2_18A", "cr2_18A1") ~ "embryo",
+    SOURCE %in% c("cr85", "cr10", "cr13", "cr22") ~ "shoot")) %>%
+  mutate(SEQTYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "long_read",
+    SOURCE %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", 
+                  "cr2_16A", "cr2_16A1","cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A",
+                  "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ "short_read"))
+```
+
+# Plot
+## Line graph
+```{r}
+ggplot(hom_windows, aes(x = POS_WINDOW, y = HOM_FRACTION, color = CULTURETYPE)) +
+  geom_point() +
+  facet_wrap(~CHROM, scales = "free_x") +
+  scale_color_manual(values=c("tree" = "darkseagreen4", "shoot" = "darkseagreen2", "embryo" = "goldenrod1"),
+                     labels = c("tree" = "Tree", "shoot" = "Shoot", "embryo" = "Embryo"),
+                     guide = guide_legend(title = NULL)
+  ) +
+  theme_classic()
+```
+
+
+# Create windows and summarize for tiles
+## Create windows
+```{r}
+an_snps <- sliding_window_table(an_snps, window_size = 1e4, slide_size = 5e3)
+```
+
+## Percent homozygosity in windows
+```{r}
+hom_windows <- an_snps %>%
+  group_by(SOURCE, CHROM, POS_WINDOW) %>%
+  summarise(HOM_FRACTION = sum(GT %in% "1/1") / (sum(GT %in% "0/0") + sum(GT %in% "0/1") + sum(GT %in% "1/1")))
+```
+
+## Assign names and levels
+```{r}
+levels <- c( "ref_chandler", "tree2",
+            "cr85", "cr10", "cr13", "cr22",
+            "cr2_11A",
+            "cr2_12A", "cr2_13A", "cr21_1", "cr21_2",
+            "cr2_18A", "cr2_15A", "cr2_15A1", "cr2_hifi", 
+            "cr2_16A","cr2_18A1", "cr2_17A1", "cr2_17A2",
+            "cr2_16A1", "cr2_16A2")
+
+hom_windows$SOURCE <- factor(hom_windows$SOURCE, levels = levels)
+
+hom_windows <- hom_windows %>%
+  mutate(TYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    SOURCE %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "Short Read Embryo",
+    SOURCE %in% c("cr85", "cr10", "cr13", "cr22") ~ "Short Read Shoot")) %>%
+  mutate(TYPE = factor(TYPE, levels = c("HiFi", "Short Read Embryo", "Short Read Shoot")))
+
+hom_windows <- hom_windows %>%
+  mutate(CULTURETYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2") ~ "tree",
+    SOURCE %in% c("cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A",
+                  "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
+                  "cr2_18A", "cr2_18A1") ~ "embryo",
+    SOURCE %in% c("cr85", "cr10", "cr13", "cr22") ~ "shoot")) %>%
+  mutate(SEQTYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "long_read",
+    SOURCE %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", 
+                  "cr2_16A", "cr2_16A1","cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A",
+                  "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ "short_read"))
+```
+
+# Plot tiles
+## Try tiles
+```{r}
+ggplot(hom_windows, aes(x = POS_WINDOW, y = SOURCE, fill = HOM_FRACTION))+
+  geom_tile(color = NA) +
+  facet_grid(~CHROM, scales = "free") +
+  labs(x = "Position (10 MB)") +
+  scale_fill_gradientn(name = "Percent\nHomozygosity", colours = c("white", "yellow", "orangered")) +
+  scale_x_continuous(labels = label_number(scale = 1e-7)) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = "bottom",
+        axis.title.y = element_blank(),
+        strip.background = element_blank())
+```
+
+## Testing out the 

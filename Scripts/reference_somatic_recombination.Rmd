@@ -1,0 +1,237 @@
+---
+title: "reference_somatic_recombination"
+author: "Matthew Davis"
+date: "2024-11-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggenomics)
+```
+
+## Functions
+```{r}
+read.ANC <- function(path, genotype = c("0/0","0/1","1/1")) {  
+  # Load data
+  snps <- fread(path)
+  
+  setnames(snps, "Source", "SOURCE")
+  
+  # Identify SNPs with single-character REF and ALT
+  snps[, SNP := nchar(REF) == 1 & nchar(ALT) == 1]
+  
+  # Filter SNPs with heterozygous genotype and calculate DPNORM by SOURCE
+  het_snps <- snps[SNP == TRUE & GT %in% genotype]
+  
+  # Select relevant columns
+  small_snps <- het_snps[, .(CHROM, POS, REF, GT, VAF, ALT, AD, DP, QUAL, SOURCE)]
+  
+  # Split AD column into REFDP and ALTDP
+  small_snps[, c("REFDP", "ALTDP") := tstrsplit(AD, ",", type.convert = TRUE)]
+  
+  # Create REALDP Column
+  small_snps[, REALDP := REFDP + ALTDP]
+  
+  # Normalize REFDP and ALTDP within each SOURCE
+  small_snps[, `:=`(
+    REFDP_NORM = REFDP / mean(REFDP, na.rm = TRUE),
+    ALTDP_NORM = ALTDP / mean(ALTDP, na.rm = TRUE),
+    REAL_DPNORM = REALDP / mean(REALDP, na.rm = TRUE)
+  ), by = SOURCE]
+  
+  # Drop the original AD column
+  small_snps[, AD := NULL]
+  small_snps[, DP := NULL]
+  
+  return(small_snps)
+}
+```
+
+## Read in ancestral SNPs
+```{r}
+chr1 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_1.vcf")
+chr2 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_2.vcf")
+chr3 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_3.vcf")
+chr4 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_4.vcf")
+chr5 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_5.vcf")
+chr6 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_6.vcf")
+chr7 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_7.vcf")
+chr8 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_8.vcf")
+chr9 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_9.vcf")
+chr10 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_10.vcf")
+chr11 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_11.vcf")
+chr12 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_12.vcf")
+chr13 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_13.vcf")
+chr14 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_14.vcf")
+chr15 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_15.vcf")
+chr16 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_16.vcf")
+
+an_snps <- rbind(chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16)
+rm(chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16)
+```
+
+# Find instances where 1 sample is 0/1 but at least one other sample is different, either 0/0 or 1/1
+## Assigning UNIQUE values for SNPs and creating a snp matrix
+```{r}
+an_snps <- an_snps %>%
+  mutate(UNIQUE = paste0(CHROM,"_",POS,"_",ALT))
+
+an_matrix <- an_snps %>%
+  select(SOURCE, UNIQUE, GT) %>%
+  pivot_wider(names_from = UNIQUE, values_from = GT)
+
+matrix_an <- as.matrix(an_matrix[,-1]) # Remove SOURCE column for matrix operations
+rownames(matrix_an) <- an_matrix$SOURCE
+```
+
+## Identify differing SNP calls from matrix
+```{r}
+diff_ploidy <- apply(matrix_an, 2, function(col) {
+  
+  any(col == "0/1", na.rm = TRUE) && any(col != "0/1" & !is.na(col), na.rm = TRUE)
+  
+})
+
+# Select differing sites
+diff_snps <- an_matrix[, c(TRUE, diff_ploidy)]
+```
+
+## Pivot longer to replace NAs with 0s faster, then pivot back into matrix format
+```{r}
+tmp <- diff_snps %>%
+  pivot_longer(cols = -1,  # Exclude the first column
+               names_to = "UNIQUE", 
+               values_to = "value")
+
+# NAs should be ref sites
+tmp[is.na(tmp)] <- "0/0"
+
+
+diff_snps <- tmp %>%
+  pivot_wider(names_from = UNIQUE, 
+              values_from = value)
+```
+
+
+## Remove sites that are only mathcing between all hifi samples
+```{r}
+remove_hifi_effect <- function(df, hifi_sources = c("ref_chandler", "tree2", "cr2_hifi")) {
+  
+  # Check columns against the condition
+  columns_to_keep <- sapply(df, function(col) {
+    # Get the unique values for the three target sources
+    target_values <- unique(col[df$SOURCE %in% hifi_sources])
+    
+    # Get the unique values for the other sources
+    other_values <- unique(col[!df$SOURCE %in% hifi_sources])
+    
+    # Condition: keep column if the target values and other values don't meet the criteria
+    !(length(target_values) == 1 && length(other_values) == 1 && target_values != other_values)
+  })
+  
+  # Subset the data frame to keep only the desired columns
+  df[, columns_to_keep, drop = FALSE]
+}
+
+# Example usage
+# Assuming your data frame is called `my_data`
+diff_snps <- remove_hifi_effect(diff_snps)
+```
+# Join with the main snp data
+## Pivot the matrix longer
+```{r}
+long_diff <- diff_snps %>%
+  pivot_longer(cols = -1,  # Exclude the first column
+               names_to = "UNIQUE", 
+               values_to = "GT")
+```
+
+## Join with original table to get CHROM and POS information
+```{r}
+diff_snps_pos <- left_join(long_diff, 
+                           an_snps %>% select(-GT), 
+                           by = c("SOURCE", "UNIQUE"))
+```
+
+
+## Set VAF 0/0 to 0, 0/1 to 0.5, 1/1 to 1, and calculate windows
+```{r}
+diff_snps_pos <- diff_snps_pos %>%
+  mutate(VAF = case_when(
+    GT == "0/0" ~ 0,
+    GT == "0/1" ~ 0.5,
+    GT == "1/1" ~ 1))
+
+diff_snps_pos <- sliding_window_table(diff_snps_pos, window_size = 5e6, slide_size = 5e6)
+```
+
+## Calculate mean VAF in windows
+```{r}
+diff_snps_pos <- diff_snps_pos %>%
+  group_by(SOURCE, CHROM, POS_WINDOW) %>%
+  mutate(MEANVAF = mean(VAF)) %>%
+  ungroup()
+```
+
+## Set levels for plotting
+```{r}
+levels <- c( "ref_chandler", "tree2",
+             "cr22", "cr13", "cr10", "cr85",
+             "cr2_11A",
+             "cr2_12A", "cr2_13A", "cr21_1", "cr21_2",
+             "cr2_18A", "cr2_15A", "cr2_15A1", "cr2_hifi", 
+             "cr2_16A","cr2_18A1", "cr2_17A1", "cr2_17A2",
+             "cr2_16A1", "cr2_16A2")
+
+diff_snps_pos$SOURCE <- factor(diff_snps_pos$SOURCE, levels = levels)
+```
+
+## Plot
+```{r}
+diff_snps_pos %>%
+  filter(CHROM %in% c(1:16)) %>%
+ggplot(aes(x = POS_WINDOW, y = SOURCE, fill = log(MEANVAF)))+
+  geom_tile() +
+  facet_grid(~CHROM, scales = "free", space = "free") +
+  #labs(x = "Position (10 MB)") +
+  scale_fill_gradientn(name = "Mean VAF", colours = c("royalblue", "yellow", "firebrick")) +
+  #scale_x_continuous(labels = label_number(scale = 1e-7)) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = "bottom",
+        axis.title.y = element_blank(),
+        strip.background = element_blank())
+```
+
+## Try normalizing samples by sample mean
+```{r}
+diff_snps_pos <- diff_snps_pos %>%
+  group_by(SOURCE) %>%
+  mutate(mean_vaf_source = mean(MEANVAF)) 
+
+diff_snps_pos <- diff_snps_pos %>%
+  group_by(POS_WINDOW) %>%
+  mutate(norm_vaf = MEANVAF/mean_vaf_source)
+```
+
+## Plotting normalized VAF
+```{r}
+diff_snps_pos %>%
+  filter(CHROM %in% c(1:16)) %>%
+ggplot(aes(x = POS_WINDOW, y = SOURCE, fill = log(norm_vaf)))+
+  geom_tile() +
+  facet_grid(~CHROM, scales = "free", space = "free") +
+  #labs(x = "Position (10 MB)") +
+  scale_fill_gradientn(name = "log normalized VAF", colours = c("royalblue", "yellow", "firebrick")) +
+  #scale_x_continuous(labels = label_number(scale = 1e-7)) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = "bottom",
+        axis.title.y = element_blank(),
+        strip.background = element_blank())
+```
+

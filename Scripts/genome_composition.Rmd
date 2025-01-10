@@ -1,0 +1,135 @@
+---
+title: "genome_composition"
+author: "Matthew Davis"
+date: "2024-12-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggenomics)
+```
+
+## Read
+```{r}
+genes <- fread("./Data/GFFs/Parsed/genes_good.tsv")
+fasta <- ggread_fasta("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+```
+
+# Calculations
+## Total length of chromosomes
+```{r}
+fasta.table <- data.table(Chromosome = names(fasta), Length = width(fasta))
+fasta.table <- select_chr(fasta.table, chr_string = "NC_049")
+chrs <- sum(fasta.table$Length)
+```
+
+
+## Total gene length in genome
+```{r}
+genic <- sum(genes$LENGTH)
+```
+
+## Calculate non-genic space
+```{r}
+nongenic <- chrs - genic
+```
+
+## Rough estimate of bp +- 5000bp from genes
+```{r}
+updown_genes <- nrow(genes) * 10000
+```
+
+## Calculate non-gene associates space
+```{r}
+no_gene_assoc <- chrs - (genic + updown_genes)
+```
+
+
+# Plotting
+## Creating table for genic/nongenic
+```{r}
+genespace <- data.table(CLASS = rep(c("genic", "nongenic")),
+                        BP = c(genic, nongenic))
+genespace[, PROPORTION := BP / sum(BP)]
+
+genespace[, PCT := scales::percent(PROPORTION)]
+```
+
+## Plotting genic/nongenic
+```{r}
+ggplot(genespace, aes(x = "", y = PROPORTION, fill = CLASS)) +
+  geom_bar(stat = "identity", width = 1, color = "white", linewidth = 0.1) +
+  geom_text(aes(label = PCT), 
+            position = position_stack(vjust = 0.5),
+            color = "black",
+            size = 1.8) +
+  coord_polar(theta = "y") +
+  scale_fill_manual(
+    name = "Genome Composition",
+    values = c("genic" = "mediumseagreen", 
+               "nongenic" = "grey90"), 
+    labels = c("genic" = "Gene", 
+               "nongenic" = "Non-Genic"),
+    #breaks=c("Gene",   "Upstream", "Downstream", "Upstream+Downstream","Intergenic")
+    ) +
+  guides(fill = guide_legend(nrow = 6)) +
+  theme_void(base_size = 6) +
+  theme(legend.position = c(1.13, 0.9),
+        legend.direction = "horizontal",
+        legend.title = element_text(face = "bold"),
+        legend.title.position = "top",
+        legend.key.size = unit(0.15,"cm"),
+        plot.margin = margin(t = 1, r = 1.75, b = -0, l = -.4, unit = "cm"),
+  ) 
+ggsave("./Figures/Genome_Composition/genic_and_nongenic_composition.pdf", height = 2, width = 2.2)
+ggsave("./Figures/Genome_Composition/genic_and_nongenic_composition.png", height = 2, width = 2.2)
+```
+
+## Table for genome composition with +- 5000bp
+```{r}
+complex_genespace <- data.table(CLASS = rep(c("genic", "updown_genes", "no_gene_assoc")),
+                        BP = c(genic, updown_genes, no_gene_assoc))
+
+complex_genespace[, PROPORTION := BP / sum(BP)]
+
+complex_genespace[, PCT := scales::percent(PROPORTION)]
+```
+
+## Plotting more complex table
+```{r}
+ggplot(complex_genespace, aes(x = "", y = PROPORTION, fill = CLASS)) +
+  geom_bar(stat = "identity", width = 1, color = "white", linewidth = 0.1) +
+  geom_text(aes(label = PCT), 
+            position = position_stack(vjust = 0.5),
+            color = "black",
+            size = 1.8) +
+  coord_polar(theta = "y") +
+  scale_fill_manual(
+    name = "Genome Composition",
+    values = c("genic" = "mediumseagreen",
+               "updown_genes" = "#9ED9B8",
+               "no_gene_assoc" = "grey90"), 
+    labels = c("genic" = "Gene", 
+               "updown_genes" = "\u00b1 5000bp from gene body",
+               "no_gene_assoc" = "All other sequence space"),
+    #breaks=c("Gene", "Upstream", "Downstream", "Upstream+Downstream","Intergenic")
+    ) +
+  guides(fill = guide_legend(nrow = 6)) +
+  theme_void(base_size = 6) +
+  theme(legend.position = c(1.13, 0.9),
+        legend.direction = "horizontal",
+        legend.title = element_text(face = "bold"),
+        legend.title.position = "top",
+        legend.key.size = unit(0.15,"cm"),
+        plot.margin = margin(t = 1, r = 1.75, b = -0, l = -.4, unit = "cm"),
+  ) 
+ggsave("./Figures/Genome_Composition/genic_updownstream_nongenic_composition.pdf", height = 2, width = 2.2)
+ggsave("./Figures/Genome_Composition/genic_updownstream_nongenic_composition.png", height = 2, width = 2.2)
+```
+

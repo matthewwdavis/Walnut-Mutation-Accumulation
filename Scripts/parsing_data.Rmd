@@ -622,3 +622,66 @@ mutations_neighbors <- rbindlist(pblapply((1:nrow(muts_small)), function(i){
 muts_hp <- merge(muts_small, mutations_neighbors, by="UNIQUE")
 ```
 
+# Create a trimmed down set of shared ancestral snps
+## Function for reading ancestral snps
+```{r}
+read.ANC <- function(path, genotype = c("0/0","0/1","1/1")) {  
+  # Load data
+  snps <- fread(path)
+  
+  setnames(snps, "Source", "SOURCE")
+  
+  # Identify SNPs with single-character REF and ALT
+  snps[, SNP := nchar(REF) == 1 & nchar(ALT) == 1]
+  
+  # Filter SNPs with heterozygous genotype and calculate DPNORM by SOURCE
+  het_snps <- snps[SNP == TRUE & GT %in% genotype]
+  
+  # Select relevant columns
+  small_snps <- het_snps[, .(CHROM, POS, REF, ALT, GT, VAF, AD, DP, QUAL, SOURCE)]
+  
+  # Split AD column into REFDP and ALTDP
+  small_snps[, c("REFDP", "ALTDP") := tstrsplit(AD, ",", type.convert = TRUE)]
+  
+  # Create REALDP Column
+  small_snps[, REALDP := REFDP + ALTDP]
+  
+  # Normalize REFDP and ALTDP within each SOURCE
+  small_snps[, `:=`(
+    REFDP_NORM = REFDP / mean(REFDP, na.rm = TRUE),
+    ALTDP_NORM = ALTDP / mean(ALTDP, na.rm = TRUE),
+    REAL_DPNORM = REALDP / mean(REALDP, na.rm = TRUE)
+  ), by = SOURCE]
+  
+  # Drop the original AD column
+  small_snps[, AD := NULL]
+  small_snps[, DP := NULL]
+  
+  return(small_snps)
+}
+```
+
+## Read and combine
+```{r}
+chr1 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_1.vcf")
+chr2 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_2.vcf")
+chr3 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_3.vcf")
+chr4 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_4.vcf")
+chr5 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_5.vcf")
+chr6 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_6.vcf")
+chr7 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_7.vcf")
+chr8 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_8.vcf")
+chr9 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_9.vcf")
+chr10 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_10.vcf")
+chr11 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_11.vcf")
+chr12 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_12.vcf")
+chr13 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_13.vcf")
+chr14 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_14.vcf")
+chr15 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_15.vcf")
+chr16 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_16.vcf")
+
+an_snps <- rbind(chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16)
+rm(chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16)
+
+fwrite(an_snps, "./Data/VCFs/Ancestral_SNPs/ancestral_snps_smaller.tsv")
+```

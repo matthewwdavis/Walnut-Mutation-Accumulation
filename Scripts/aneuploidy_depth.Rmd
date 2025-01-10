@@ -12,82 +12,39 @@ knitr::opts_chunk$set(echo = TRUE)
 # Setup
 ## Library
 ```{r, message=FALSE}
-library(data.table)
-library(tidyverse)
-```
-
-## Functions
-```{r}
-read.ANC <- function(path) {  
-  # Load data
-  snps <- fread(path)
-  
-  setnames(snps, "Source", "SOURCE")
-  
-  
-  # Identify SNPs with single-character REF and ALT
-  snps[, SNP := nchar(REF) == 1 & nchar(ALT) == 1]
-  
-  # Filter SNPs with heterozygous genotype and calculate DPNORM by SOURCE
-  het_snps <- snps[SNP == TRUE & GT == "0/1"]
-  
-  # Select relevant columns
-  small_snps <- het_snps[, .(CHROM, POS, REF, ALT, AD, DP, QUAL, SOURCE)]
-  
-  # Split AD column into REFDP and ALTDP
-  small_snps[, c("REFDP", "ALTDP") := tstrsplit(AD, ",", type.convert = TRUE)]
-  
-  # Normalize REFDP and ALTDP within each SOURCE
-  small_snps[, `:=`(
-    REFDP_NORM = REFDP / mean(REFDP, na.rm = TRUE),
-    ALTDP_NORM = ALTDP / mean(ALTDP, na.rm = TRUE),
-    DPNORM = DP / mean(DP, na.rm = TRUE)
-  ), by = SOURCE]
-  
-  # Drop the original AD column
-  small_snps[, AD := NULL]
-  
-  return(small_snps)
-}
-
+library(ggenomics)
 ```
 
 ## Read in data
 ```{r}
-chr1 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_1.vcf")
-chr2 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_2.vcf")
-chr3 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_3.vcf")
-chr4 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_4.vcf")
-chr5 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_5.vcf")
-chr6 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_6.vcf")
-chr7 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_7.vcf")
-chr8 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_8.vcf")
-chr9 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_9.vcf")
-chr10 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_10.vcf")
-chr11 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_11.vcf")
-chr12 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_12.vcf")
-chr13 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_13.vcf")
-chr14 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_14.vcf")
-chr15 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_15.vcf")
-chr16 <- read.ANC("./Data/VCFs/Filtered/all_an_snps_chr_16.vcf")
-
-an_snps <- rbind(chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16)
-rm(chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, chr13, chr14, chr15, chr16)
+an_snps <- fread("./Data/VCFs/Ancestral_SNPs/ancestral_snps_smaller.tsv")
 
 gen_map <- fread("./Data/Linkage_Maps/map_LBF2411_RefChandlerPrimaryYesOmniC_no_genos.csv")
 setnames(gen_map, old = c("chr", "bp", "hap1", "hap2"), new = c("CHROM", "POS", "Hap1", "Hap2"))
+
+# an_snps[,unique:=paste(CHROM, POS)]
+# an_snps[,window:=as.numeric(cut(POS, breaks=20))]
+# an_PAV<-an_snps[SEQTYPE=="short_read",.(N=.N),by=.(CHROM, SOURCE, window)]
+# an_PAV[,relN:=N/mean(N), by=.(CHROM, window)]
+# ggplot(an_PAV, aes(x=window, y=SOURCE, fill=relN))+
+#   geom_tile()+
+#   facet_grid(SOURCE~CHROM, scales="free")+
+#   scale_fill_gradient2(midpoint = 1)
 ```
 
-# Making new labels
+# Prepare data
+## Making new labels
 ```{r}
-new_labels = c("ref_chandler" = "Reference", "tree2" = "Tree 2",
-               "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
-               "cr2_11A" = "Embryo 11A", "cr2_12A" = "Embryo 12A", "cr2_13A" = "Embryo 13A",
-               "cr2_15A" = "Embryo 15A", "cr2_15A1" = "Embryo 15A1", "cr2_16A" = "Embryo 16A",
-               "cr2_16A1" = "Embryo 16A1", "cr2_16A2" = "Embryo 16A2", "cr2_17A1" = "Embryo 17A1",
-               "cr2_17A2" = "Embryo 17A2", "cr2_18A" = "Embryo 18A", "cr2_18A1" = "Embryo 18A1",
-               "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
-               "cr22" = "Chandler '22")
+new_labels = c(
+  "ref_chandler" = "Reference", "tree2" = "Tree",
+  "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+  "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
+  "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
+  "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
+  "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
+  "cr85" = "S 1985", "cr10" = "S 2010",
+  "cr13" = "S 2013", "cr22" = "S 2022"
+)
 
 an_snps <- an_snps %>%
   mutate(CULTURETYPE = case_when(
@@ -105,6 +62,7 @@ an_snps <- an_snps %>%
 
 ## Combine data
 ```{r}
+# Look back through this to make sure nothing funky is happening in this parsing
 phased_snps <- inner_join(an_snps, gen_map, by = c("CHROM", "POS"))
 
 phased_snps <- phased_snps %>%
@@ -122,12 +80,10 @@ phased_snps %>%
                values_to = "Combined_DP")
 ```
 
-
-
-## Plot
+# Plot
 ```{r}
 hap1 <- phased_snps %>%
-  select(-c(ALT, ALTDP, ALTDP_NORM)) %>%
+  dplyr::select(-c(ALT, ALTDP, ALTDP_NORM)) %>%
   filter(Variant_is_hap1 == FALSE) %>%
   mutate(Haplotype = "hap1") %>%
   mutate(Interaction_Column = interaction(SOURCE, Haplotype)) %>%
@@ -136,7 +92,7 @@ hap1 <- phased_snps %>%
   mutate(ALTDP_NORM = NA)
 
 hap2 <- phased_snps %>%
-  select(-c(REF, REFDP, REFDP_NORM)) %>%
+  dplyr::select(-c(REF, REFDP, REFDP_NORM)) %>%
   filter(Variant_is_hap2 == TRUE) %>%
   mutate(Haplotype = "hap2") %>%
   mutate(Interaction_Column = interaction(SOURCE, Haplotype)) %>%
@@ -215,8 +171,8 @@ combo_haps %>%
         axis.ticks.x = element_blank(),
         legend.key.size = unit(0.25, "cm"),
         legend.position = c(.95,.9))
-ggsave("./Figures/Aneuploidy_Depth/depth_per_chr_hap.pdf", height = 3, width = 7)
-ggsave("./Figures/Aneuploidy_Depth/depth_per_chr_hap.png", height = 3, width = 7)
+# ggsave("./Figures/Aneuploidy_Depth/depth_per_chr_hap.pdf", height = 3, width = 7)
+# ggsave("./Figures/Aneuploidy_Depth/depth_per_chr_hap.png", height = 3, width = 7)
 
 
 combo_haps %>%
@@ -230,8 +186,16 @@ combo_haps %>%
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank()) +
   theme_classic(base_size = 6)
-
 ```
+
+## Set levels
+```{r}
+combo_haps$SOURCE <- factor(combo_haps$SOURCE, levels = c("ref_chandler", "tree2", "cr22", "cr13", "cr10", "cr85",
+                                                          "cr2_11A", "cr2_13A", "cr2_12A",  "cr21_1", "cr21_2",
+                                                          "cr2_18A", "cr2_15A", "cr2_15A1", "cr2_hifi", "cr2_16A",
+                                                          "cr2_18A1", "cr2_17A1", "cr2_17A2", "cr2_16A1", "cr2_16A2"))
+```
+
 
 ## Try mean plotting
 ```{r}
@@ -282,33 +246,391 @@ combo_means %>%
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank())
 
-combo_means$SOURCE <- factor(combo_means$SOURCE, levels = c("cr85", "cr10", "cr13", "cr22", "tree2", "ref_chandler",
+combo_means$SOURCE <- factor(combo_means$SOURCE, levels = c("cr85", "cr10", "cr13", "cr22", "ref_chandler", "tree2", 
                                                             "cr2_11A", "cr2_13A", "cr2_12A",  "cr21_1", "cr21_2",
                                                             "cr2_18A", "cr2_15A", "cr2_15A1", "cr2_hifi", "cr2_16A",
                                                             "cr2_18A1", "cr2_17A1", "cr2_17A2", "cr2_16A1", "cr2_16A2"))
+```
 
+## Replace Hap names with A and B
+```{r}
+combo_means$Haplotype <- gsub("hap1", "A", combo_means$Haplotype)
+combo_means$Haplotype <- gsub("hap2", "B", combo_means$Haplotype)
+```
+
+
+## Plot the heatmap style grid
+```{r}
 combo_means %>%
   ggplot(aes(x = 1, y = SOURCE, fill = MEAN_ADSCALE)) +
   facet_grid(~CHROM + Haplotype, space = "free", scales = "free") +
   geom_tile() +
-  scale_fill_gradientn(colors = c("white", "orangered")) + 
+  scale_fill_gradientn(colors = c("white", "lightyellow", "orangered", "orangered2")) + 
   scale_y_discrete(labels = new_labels) +
   labs(fill = "Scaled\nDepth") +
   theme_classic(base_size = 6) +
   theme(strip.background = element_blank(),
-        legend.position = "bottom",
+        legend.position = "none",
         #legend.key.size = unit(.2, "cm"),
         #strip.text.x = element_text(face = "bold"),
+        panel.spacing.x = unit(.2, "cm"),
         axis.title = element_blank(),
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.line.x = element_blank(),
-            # axis.text.y = element_text(color = c("cr85" = "darkseagreen2", "cr10" = "darkseagreen2", "cr13" = "darkseagreen2", "cr22" = "darkseagreen2",
-            #       "tree2" = "darkseagreen4", "ref_chandler" = "darkseagreen4",
-            #                                                 "cr2_11A" = "goldenrod1", "cr2_13A" = "goldenrod1", "cr2_12A" = "goldenrod1",  "cr21_1" = "goldenrod1", "cr21_2" = "goldenrod1",
-            #                                                 "cr2_18A" = "goldenrod1", "cr2_15A" = "goldenrod1", "cr2_15A1" = "goldenrod1", "cr2_hifi" = "goldenrod1", "cr2_16A" = "goldenrod1",
-            #                                                 "cr2_18A1" = "goldenrod1", "cr2_17A1" = "goldenrod1", "cr2_17A2" = "goldenrod1", "cr2_16A1" = "goldenrod1", "cr2_16A2" = "goldenrod1"))
-)
-ggsave("./Figures/Aneuploidy_Depth/depth_all_samples.pdf", height = 3, width = 6.5)
+        #axis.line.y = element_line(linewidth = 1),
+        axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
+        axis.ticks.length.y = unit(0.5, "cm"),
+        axis.text.y = element_blank()
+  )
+# ggsave("./Figures/Aneuploidy_Depth/depth_all_samples.pdf", height = 3.35, width = 4.46)
+```
+
+## Best may be to do this in windows
+```{r}
+combo_haps <- sliding_window_table(combo_haps, window_size = 1e7, slide_size = 1e7)
+
+mean_AD <-combo_haps %>%
+  group_by(SOURCE, CHROM, Haplotype, POS_WINDOW) %>%
+  mutate(mean_AD_Scale = mean(AD_Scale))
+```
+
+## Also do 10 even windows
+```{r}
+setDT(mean_AD)
+mean_AD[, SEGMENT := cut(1:.N, breaks = 5, labels = FALSE), by = c("SOURCE", "CHROM", "Haplotype")]
+
+mean_AD[, mean_AD_Scale_Segment := mean(AD_Scale), by = c("SOURCE", "CHROM", "Haplotype", "SEGMENT")]
+```
+
+## Set Source and rename haplotype
+```{r}
+mean_AD$SOURCE <- factor(mean_AD$SOURCE, levels = c(   "cr2_16A2", "cr2_16A1","cr2_17A2","cr2_17A1","cr2_18A1",
+                                                       "cr2_16A","cr2_hifi","cr2_15A1","cr2_15A", "cr2_18A",
+                                                       "cr21_2","cr21_1", "cr2_12A","cr2_13A","cr2_11A",
+                                                       "cr85", "cr10",  "cr13", "cr22", "tree2", "ref_chandler"))
+mean_AD$Haplotype <- gsub("hap1", "A", mean_AD$Haplotype)
+mean_AD$Haplotype <- gsub("hap2", "B", mean_AD$Haplotype)
+```
+
+## Plot
+```{r}
+aneu_depth <- mean_AD %>%
+  ggplot(aes(x = POS_WINDOW, y = SOURCE, fill = mean_AD_Scale)) +
+  facet_grid(SOURCE~CHROM + Haplotype, space = "free", scales = "free") +
+  geom_tile() +
+  scale_fill_gradientn(colors = c("royalblue", "grey100", "grey95", "orangered2")) + 
+  scale_y_discrete(labels = new_labels) +
+  labs(fill = "Scaled\nDepth") +
+  theme_classic(base_size = 6) +
+  theme(strip.background = element_blank(),
+        strip.text.y = element_blank(),
+        legend.position = "none",
+        legend.key.size = unit(.2, "cm"),
+        #strip.text.x = element_text(face = "bold"),
+        strip.text.x = element_text(margin = margin(t = 0, b = 0)),
+        #panel.spacing.x = unit(.1, "cm"),
+        axis.title = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        #axis.line.x = element_blank(),
+        axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
+        axis.ticks.length.y = unit(0.5, "cm"),
+        axis.text.y = element_blank(),
+        panel.border = element_rect(fill = NA),
+        panel.spacing.y = unit(0.05, "cm"),
+        panel.spacing.x = unit(0.05, "cm"),
+        plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+  )
+
+aneu_depth
+
+ggsave("./Figures/Aneuploidy_Depth/depth_in_10mb_windows.pdf", height = 3, width = 5.85)
+ggsave("./Figures/Aneuploidy_Depth/depth_in_10mb_windows.png", height = 3, width = 5.85)
+saveRDS(aneu_depth, file = "./Data/Plot_Objects/depth_in_10mb_windows_heatmap.rds")
+```
+
+## Plotting with equal number of segments per chromosome
+```{r}
+aneu_dp_equal <- mean_AD %>%
+  ggplot(aes(x = SEGMENT, y = SOURCE, fill = mean_AD_Scale_Segment)) +
+  facet_grid(SOURCE~CHROM + Haplotype, space = "free", scales = "free") +
+  geom_tile() +
+  scale_fill_gradientn(colors = c("royalblue1","royalblue", "grey97", "grey95", "orangered", "orangered2")) + 
+  scale_y_discrete(labels = new_labels) +
+  labs(fill = "Scaled\nDepth") +
+  theme_classic(base_size = 6) +
+  theme(strip.background = element_blank(),
+        strip.text.y = element_blank(),
+        legend.position = "none",
+        legend.key.size = unit(.2, "cm"),
+        strip.text.x = element_text(margin = margin(t = 0, b = 0)),
+        axis.title = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
+        axis.ticks.length.y = unit(0.5, "cm"),
+        axis.text.y = element_blank(),
+        axis.line.y = element_blank(),
+        panel.border = element_rect(fill = NA),
+        panel.spacing.y = unit(0.05, "cm"),
+        panel.spacing.x = unit(0.05, "cm"),
+        plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+  )
+
+aneu_dp_equal
+
+ggsave("./Figures/Aneuploidy_Depth/depth_in_5_windows_per_chr.pdf", height = 3, width = 6)
+ggsave("./Figures/Aneuploidy_Depth/depth_in_5_windows_per_chr.png", height = 3, width = 6)
+saveRDS(aneu_dp_equal, file = "./Data/Plot_Objects/depth_in_5_windows_per_chr.rds")
+```
+
+# VAF heatmap
+## Mean VAF per Segment
+```{r}
+mean_AD[, mean_VAF_Segment := mean(VAF), by = c("SOURCE", "CHROM", "Haplotype", "SEGMENT")]
+```
+
+## Plot VAF heatmap
+This is better displayed in the primary sequence. Can likely use only embryos
+```{r}
+mean_AD %>%
+  ggplot(aes(x = SEGMENT, y = SOURCE, fill = mean_VAF_Segment)) +
+  facet_grid(SOURCE~CHROM + Haplotype, space = "free", scales = "free") +
+  geom_tile() +
+  scale_fill_gradientn(colors = c("grey100", "grey95", "orangered2")) + 
+  scale_y_discrete(labels = new_labels) +
+  labs(fill = "Scaled\nDepth") +
+  theme_classic(base_size = 6) +
+  theme(strip.background = element_blank(),
+        strip.text.y = element_blank(),
+        legend.position = "none",
+        legend.key.size = unit(.2, "cm"),
+        strip.text.x = element_text(margin = margin(t = 0, b = 0)),
+        axis.title = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
+        axis.ticks.length.y = unit(0.5, "cm"),
+        axis.text.y = element_blank(),
+        axis.line.y = element_blank(),
+        panel.border = element_rect(fill = NA),
+        panel.spacing.y = unit(0.05, "cm"),
+        panel.spacing.x = unit(0.05, "cm"),
+        plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+  )
+```
+
+
+## AD in CHR 9 sample cr16A1
+```{r}
+combo_haps %>%
+  filter(SOURCE %in% "cr2_16A1", CHROM %in% 9) %>%
+  ggplot(aes(x = POS, y = Combined_Scaled_DP, color = Haplotype)) +
+  geom_point(size = 1) +
+  geom_smooth(alpha = 0.2, linewidth = 1.3) +
+  scale_color_manual(values = c(hap1 = "orangered2", hap2 = "royalblue"))+ 
+  labs(x = "Position", y = "Scaled Depth") +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "Mb")) +
+  scale_y_continuous(limits = c(0, 4.5)) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = c(0.88,0.8),
+        legend.key.size = unit(0.2, units = "cm"),
+        plot.margin = margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
+ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr9_depth.pdf", height = 1, width = 1.87)
+ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr9_depth.png", height = 1, width = 1.87)
+
+combo_haps %>%
+  filter(SOURCE %in% "cr2_16A1", CHROM %in% 1) %>%
+  ggplot(aes(x = POS, y = Combined_Scaled_DP, color = Haplotype)) +
+  geom_point(size = 1) +
+  geom_smooth(alpha = 0.2, linewidth = 1.3) +
+  scale_color_manual(values = c(hap1 = "steelblue", hap2 = "lemonchiffon3"))+ 
+  labs(x = "Position", y = "Scaled Depth") +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "Mb")) +
+  scale_y_continuous(limits = c(0, 4.5)) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = c(0.88,0.8),
+        legend.key.size = unit(0.2, units = "cm"),
+        plot.margin = margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
+ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr1_depth.pdf",height = 1, width = 1.87)
+ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr1_depth.png", height = 1, width = 1.87)
+
+combo_haps %>%
+  filter(SOURCE %in% "cr2_16A1", CHROM %in% 4) %>%
+  ggplot(aes(x = POS, y = Combined_Scaled_DP, color = Haplotype)) +
+  geom_point(size = 1) +
+  geom_smooth(alpha = 0.2, linewidth = 1.3) +
+  scale_color_manual(values = c(hap1 = "steelblue", hap2 = "lemonchiffon3"))+ 
+  labs(x = "Position", y = "Scaled Depth") +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "Mb")) +
+  scale_y_continuous(limits = c(0, 4.5)) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = c(0.88,0.8),
+        legend.key.size = unit(0.2, units = "cm"),
+        plot.margin = margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
+ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr4_depth.pdf", height = 1, width = 1.87)
+ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr4_depth.png", height = 1, width = 1.87)
+
+combo_haps %>%
+  filter(SOURCE %in% "cr2_16A1", CHROM %in% 11) %>%
+  ggplot(aes(x = POS, y = Combined_Scaled_DP, color = Haplotype)) +
+  geom_point(size = 1) +
+  geom_smooth(alpha = 0.2, linewidth = 1.3) +
+  scale_color_manual(values = c(hap1 = "royalblue", hap2 = "orangered2"))+ 
+  labs(x = "Position", y = "Scaled Depth") +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "Mb")) +
+  scale_y_continuous(limits = c(0, 4.5)) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = c(0.88,0.8),
+        legend.key.size = unit(0.2, units = "cm"),
+        plot.margin = margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
+ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr11_depth.pdf", height = 1, width = 1.87)
+ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr11_depth.png", height = 1, width = 1.87)
+
+combo_haps %>%
+  filter(SOURCE %in% "cr2_16A1", CHROM %in% 16) %>%
+  ggplot(aes(x = POS, y = Combined_Scaled_DP, color = Haplotype)) +
+  geom_point(size = 1) +
+  geom_smooth(alpha = 0.2, linewidth = 1.3) +
+  scale_color_manual(values = c(hap1 = "royalblue", hap2 = "orangered2"))+ 
+  labs(x = "Position", y = "Scaled Depth") +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "Mb")) +
+  scale_y_continuous(limits = c(0, 4.5)) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = c(0.88,0.8),
+        legend.key.size = unit(0.2, units = "cm"),
+        plot.margin = margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
+ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr16_depth.pdf", height = 1, width = 1.87)
+ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr16_depth.png", height = 1, width = 1.87)
+
+combo_haps %>%
+  filter(SOURCE %in% "cr2_15A", CHROM %in% 12) %>%
+  ggplot(aes(x = POS, y = Combined_Scaled_DP, color = Haplotype)) +
+  geom_point(size = 1) +
+  geom_smooth(alpha = 0.2, linewidth = 1.3) +
+  scale_color_manual(values = c(hap1 = "royalblue", hap2 = "wheat"))+ 
+  labs(x = "Position", y = "Scaled Depth") +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "Mb")) +
+  scale_y_continuous(limits = c(0, 4.5)) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = c(0.88,0.8),
+        legend.key.size = unit(0.2, units = "cm"),
+        plot.margin = margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
+ggsave("./Figures/Somatic_Recombination/cr2_15a_chr12_depth.pdf", height = 1, width = 1.87)
+ggsave("./Figures/Somatic_Recombination/cr2_15a_chr12_depth.png", height = 1, width = 1.87)
+```
+
+
+## Look at AD for CHR 9
+```{r, eval=FALSE}
+for (source in unique(combo_haps$SOURCE)) {
+  
+  p <- combo_haps %>%
+    filter(SOURCE %in% source, CHROM %in% 9) %>%
+    ggplot(aes(x = POS, y = Combined_Scaled_DP, color = Haplotype)) +
+    geom_point() +
+    geom_smooth() +
+    labs(title = paste(source, " SR")) +
+    theme_classic() +
+    theme(legend.position = "bottom")
+  
+  print(p)
+}
+```
+
+## Look at all chromosomes in all samples
+```{r, eval=FALSE}
+pdf(file = "~/Desktop/all_sr_plot.pdf", height = 8, width = 8)
+for (source in unique(combo_haps$SOURCE)) {
+  
+  p <- combo_haps %>%
+    filter(SOURCE %in% source) %>%
+    ggplot(aes(x = POS, y = Combined_Scaled_DP, color = Haplotype)) +
+    geom_point() +
+    geom_smooth(method = "loess", formula = "y~x") +
+    facet_wrap(~ CHROM, scales = "free") +
+    labs(title = paste(source, " SR")) +
+    theme_classic(base_size = 6) +
+    theme(legend.position = "bottom")
+  
+  print(p)
+}
+dev.off()
+
+```
+
+## Try to summarize homozygous fraction
+```{r}
+combo_haps <- sliding_window_table(combo_haps, window_size = 1e7, slide_size = 5e6)
+
+hom_sum <- combo_haps %>%
+  group_by(SOURCE, CHROM, POS_WINDOW) %>%
+  summarise(hom_pct = sum(GT %in% "1/1") / (sum(GT %in% "0/0") + sum(GT %in% "0/1") + sum(GT %in% "1/1")), .groups = "drop")
+
+hom_combo_haps <-left_join(combo_haps, hom_sum)
+```
+
+## Plotting
+```{r}
+hom_combo_haps %>%
+  ggplot(aes(x = POS_WINDOW, y = SOURCE, fill = hom_pct)) +
+  facet_grid(~CHROM + Haplotype, space = "free", scales = "free") +
+  geom_tile() +
+  scale_fill_gradientn(colors = c("white", "wheat1", "orangered")) + 
+  scale_y_discrete(labels = new_labels) +
+  labs(fill = "Homozygous\nfraction") +
+  theme_classic(base_size = 6) +
+  theme(strip.background = element_blank(),
+        legend.position = "bottom",
+        legend.key.size = unit(.2, "cm"),
+        #strip.text.x = element_text(face = "bold"),
+        axis.title = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank())
+```
+
+## looking at sample 13 chr 9
+```{r}
+hom_combo_haps %>%
+  filter(SOURCE %in% "cr2_16A1") %>%
+  ggplot(aes(x = POS_WINDOW, y = SOURCE, fill = VAF)) +
+  facet_grid(~CHROM + Haplotype, space = "free", scales = "free") +
+  geom_tile() +
+  scale_fill_gradientn(colors = c("white", "wheat1", "orangered")) + 
+  scale_y_discrete(labels = new_labels) +
+  labs(fill = "VAF") +
+  theme_classic(base_size = 6) +
+  theme(strip.background = element_blank(),
+        legend.position = "bottom",
+        legend.key.size = unit(.2, "cm"),
+        #strip.text.x = element_text(face = "bold"),
+        axis.title = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank())
+
+hom_combo_haps %>%
+  filter(SOURCE %in% "cr2_11A", CHROM %in% c(4,9)) %>%
+  ggplot(aes(x = POS_WINDOW, y = SOURCE, fill = VAF)) +
+  facet_grid(~CHROM + Haplotype, space = "free", scales = "free") +
+  geom_tile() +
+  scale_fill_gradientn(colors = c("white", "wheat1", "orangered")) + 
+  scale_y_discrete(labels = new_labels) +
+  labs(fill = "VAF") +
+  theme_classic(base_size = 6) +
+  theme(strip.background = element_blank(),
+        legend.position = "bottom",
+        legend.key.size = unit(.2, "cm"),
+        #strip.text.x = element_text(face = "bold"),
+        axis.title = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank())
+
+
 ```
 

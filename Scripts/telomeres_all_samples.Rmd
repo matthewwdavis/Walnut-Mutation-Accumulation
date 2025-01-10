@@ -220,7 +220,7 @@ mean_tel %>%
   ggplot(aes(x = CULTURETYPE, y = NORM_TEL_COUNT, fill = CULTURETYPE)) +
   geom_bar(stat = "identity", width = .9) +
   labs(y = "Average normalized telomere counts") +
-  scale_fill_manual(values=c("tree" = "darkseagreen4", "shoot" = "darkseagreen", "embryo" = "goldenrod1"),
+  scale_fill_manual(values=c("tree" = "darkseagreen4", "shoot" = "darkseagreen2", "embryo" = "goldenrod1"),
                     labels = c("tree" = "Tree", "shoot" = "Shoot", "embryo" = "Embryo")) +
   theme_classic( base_size = 6) +
   theme(axis.title.x = element_blank(),

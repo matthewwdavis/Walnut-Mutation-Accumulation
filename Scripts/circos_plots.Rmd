@@ -307,3 +307,21 @@ circos.track(ylim = c(-2.1,5.3), panel.fun = function(x, y) {
 #dev.off()
 ```
 
+# Start from scratch
+## New Libraries
+```{r}
+library(ggenomics)
+library(circlize)
+```
+
+## Functions
+```{r}
+
+```
+
+## Read in data
+```{r}
+ref_combo <- ggread_fasta("../Data/Fastas/ref_chandler_combohap_default_scaffold.fasta")
+
+```
+

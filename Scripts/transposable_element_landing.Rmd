@@ -1,0 +1,206 @@
+---
+title: "transposable_element_landing"
+author: "Matthew Davis"
+date: "2024-12-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggenomics)
+```
+
+## Additional Functions
+```{r}
+# Need a read_gff and read.PBSV added to ggenomics
+read.PBSV <- function(data_path){
+  
+  sv.vcf <- fread(data_path, skip = "#CHROM")
+  
+  sv.vcf <- sv.vcf %>%
+    rename("#CHROM" = "CHROM", "UnnamedSample" = "SAMPLE")
+  
+  sv.vcf <- sv.vcf %>%
+    separate(SAMPLE, c("GT", "AD", "DP", "SAC"), sep = ":", fill = "right") %>%
+    separate(AD, c("REFDP", "ALTDP")) %>%
+    mutate(DP = as.numeric(DP),
+           REFDP = as.numeric(REFDP),
+           ALTDP = as.numeric(ALTDP),
+           DPREAL = (REFDP + ALTDP),
+           VAF = (ALTDP/DPREAL),
+           SVTYPE = str_extract(INFO, "(?<=SVTYPE=)[^;]+"),
+           END = str_extract(INFO, "(?<=END=)[^;]+"),
+           SVLEN = str_extract(INFO, "(?<=SVLEN=)[^;]+"),
+           CIPOS = str_extract(INFO, "(?<=CIPOS=)[^;]+"),
+           MATEID = str_extract(INFO, "(?<=MATEID=)[^;]+"),
+           SVLEN = as.numeric(SVLEN)) %>%
+    dplyr::select(c(CHROM, ID, POS, END, SVTYPE, SVLEN,  QUAL, FILTER, GT, DP, DPREAL, REFDP, ALTDP, VAF, SAC, CIPOS, MATEID, REF, ALT))
+  
+  return(sv.vcf)
+}
+```
+
+## Read in data
+```{r}
+genes <- fread("./Data/GFFs/Parsed/genes_good.tsv")
+sv.vcf <- read.PBSV("./Data/VCFs/SV_VCF/cr2_primary.sv.vcf")
+```
+
+## Prepare data
+# Filter svs for TE length and parse the CHROM column
+```{r}
+te.vcf <- sv.vcf %>%
+  filter(SVLEN == 5453 & FILTER %in% "PASS")
+
+te.vcf$CHROM <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1", te.vcf$CHROM))
+```
+
+## Find the where TEs are located in reference to genes genes
+```{r}
+setDT(te.vcf)
+
+# within in gene bodies
+te.vcf[, GENIC := FALSE]
+
+te.vcf[genes, on = .(CHROM, POS >= START, POS <= STOP), GENIC := TRUE]
+
+# Upstream of gene bodies
+genes[, UPSTREAM_START := START - 5000]
+te.vcf[, UPSTREAM := FALSE]
+
+te.vcf[genes, on = .(CHROM, POS > UPSTREAM_START, POS < START), UPSTREAM := TRUE]
+
+# Downstream of gene bodies
+genes[, DOWNSTREAM_STOP := STOP + 5000]
+te.vcf[, DOWNSTREAM := FALSE]
+
+te.vcf[genes, on = .(CHROM, POS > STOP, POS < DOWNSTREAM_STOP), DOWNSTREAM := TRUE]
+```
+
+## summarizing data
+```{r}
+te.summ <- te.vcf[, .(COUNT = .N), by = .(GENIC, UPSTREAM, DOWNSTREAM)]
+
+te.summ[, CLASS := c("Gene", "Upstream", "Upstream+Downstream", "Downstream", "Gene", "Gene",
+                     "Gene", "Intergenic")]
+
+te.summ <- te.summ[, .(TOTAL_COUNT = sum(COUNT)), by = CLASS]
+
+te.summ[, PROPORTION := TOTAL_COUNT / sum(TOTAL_COUNT)]
+
+te.summ[, PCT := scales::percent(PROPORTION)]
+```
+
+## Combining upstream and downstream
+```{r}
+te.simp <- te.summ %>%
+  group_by(CLASS = if_else(CLASS %in% c("Upstream", "Downstream", "Upstream+Downstream"),
+                           "5000bp", CLASS)) %>%
+  summarise(
+    TOTAL_COUNT = sum(TOTAL_COUNT),
+    PROPORTION = sum(PROPORTION),
+    PCT = sprintf("%.1f%%", PROPORTION * 100)
+  )
+```
+
+# Plotting
+## Set levels
+```{r}
+te.summ
+
+te.summ_levels <- c("Upstream", "Gene", "Downstream",  "Upstream+Downstream", "Intergenic")
+
+te.summ$CLASS <- factor(te.summ$CLASS, levels = te.summ_levels)
+
+
+```
+
+## Plot
+```{r}
+ggplot(te.summ, aes(x = "", y = PROPORTION, fill = CLASS)) +
+  geom_bar(stat = "identity", width = 1, color = "white", linewidth = 0.1) +
+  geom_text(aes(label = PCT), 
+            position = position_stack(vjust = 0.5),  # Center labels in each slice
+            color = "black",
+            size = 1.8) +
+  coord_polar(theta = "y") +
+  labs(fill = "TE Location") +
+  scale_fill_manual(
+    values = c("Gene" = "mediumseagreen", 
+               "Upstream" = "#9ED9B8", 
+               "Downstream" = "#9ED9B8", 
+               "Upstream+Downstream" = "#6DC695", 
+               "Intergenic" = "grey90"), 
+    labels = c("Gene" = "Gene body", 
+               "Upstream+Downstream" = "Upstream and Downstream",
+               "Downstream",
+               "Upstream",
+               "Intergenic"),
+    breaks=c("Gene",   "Upstream", "Downstream", "Upstream+Downstream","Intergenic")) +
+  guides(fill = guide_legend(nrow = 6)) +
+  theme_void(base_size = 6) +
+  theme(legend.position = c(1.13, 0.9),
+        legend.direction = "horizontal",
+        legend.title = element_text(hjust = 0.5),
+        legend.title.position = "top",
+        legend.key.size = unit(0.15,"cm"),
+        plot.margin = margin(t = 1, r = 1.75, b = -0, l = -.4, unit = "cm"),
+  ) 
+ggsave("./Figures/Transposable_Elements/piechart_te_location.pdf", height = 2, width = 2.2)
+ggsave("./Figures/Transposable_Elements/piechart_te_location.png", height = 2, width = 2.2)
+```
+
+## Combine upstream and downstream into +- 5000 bp
+```{r}
+ggplot(te.simp, aes(x = "", y = PROPORTION, fill = CLASS)) +
+  geom_bar(stat = "identity", width = 1, color = "white", linewidth = 0.1) +
+  geom_text(aes(label = PCT), 
+            position = position_stack(vjust = 0.5),  # Center labels in each slice
+            color = "black",
+            size = 1.8) +
+  coord_polar(theta = "y") +
+  labs(fill = "TE Location") +
+  scale_fill_manual(
+    values = c("Gene" = "mediumseagreen", 
+               "5000bp" = "#9ED9B8", 
+               "Intergenic" = "grey90"), 
+    labels = c("Gene" = "Gene body", 
+               "5000bp" = "\u00b1 5000bp from gene body",
+               "Intergenic"),
+    breaks=c("Gene", "5000bp", "Intergenic")) +
+  guides(fill = guide_legend(nrow = 6)) +
+  theme_void(base_size = 6) +
+  theme(legend.position = c(1.13, 0.9),
+        legend.direction = "horizontal",
+        legend.title = element_text(face = "bold"),
+        legend.title.position = "top",
+        legend.key.size = unit(0.15,"cm"),
+        plot.margin = margin(t = 1, r = 1.75, b = -0, l = -.4, unit = "cm"),
+  ) 
+ggsave("./Figures/Transposable_Elements/piechart_te_location_updownstreamcombo.pdf", height = 2, width = 2.2)
+ggsave("./Figures/Transposable_Elements/piechart_te_location_updownstreamcombo.png", height = 2, width = 2.2)
+```
+
+# Statistical test
+## Chi Sq for landing in genes
+```{r}
+chisq.test(c(48, 10), p=c(0.28, 0.72))
+```
+I may need to be a little more discerning on how I define upstream and downstream of a gene. For now, these are the results.
+
+## Chi sq for landing in +- 5000bp
+```{r}
+chisq.test(c(32, 58), p=c(0.53, 0.47))
+```
+
+
+## Chi sq for landing in gene and +- 5000bp
+```{r}
+chisq.test(c(80, 10), p=c(0.812, 0.188))
+```
+

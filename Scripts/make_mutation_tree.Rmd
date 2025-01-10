@@ -21,76 +21,31 @@ library(tidyverse)
 
 ## Functions
 ```{r}
-gene_body_source_type <- function(source_type) {
-
-  # Filter mutations for the given source type
-  muts_filtered <- unique(mutations_filt[Source_type == source_type, .(CHROM, POS, effect)])
-  muts_filtered$CHROM <- as.numeric(as.character(muts_filtered$CHROM))
-  gene_windows$CHROM <- as.numeric(as.character(gene_windows$CHROM))
-
-  # Calculate mutations in gene windows
-  gene_windows_mutations <- sites_in_features(gene_windows, sites = muts_filtered, mode = "counts")
-  gene_windows$muts <- gene_windows_mutations$counts[match(gene_windows$ID, gene_windows_mutations$ID)]
-
-  # Plot and summarize the feature windows
-  summary <- plot_feature_windows(gene_windows, variable = "muts", mode = "percent")$summary
-  maxpos <- max(summary$RELATIVEPOS)
-
-  # Chi-squared test
-  chisq.test(summary[, 4:5])
-
-  # Generate the plot
-  plot <- ggplot(summary, aes(x = RELATIVEPOS, y = y, fill = REGION == "gene body")) +
-    geom_bar(stat = "identity", col = "black", width = 0.75) +
-    geom_vline(xintercept = c(maxpos / 3, maxpos / 3 * 2) + 0.5, linetype = "dashed") +
-    theme_classic(base_size = 6) +
-    scale_x_continuous(breaks = c(1, (maxpos / 3) + 0.5, (maxpos / 3 * 2) + 0.5, maxpos),
-                       labels = c("-5kb", "START", "STOP", "+5kb")) +
-    scale_fill_manual(values = c("gray", "green4"), guide="none") +
-    ggtitle(paste("Ns =", sum(muts_filtered$effect == "Non-Syn"), "S =", sum(muts_filtered$effect == "Syn")))
-
-  return(plot)
-}
-
-fasta_trimer_freq<-function(fasta, stop = NULL){
-  fasta_windows<-rbindlist(lapply(1:length(fasta), function(i){
-    data.table(CHROM=names(fasta)[i], START=1, STOP=length(fasta[[i]]), ID=i)
-    data.table(CHROM=names(fasta)[i], START=1, STOP=ifelse(is.null(stop), length(fasta[[i]]), stop), ID=i)
-
-  }))[!is.na(CHROM)]
-  trimer_freq<-Nmerfrequency(features = fasta_windows, fasta=fasta, Nmer = 3, mode="counts")
-  trimer_freq<-rbindlist(lapply(1:ncol(trimer_freq), function(i){
-    data.table(TRI=names(trimer_freq)[i], N=sum(trimer_freq[[i]]))
-  }))
-
-  trimer_freq<-trimer_freq[!grepl("ID|N|V", TRI)]
-}
-
-make_tree<-function(mutations){
-    mutations_matrix<-mutations
-  mutations_matrix<-data.table(table(UNIQUE=mutations_matrix$UNIQUE, Source=mutations_matrix$SOURCE))
+make_tree_table <-function(mutations){
+  
+  mutations_matrix<-data.table(table(UNIQUE=mutations$UNIQUE, Source=mutations$SOURCE))
   mutations_matrix<-dcast(mutations_matrix, Source~UNIQUE)
   mutations_matrix<-as.matrix(mutations_matrix)
   row.names(mutations_matrix)<-mutations_matrix[,1]
   mutations_matrix<-mutations_matrix[,-1]
-
+  
   # Assume mutations_matrix is already defined (row names are Samples, colnames are UNIQUE)
   # Rows: samples, Columns: mutations
-
+  
   # Step 1: Convert the binary mutation matrix into a phyDat object
   phy_data <- phyDat(mutations_matrix, type = "USER", levels = c(0, 1))
-
+  
   # Step 2: Create a distance matrix using binary distances
   dist_matrix <- dist(mutations_matrix, method = "binary")
-
+  
   # Step 3: Generate a UPGMA tree from the distance matrix
   tree <- upgma(dist_matrix)
   #plot(tree)
-
+  
   fun <- function(x) upgma(dist.ml(x))
-
+  
   tree <- upgma(dist.ml(phy_data))
-   
+  
   bs_upgma <- bootstrap.phyDat(phy_data,  fun, bs = 1e4)
   plotBS(tree, bs_upgma, main="UPGMA")
   tree_with_bs <- plotBS(tree, bs_upgma, main="UPGMA")  
@@ -98,24 +53,24 @@ make_tree<-function(mutations){
   # Step 4: Calculate branch lengths based on unique mutations
   # Initialize branch lengths
   branch_lengths <- numeric(nrow(tree_with_bs$edge))
-
+  
   branch_muts<-c()
   # Traverse each edge and calculate the unique mutations
   for (i in seq_len(nrow(tree_with_bs$edge))) {
     message(i)
     node1 <- tree_with_bs$edge[i, 1]
     node2 <- tree_with_bs$edge[i, 2]
-
+    
     # Get the tips (samples) downstream of node2
     descendants <- Descendants(tree_with_bs, node2, type = "tips")[[1]]
-
-
+    
+    
     # Get the tip labels corresponding to these descendants
     tips_in_branch <- tree_with_bs$tip.label[descendants]
     message(paste0(rownames(mutations_matrix)[descendants], collapse=" "))
     # Identify the columns in mutation_matrix that correspond to these tips
     tip_indices <- match(tips_in_branch, row.names(mutations_matrix))
-
+    
     # Subset the mutation matrix for these tips
     relevant_mutations <- (mutations_matrix[tip_indices,])
     if(length(tip_indices)==1){
@@ -133,15 +88,15 @@ make_tree<-function(mutations){
     if(length(tip_indices)==length(tree_with_bs$tip.label)-1){
       out_relevant_mutations<-matrix(out_relevant_mutations, nrow=1)
     }
-
+    
     # Count mutations that are unique to this branch (present in at least one tip downstream, absent in others)
     group_mutations <- apply(relevant_mutations, 2, function(x) all(x==1))
-
+    
     non_outgroup_mutations <- apply(out_relevant_mutations, 2, function(x) !any(x==1))
     group_mutations_names<-colnames(mutations_matrix)[which(group_mutations)]
-
+    
     group_mutations_names<-colnames(mutations_matrix)[which(group_mutations & non_outgroup_mutations)]
-
+    
     branch_muts<-c(branch_muts, group_mutations_names)
     unique_mutations<-sum(group_mutations & non_outgroup_mutations)
     # Set the branch length to the count of unique mutations
@@ -151,73 +106,23 @@ make_tree<-function(mutations){
   # Step 5: Assign calculated branch lengths to the tree
   tree_with_bs$edge.length <- branch_lengths
   tree_with_bs$tip.color<-ifelse(tree_with_bs$tip.label %in% c("ref_chandler","tree2"), "tree",
-                         ifelse(tree_with_bs$tip.label %in% c("cr10","cr13","cr22","cr85"), "shoot", "embryo"))
-
+                                 ifelse(tree_with_bs$tip.label %in% c("cr10","cr13","cr22","cr85"), "shoot", "embryo"))
+  
   # Ensure the tip labels and colors are stored correctly in the tree object
   tree_with_bs$tip.label <- as.character(tree_with_bs$tip.label)
   
   tree_with_bs$tip.label <- new_labels[tree_with_bs$tip.label]
-
+  
   # Create a data frame from the tree object for easier mapping of colors
   tip_data <- data.frame(label = tree_with_bs$tip.label, color = tree_with_bs$tip.color)
   
-#   # Attach node.label to your tree data if necessary
- node_data <- as.data.frame(tree_with_bs$node.label)
- node_data$node <- (1 + length(tree_with_bs$tip.label)):(length(tree_with_bs$tip.label) + length(tree_with_bs$node.label))
- node_data <- node_data %>%
-   rename(`tree_with_bs$node.label` = "bootstrap" )
-
-
-# Now, create the plot with the modified data
-p <- ggtree(tree_with_bs, branch.length = "edge.length", layout = "roundrect", size = 0.25) %<+% tip_data +
-    geom_tiplab(aes(label = label, fill = color),
-                geom = "label",
-                size = 2,
-                align = FALSE,
-                offset = -0.3, linesize = 0.25) +
-
-    scale_fill_manual(values = source_type_colors, name = NULL,
-                      labels = c("Embryo", "Shoot", "Tree"),
-                      guide = guide_legend(override.aes = list(label = ""))) +
-    theme_tree2() +
-    theme(text = element_text(size = 8),
-          legend.position = c(0.1, 0.75),
-          legend.key.size = unit(0.25, "cm"))
-
-p <- p %<+% node_data
-
-p <- p + geom_text(aes(label = bootstrap), hjust = 1, vjust = -0.4, size = 2)
-
-print(p)
- 
-# Cladogram
-
- c <- ggtree(tree_with_bs, branch.length = "none", size=0.25) %<+% tip_data +# Use the `%<+%` operator to attach data
-   geom_tiplab(aes(label = label, fill = color),
-               geom = "label",
-               size = 2,
-               align = FALSE,
-               offset = -.4, linesize = 0.25) +  # Add tip labels as boxes
-#   #geom_text2(aes(label = branch.length), vjust = 1.5, hjust = 1.5, size = 2, col = "red") +  # Add branch length labels
-   scale_fill_manual(values = source_type_colors,
-                     name=NULL,
-                     labels=c("Embryo","Shoot","Tree"),
-                     guide = guide_legend(override.aes = list(label = ""))) +
-   theme_tree2() +
-   theme(text = element_text(size = 6), legend.position = c(0.1, 0.75), legend.key.size = unit(0.25,"cm"),
-         axis.title.x = element_blank(),      # Remove x-axis title
-       axis.text.x = element_blank(),       # Remove x-axis text
-       axis.ticks.x = element_blank(),      # Remove x-axis ticks
-       axis.line.x = element_blank()        #  Remove x-axis line
-   )
-
- 
- c <- c %<+% node_data
- c <- c + geom_text(aes(label = bootstrap), hjust = 1, vjust = -0.4, size = 2)
- 
- print(c)
-
-  return(list(tree=tree, plot=p, cladogram=c, branch_muts=branch_muts, bs_upgma=bs_upgma, tips = tip_data, nodes = node_data))
+  #   # Attach node.label to your tree data if necessary
+  node_data <- as.data.frame(tree_with_bs$node.label)
+  node_data$node <- (1 + length(tree_with_bs$tip.label)):(length(tree_with_bs$tip.label) + length(tree_with_bs$node.label))
+  colnames(node_data)[colnames(node_data) == "tree_with_bs$node.label"] <- "bootstrap"
+  
+  
+  return(list(tree_with_bs = tree_with_bs, tip_data = tip_data, node_data = node_data))
 }
 ```
 
@@ -226,7 +131,7 @@ print(p)
 mutations <- fread("./Data/VCFs/Parsed/mutations.tsv")
 ```
 
-
+# Prep for plotting
 ## Color palette
 ```{r}
 source_type_colors <- c("embryo"="goldenrod1", "shoot"="darkseagreen2","tree"="darkseagreen4")
@@ -234,20 +139,854 @@ source_type_colors <- c("embryo"="goldenrod1", "shoot"="darkseagreen2","tree"="d
 
 ## New labels
 ```{r}
-new_labels = c("ref_chandler" = "Reference", "tree2" = "Tree 2",
-                              "cr2_hifi" = "Embryo\nHiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
-                              "cr2_11A" = "Embryo 11A", "cr2_12A" = "Embryo 12A", "cr2_13A" = "Embryo 13A",
-                              "cr2_15A" = "Embryo 15A", "cr2_15A1" = "Embryo 15A1", "cr2_16A" = "Embryo 16A",
-                              "cr2_16A1" = "Embryo 16A1", "cr2_16A2" = "Embryo 16A2", "cr2_17A1" = "Embryo 17A1",
-                              "cr2_17A2" = "Embryo 17A2", "cr2_18A" = "Embryo 18A", "cr2_18A1" = "Embryo 18A1",
-                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
-                              "cr22" = "Chandler '22")
+new_labels = c(
+  "ref_chandler" = "Reference", "tree2" = "Tree",
+  "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+  "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
+  "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
+  "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
+  "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
+  "cr85" = "S 1985", "cr10" = "S 2010",
+  "cr13" = "S 2013", "cr22" = "S 2022"
+)
 ```
 
+# Creating tree objects
+## Make snp tree table
+```{r}
+snp_filt <- mutations[medQUAL >= 25 & medDPREAL >= 10 & MAPP == T & SNP == T]
 
+snp_tree.table <- make_tree_table(snp_filt)
+
+snp_tree_with_bs <- snp_tree.table$tree_with_bs
+
+snp_tip_data <- snp_tree.table$tip_data
+
+snp_node_data <- snp_tree.table$node_data
+```
+
+## Make indel tree table
+```{r}
+indel_filt <- mutations[medQUAL >= 25 & medDPREAL >= 15 & MAPP == T & SNP == F]
+
+indel_tree.table <- make_tree_table(indel_filt)
+
+indel_tree_with_bs <- indel_tree.table$tree_with_bs
+
+indel_tip_data <- indel_tree.table$tip_data
+
+indel_node_data <- indel_tree.table$node_data
+```
+
+## Make snp+indel tree table
+```{r}
+both_filt <- mutations[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T]
+
+both_tree.table <- make_tree_table(both_filt)
+
+both_tree_with_bs <- both_tree.table$tree_with_bs
+
+both_tip_data <- both_tree.table$tip_data
+
+both_node_data <- both_tree.table$node_data
+```
+
+## No aneuploid
+```{r}
+noan_filt <- mutations[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T & CHROM != c(4,9)]
+
+noan_tree.table <- make_tree_table(noan_filt)
+
+noan_tree_with_bs <- noan_tree.table$tree_with_bs
+
+noan_tip_data <- noan_tree.table$tip_data
+
+noan_node_data <- noan_tree.table$node_data
+```
+
+## No large mutations
+```{r}
+nolarge_filt <- mutations[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T & CHROM != c(4, 9, 11, 12, 16)]
+
+nolarge_tree.table <- make_tree_table(nolarge_filt)
+
+nolarge_tree_with_bs <- nolarge_tree.table$tree_with_bs
+
+nolarge_tip_data <- nolarge_tree.table$tip_data
+
+nolarge_node_data <- nolarge_tree.table$node_data
+```
+
+## Chromosome 4 only
+```{r}
+chr4_filt <- mutations[medQUAL >= 30 & medDPREAL >= 15 & CHROM == 4]
+
+chr4_tree.table <- make_tree_table(chr4_filt)
+
+chr4_tree_with_bs <- chr4_tree.table$tree_with_bs
+
+chr4_tip_data <- chr4_tree.table$tip_data
+
+chr4_node_data <- chr4_tree.table$node_data
+```
+
+## RNA seq individuals
+```{r}
+mutations_filt_rna <- both_filt %>%
+  filter(SOURCE %in% c(
+  "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A",
+  "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1"))
+
+tree.table_rna <- make_tree_table(mutations_filt_rna)
+
+tree_with_bs_rna <- tree.table_rna$tree_with_bs
+
+tip_data_rna <- tree.table_rna$tip_data
+
+node_data_rna <- tree.table_rna$node_data
+```
+
+## Only embryos
+```{r}
+embryo_only <- mutations[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T & CULTURETYPE == "embryo"]
+
+embryo_only_tree.table <- make_tree_table(embryo_only)
+
+embryo_only_tree_with_bs <- embryo_only_tree.table$tree_with_bs
+
+embryo_only_tip_data <- embryo_only_tree.table$tip_data
+
+embryo_only_node_data <- embryo_only_tree.table$node_data
+```
+
+# Plotting trees
+## Plot SNP tree with branch lengths
+```{r}
+snp_plot <- ggtree(snp_tree_with_bs, branch.length = "edge.length", layout = "rectangular", size = 0.25) %<+% snp_tip_data +
+  geom_tiplab(aes(label = label, fill = color),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              #hjust = 0.5,
+              #vjust = 0.5,
+              offset = -0.3,
+              linesize = 0.25) +
+  
+  scale_fill_manual(values = source_type_colors, name = NULL,
+                    labels = c("Embryo", "Shoot", "Tree"),
+                    guide = guide_legend(override.aes = list(label = ""))) +
+  theme_tree2() +
+  theme(text = element_text(size = 8),
+        legend.position = c(0.1, 0.75),
+        legend.key.size = unit(0.25, "cm"))
+
+snp_plot
+
+snp_plot +
+  geom_text2(aes(label = node), hjust = -0.3, size = 3)
+
+snp_plot <- rotate(snp_plot, 27)
+
+snp_plot <- rotate(snp_plot, 37)
+
+snp_plot <- rotate(snp_plot, 36)
+
+snp_plot <- rotate(snp_plot, 23)
+
+snp_plot <- rotate(snp_plot, 36)
+
+snp_max_x <- max(snp_plot$data$x)
+
+snp_plot <- snp_plot + expand_limits(x = snp_max_x * 1.2)
+
+snp_plot_obj <- snp_plot +
+  scale_x_continuous(expand = c(0,150)) +
+  theme(legend.position = c(.2,.85),
+        plot.margin = margin(t = 0, r = 0, b = -.1, l = 0, unit = "cm"),
+        axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())
+snp_plot_obj
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_snp.pdf", height = 2.8, width = 1.5)
+saveRDS(snp_plot_obj, file = "./Data/Plot_Objects/snp_tree_all_samples_plot.rds")
+
+snp_plot <- snp_plot %<+% snp_node_data
+snp_plot <- snp_plot + geom_text(
+  aes(label = ifelse(bootstrap < 1, round(bootstrap, 3), "")),
+  hjust = 1,
+  vjust = -0.4,
+  size = 2
+)
+snp_plot +
+  #scale_x_continuous(expand = c(-1, 0)) +
+  theme(legend.position = c(.1,.85),
+        plot.margin = margin(t = 0, r = -2, b = 0, l = 0, unit = "cm"))
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_snps.pdf", height = 3.58, width = 5)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_snps.png", height = 3.58, width = 5)
+```
+
+## INDEL tree with branch lengths
+```{r}
+indel_plot <- ggtree(indel_tree_with_bs, branch.length = "edge.length", layout = "rectangular", size = 0.25) %<+% indel_tip_data +
+  geom_tiplab(aes(label = label, fill = color),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              #hjust = 0.5,
+              #vjust = 0.5,
+              offset = -0.3,
+              linesize = 0.25) +
+  
+  scale_fill_manual(values = source_type_colors, name = NULL,
+                    labels = c("Embryo", "Shoot", "Tree"),
+                    guide = guide_legend(override.aes = list(label = ""))) +
+  theme_tree2() +
+  theme(text = element_text(size = 8),
+        legend.position = c(0.1, 0.75),
+        legend.key.size = unit(0.25, "cm"))
+
+indel_plot
+
+indel_plot +
+  geom_text2(aes(label = node), hjust = -0.3, size = 3)
+
+indel_plot <- rotate(indel_plot, 23)
+
+indel_plot <- rotate(indel_plot, 38)
+
+indel_plot <- rotate(indel_plot, 40)
+
+indel_max_x <- max(indel_plot$data$x)
+
+indel_plot <- indel_plot + expand_limits(x = indel_max_x * 1.2)
+
+indel_plot_obj <- indel_plot +
+  scale_x_continuous(expand = c(0,150)) +
+  theme(legend.position = c(.2,.85),
+        plot.margin = margin(t = 0, r = 0, b = -.1, l = 0, unit = "cm"),
+        axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())
+indel_plot_obj
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_indel.pdf", height = 2.8, width = 1.5)
+
+indel_plot <- indel_plot %<+% indel_node_data
+indel_plot <- indel_plot + geom_text(
+  aes(label = ifelse(bootstrap < 1, round(bootstrap, 3), "")),
+  hjust = 1,
+  vjust = -0.4,
+  size = 2
+)
+indel_plot +
+  #scale_x_continuous(expand = c(-1, 0)) +
+  theme(legend.position = c(.1,.85),
+        plot.margin = margin(t = 0, r = -2, b = 0, l = 0, unit = "cm"))
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_indel.pdf", height = 3.58, width = 5)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_indel.png", height = 3.58, width = 5)
+```
+
+## SNP and INDEL tree with branch lengths
+```{r}
+both_plot <- ggtree(both_tree_with_bs, branch.length = "edge.length", layout = "rectangular", size = 0.25) %<+% both_tip_data +
+  geom_tiplab(aes(label = label, fill = color),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              #hjust = 0.5,
+              #vjust = 0.5,
+              offset = -0.3,
+              linesize = 0.25) +
+  
+  scale_fill_manual(values = source_type_colors, name = NULL,
+                    labels = c("Embryo", "Shoot", "Tree"),
+                    guide = guide_legend(override.aes = list(label = ""))) +
+  theme_tree2() +
+  theme(text = element_text(size = 8),
+        legend.position = c(0.1, 0.75),
+        legend.key.size = unit(0.25, "cm"))
+
+both_plot
+
+both_plot +
+  geom_text2(aes(label = node), hjust = -0.3, size = 3)
+
+both_plot <- rotate(both_plot, 23)
+
+both_plot <- rotate(both_plot, 31)
+
+both_plot <- rotate(both_plot, 40)
+
+both_max_x <- max(both_plot$data$x)
+
+both_plot <- both_plot + expand_limits(x = both_max_x * 1.2)
+
+both_plot_obj <- both_plot +
+  scale_x_continuous(expand = c(0,150)) +
+  theme(legend.position = c(.2,.9),
+        plot.margin = margin(t = 0, r = 0, b = -.1, l = 0, unit = "cm"),
+        axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())
+both_plot_obj
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_both.pdf", height = 2.8, width = 1.5)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_presentation_lables_both.pdf", height = 4.97, width = 2)
+
+saveRDS(both_plot_obj, file = "./Data/Plot_Objects/all_sample_branch_is_mut_for_lables_both.rds")
+
+
+both_plot <- both_plot %<+% both_node_data
+both_plot <- both_plot + geom_text(
+  aes(label = ifelse(bootstrap < 1, round(bootstrap, 3), "")),
+  hjust = 1,
+  vjust = -0.4,
+  size = 2
+)
+both_plot +
+  #scale_x_continuous(expand = c(-1, 0)) +
+  theme(legend.position = c(.05,.8),
+        plot.margin = margin(t = 0, r = -3.5, b = 0, l = -.5, unit = "cm"))
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both.pdf", height = 2.75, width = 7.4)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both.png", height = 2.75, width = 7.4)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both_presentation.pdf", height = 3.33, width = 6.6)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both_presentation.png", height = 3.33, width = 6.6)
+```
+
+## Tree removing duplicated chromosomes with branch lengths
+```{r}
+noan_plot <- ggtree(noan_tree_with_bs, branch.length = "edge.length", layout = "rectangular", size = 0.25) %<+% noan_tip_data +
+  geom_tiplab(aes(label = label, fill = color),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              #hjust = 0.5,
+              #vjust = 0.5,
+              offset = -0.3,
+              linesize = 0.25) +
+  
+  scale_fill_manual(values = source_type_colors, name = NULL,
+                    labels = c("Embryo", "Shoot", "Tree"),
+                    guide = guide_legend(override.aes = list(label = ""))) +
+  theme_tree2() +
+  theme(text = element_text(size = 8),
+        legend.position = c(0.1, 0.75),
+        legend.key.size = unit(0.25, "cm"))
+
+noan_plot
+
+noan_plot +
+  geom_text2(aes(label = node), hjust = -0.3, size = 3)
+
+noan_plot <- rotate(noan_plot, 23)
+
+noan_plot <- rotate(noan_plot, 31)
+
+noan_plot <- rotate(noan_plot, 40)
+
+noan_max_x <- max(noan_plot$data$x)
+
+noan_plot <- noan_plot + expand_limits(x = noan_max_x * 1.2)
+
+noan_plot_obj <- noan_plot +
+  scale_x_continuous(expand = c(0,150)) +
+  theme(legend.position = c(.2,.85),
+        plot.margin = margin(t = 0, r = 0, b = -.1, l = 0, unit = "cm"),
+        axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())
+noan_plot_obj
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_noan.pdf", height = 2.8, width = 1.5)
+ 
+noan_plot <- noan_plot %<+% noan_node_data
+noan_plot <- noan_plot + geom_text(
+  aes(label = ifelse(bootstrap < 1, round(bootstrap, 3), "")),
+  hjust = 1,
+  vjust = -0.4,
+  size = 2
+)
+noan_plot +
+  #scale_x_continuous(expand = c(-1, 0)) +
+  theme(legend.position = c(.1,.85),
+        plot.margin = margin(t = 0, r = -2, b = 0, l = 0, unit = "cm"))
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_noan.pdf", height = 3.58, width = 5)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_noan.png", height = 3.58, width = 5)
+```
+
+## Tree removing all large scale mutations chromosomes with branch lengths
+```{r}
+nolarge_plot <- ggtree(nolarge_tree_with_bs, branch.length = "edge.length", layout = "rectangular", size = 0.25) %<+% nolarge_tip_data +
+  geom_tiplab(aes(label = label, fill = color),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              #hjust = 0.5,
+              #vjust = 0.5,
+              offset = -0.3,
+              linesize = 0.25) +
+  
+  scale_fill_manual(values = source_type_colors, name = NULL,
+                    labels = c("Embryo", "Shoot", "Tree"),
+                    guide = guide_legend(override.aes = list(label = ""))) +
+  theme_tree2() +
+  theme(text = element_text(size = 8),
+        legend.position = c(0.1, 0.75),
+        legend.key.size = unit(0.25, "cm"))
+
+nolarge_plot
+
+nolarge_plot +
+  geom_text2(aes(label = node), hjust = -0.3, size = 3)
+
+nolarge_plot <- rotate(nolarge_plot, 23)
+
+nolarge_plot <- rotate(nolarge_plot, 33)
+
+nolarge_plot <- rotate(nolarge_plot, 39)
+
+nolarge_max_x <- max(nolarge_plot$data$x)
+
+nolarge_plot <- nolarge_plot + expand_limits(x = nolarge_max_x * 1.2)
+
+nolarge_plot_obj <- nolarge_plot +
+  scale_x_continuous(expand = c(0,150)) +
+  theme(legend.position = c(.2,.85),
+        plot.margin = margin(t = 0, r = 0, b = -.1, l = 0, unit = "cm"),
+        axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())
+nolarge_plot_obj
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_nolarge.pdf", height = 2.8, width = 1.5)
+
+nolarge_plot <- nolarge_plot %<+% nolarge_node_data
+nolarge_plot <- nolarge_plot + geom_text(
+  aes(label = ifelse(bootstrap < 1, round(bootstrap, 3), "")),
+  hjust = 1,
+  vjust = -0.4,
+  size = 2
+)
+nolarge_plot +
+  #scale_x_continuous(expand = c(-1, 0)) +
+  theme(legend.position = c(.1,.85),
+        plot.margin = margin(t = 0, r = -2, b = 0, l = 0, unit = "cm"))
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_nolarge.pdf", height = 3.58, width = 5)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_nolarge.png", height = 3.58, width = 5)
+```
+
+## Tree removing all large scale mutations chromosomes with branch lengths
+```{r}
+chr4_plot <- ggtree(chr4_tree_with_bs, branch.length = "edge.length", layout = "rectangular", size = 0.25) %<+% chr4_tip_data +
+  geom_tiplab(aes(label = label, fill = color),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              #hjust = 0.5,
+              #vjust = 0.5,
+              offset = -0.3,
+              linesize = 0.25) +
+  
+  scale_fill_manual(values = source_type_colors, name = NULL,
+                    labels = c("Embryo", "Shoot", "Tree"),
+                    guide = guide_legend(override.aes = list(label = ""))) +
+  theme_tree2() +
+  theme(text = element_text(size = 8),
+        legend.position = c(0.1, 0.75),
+        legend.key.size = unit(0.25, "cm"))
+
+chr4_plot
+
+chr4_plot +
+  geom_text2(aes(label = node), hjust = -0.3, size = 3)
+
+chr4_plot <- rotate(chr4_plot, 23)
+
+chr4_plot <- rotate(chr4_plot, 29)
+
+chr4_plot <- rotate(chr4_plot, 40)
+
+chr4_max_x <- max(chr4_plot$data$x)
+
+chr4_plot <- chr4_plot + expand_limits(x = chr4_max_x * 1.2)
+
+chr4_plot_obj <- chr4_plot +
+  scale_x_continuous(expand = c(0,150)) +
+  theme(legend.position = c(.2,.85),
+        plot.margin = margin(t = 0, r = 0, b = -.1, l = 0, unit = "cm"),
+        axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())
+chr4_plot_obj
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_chr4only.pdf", height = 2.8, width = 1.5)
+
+chr4_plot <- chr4_plot %<+% chr4_node_data
+chr4_plot <- chr4_plot + geom_text(
+  aes(label = ifelse(bootstrap < 1, round(bootstrap, 3), "")),
+  hjust = 1,
+  vjust = -0.4,
+  size = 2
+)
+chr4_plot +
+  #scale_x_continuous(expand = c(-1, 0)) +
+  theme(legend.position = c(.1,.85),
+        plot.margin = margin(t = 0, r = -2, b = 0, l = 0, unit = "cm"))
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_chr4only.pdf", height = 3.58, width = 5)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_chr4only.png", height = 3.58, width = 5)
+```
+
+## RNA seq individuals tree with branch lengths
+```{r}
+plot_rna <- ggtree(tree_with_bs_rna, branch.length = "edge.length", layout = "rectangular", size = 0.25) %<+% tip_data_rna +
+  geom_tiplab(aes(label = label, fill = color),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              #hjust = 0.5,
+              #vjust = 0.5,
+              offset = -0.3,
+              linesize = 0.25) +
+  
+  scale_fill_manual(values = source_type_colors, name = NULL,
+                    labels = c("Embryo", "Shoot", "Tree"),
+                    guide = guide_legend(override.aes = list(label = ""))) +
+  theme_tree2() +
+  theme(text = element_text(size = 8),
+        legend.position = c(0.1, 0.75),
+        legend.key.size = unit(0.25, "cm"))
+
+plot_rna +
+  geom_text2(aes(label = node), hjust = -0.3, size = 3)
+
+plot_rna <- rotate(plot_rna, 14)
+
+plot_rna <- rotate(plot_rna, 18)
+
+max_x <- max(plot_rna$data$x)
+
+max_x <- max(plot_rna$data$x)
+
+plot_rna <- plot_rna + expand_limits(x = max_x * 1.2)
+
+plot_rna <- plot_rna +
+  scale_x_continuous(expand = c(0,500)) +
+  theme(legend.position = "none",
+        legend.key.size = unit(.2, units = "cm"),
+        plot.margin = margin(t = 0, r = -0, b = -.1, l = -0, unit = "cm"),
+        axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())
+plot_rna
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_rna.pdf", height = 1.8, width = 0.75)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_rna.png", height = 1.8, width = 0.75)
+saveRDS(plot_rna, file = "./Data/Plot_Objects/snp_tree_rna_samples_plot.rds")
+```
+
+## Embryo tree with branch lengths
+```{r}
+plot_embryo <- ggtree(embryo_only_tree_with_bs, branch.length = "edge.length", layout = "rectangular", size = 0.25) %<+% embryo_only_tip_data +
+  geom_tiplab(aes(label = label, fill = color),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              #hjust = 0.5,
+              #vjust = 0.5,
+              offset = -0.3,
+              linesize = 0.25) +
+  
+  scale_fill_manual(values = source_type_colors, name = NULL,
+                    labels = c("Embryo"),
+                    guide = guide_legend(override.aes = list(label = ""))) +
+  theme_tree2() +
+  theme(text = element_text(size = 8),
+        legend.position = c(0.1, 0.75),
+        legend.key.size = unit(0.25, "cm"))
+
+plot_embryo +
+  geom_text2(aes(label = node), hjust = -0.3, size = 3)
+
+max_x <- max(plot_embryo$data$x)
+
+plot_embryo <- plot_embryo + expand_limits(x = max_x * 1.2)
+
+plot_embryo <- plot_embryo +
+  scale_x_continuous(expand = c(0,500)) +
+  theme(legend.position = "none",
+        legend.key.size = unit(.2, units = "cm"),
+        plot.margin = margin(t = 0, r = .1, b = -.1, l = -.4, unit = "cm"),
+        axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())
+plot_embryo
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_embryos.pdf", height = 1.8, width = 0.75)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_embryos.png", height = 1.8, width = 0.75)
+saveRDS(plot_rna, file = "./Data/Plot_Objects/snp_tree_embryo_samples_plot.rds")
+```
+
+# Legacy, no longer used
+## Functions
+```{r, eval=FALSE}
+gene_body_source_type <- function(source_type) {
+  
+  # Filter mutations for the given source type
+  muts_filtered <- unique(mutations_filt[Source_type == source_type, .(CHROM, POS, effect)])
+  muts_filtered$CHROM <- as.numeric(as.character(muts_filtered$CHROM))
+  gene_windows$CHROM <- as.numeric(as.character(gene_windows$CHROM))
+  
+  # Calculate mutations in gene windows
+  gene_windows_mutations <- sites_in_features(gene_windows, sites = muts_filtered, mode = "counts")
+  gene_windows$muts <- gene_windows_mutations$counts[match(gene_windows$ID, gene_windows_mutations$ID)]
+  
+  # Plot and summarize the feature windows
+  summary <- plot_feature_windows(gene_windows, variable = "muts", mode = "percent")$summary
+  maxpos <- max(summary$RELATIVEPOS)
+  
+  # Chi-squared test
+  chisq.test(summary[, 4:5])
+  
+  # Generate the plot
+  plot <- ggplot(summary, aes(x = RELATIVEPOS, y = y, fill = REGION == "gene body")) +
+    geom_bar(stat = "identity", col = "black", width = 0.75) +
+    geom_vline(xintercept = c(maxpos / 3, maxpos / 3 * 2) + 0.5, linetype = "dashed") +
+    theme_classic(base_size = 6) +
+    scale_x_continuous(breaks = c(1, (maxpos / 3) + 0.5, (maxpos / 3 * 2) + 0.5, maxpos),
+                       labels = c("-5kb", "START", "STOP", "+5kb")) +
+    scale_fill_manual(values = c("gray", "green4"), guide="none") +
+    ggtitle(paste("Ns =", sum(muts_filtered$effect == "Non-Syn"), "S =", sum(muts_filtered$effect == "Syn")))
+  
+  return(plot)
+}
+
+fasta_trimer_freq<-function(fasta, stop = NULL){
+  fasta_windows<-rbindlist(lapply(1:length(fasta), function(i){
+    data.table(CHROM=names(fasta)[i], START=1, STOP=length(fasta[[i]]), ID=i)
+    data.table(CHROM=names(fasta)[i], START=1, STOP=ifelse(is.null(stop), length(fasta[[i]]), stop), ID=i)
+    
+  }))[!is.na(CHROM)]
+  trimer_freq<-Nmerfrequency(features = fasta_windows, fasta=fasta, Nmer = 3, mode="counts")
+  trimer_freq<-rbindlist(lapply(1:ncol(trimer_freq), function(i){
+    data.table(TRI=names(trimer_freq)[i], N=sum(trimer_freq[[i]]))
+  }))
+  
+  trimer_freq<-trimer_freq[!grepl("ID|N|V", TRI)]
+}
+
+make_tree<-function(mutations){
+  mutations_matrix<-mutations
+  mutations_matrix<-data.table(table(UNIQUE=mutations_matrix$UNIQUE, Source=mutations_matrix$SOURCE))
+  mutations_matrix<-dcast(mutations_matrix, Source~UNIQUE)
+  mutations_matrix<-as.matrix(mutations_matrix)
+  row.names(mutations_matrix)<-mutations_matrix[,1]
+  mutations_matrix<-mutations_matrix[,-1]
+  
+  # Assume mutations_matrix is already defined (row names are Samples, colnames are UNIQUE)
+  # Rows: samples, Columns: mutations
+  
+  # Step 1: Convert the binary mutation matrix into a phyDat object
+  phy_data <- phyDat(mutations_matrix, type = "USER", levels = c(0, 1))
+  
+  # Step 2: Create a distance matrix using binary distances
+  dist_matrix <- dist(mutations_matrix, method = "binary")
+  
+  # Step 3: Generate a UPGMA tree from the distance matrix
+  tree <- upgma(dist_matrix)
+  #plot(tree)
+  
+  fun <- function(x) upgma(dist.ml(x))
+  
+  tree <- upgma(dist.ml(phy_data))
+  
+  bs_upgma <- bootstrap.phyDat(phy_data,  fun, bs = 1e4)
+  plotBS(tree, bs_upgma, main="UPGMA")
+  tree_with_bs <- plotBS(tree, bs_upgma, main="UPGMA")  
+  
+  # Step 4: Calculate branch lengths based on unique mutations
+  # Initialize branch lengths
+  branch_lengths <- numeric(nrow(tree_with_bs$edge))
+  
+  branch_muts<-c()
+  # Traverse each edge and calculate the unique mutations
+  for (i in seq_len(nrow(tree_with_bs$edge))) {
+    message(i)
+    node1 <- tree_with_bs$edge[i, 1]
+    node2 <- tree_with_bs$edge[i, 2]
+    
+    # Get the tips (samples) downstream of node2
+    descendants <- Descendants(tree_with_bs, node2, type = "tips")[[1]]
+    
+    
+    # Get the tip labels corresponding to these descendants
+    tips_in_branch <- tree_with_bs$tip.label[descendants]
+    message(paste0(rownames(mutations_matrix)[descendants], collapse=" "))
+    # Identify the columns in mutation_matrix that correspond to these tips
+    tip_indices <- match(tips_in_branch, row.names(mutations_matrix))
+    
+    # Subset the mutation matrix for these tips
+    relevant_mutations <- (mutations_matrix[tip_indices,])
+    if(length(tip_indices)==1){
+      relevant_mutations<-matrix(relevant_mutations, nrow=1)
+    }
+    relevant_mutations <- apply(relevant_mutations, 2, as.numeric)
+    if(length(tip_indices)==1){
+      relevant_mutations<-matrix(relevant_mutations, nrow=1)
+    }
+    out_relevant_mutations <- (mutations_matrix[-tip_indices,])
+    if(length(tip_indices)==length(tree_with_bs$tip.label)-1){
+      out_relevant_mutations<-matrix(out_relevant_mutations, nrow=1)
+    }
+    out_relevant_mutations <- apply(out_relevant_mutations, 2, as.numeric)
+    if(length(tip_indices)==length(tree_with_bs$tip.label)-1){
+      out_relevant_mutations<-matrix(out_relevant_mutations, nrow=1)
+    }
+    
+    # Count mutations that are unique to this branch (present in at least one tip downstream, absent in others)
+    group_mutations <- apply(relevant_mutations, 2, function(x) all(x==1))
+    
+    non_outgroup_mutations <- apply(out_relevant_mutations, 2, function(x) !any(x==1))
+    group_mutations_names<-colnames(mutations_matrix)[which(group_mutations)]
+    
+    group_mutations_names<-colnames(mutations_matrix)[which(group_mutations & non_outgroup_mutations)]
+    
+    branch_muts<-c(branch_muts, group_mutations_names)
+    unique_mutations<-sum(group_mutations & non_outgroup_mutations)
+    # Set the branch length to the count of unique mutations
+    branch_lengths[i] <- sum(unique_mutations)
+  }
+  branch_muts<-unique(branch_muts)
+  # Step 5: Assign calculated branch lengths to the tree
+  tree_with_bs$edge.length <- branch_lengths
+  tree_with_bs$tip.color<-ifelse(tree_with_bs$tip.label %in% c("ref_chandler","tree2"), "tree",
+                                 ifelse(tree_with_bs$tip.label %in% c("cr10","cr13","cr22","cr85"), "shoot", "embryo"))
+  
+  # Ensure the tip labels and colors are stored correctly in the tree object
+  tree_with_bs$tip.label <- as.character(tree_with_bs$tip.label)
+  
+  tree_with_bs$tip.label <- new_labels[tree_with_bs$tip.label]
+  
+  # Create a data frame from the tree object for easier mapping of colors
+  tip_data <- data.frame(label = tree_with_bs$tip.label, color = tree_with_bs$tip.color)
+  
+  #   # Attach node.label to your tree data if necessary
+  node_data <- as.data.frame(tree_with_bs$node.label)
+  node_data$node <- (1 + length(tree_with_bs$tip.label)):(length(tree_with_bs$tip.label) + length(tree_with_bs$node.label))
+  colnames(node_data)[colnames(node_data) == "tree_with_bs$node.label"] <- "bootstrap"
+  
+  
+  # Now, create the plot with the modified data
+  p <- ggtree(tree_with_bs, branch.length = "edge.length", layout = "rectangular", size = 0.25) %<+% tip_data +
+    geom_tiplab(aes(label = label, fill = color),
+                geom = "label",
+                size = 2,
+                align = FALSE,
+                #hjust = 0.5,
+                #vjust = 0.5,
+                offset = -0.3,
+                linesize = 0.25) +
+    
+    scale_fill_manual(values = source_type_colors, name = NULL,
+                      labels = c("Embryo", "Shoot", "Tree"),
+                      guide = guide_legend(override.aes = list(label = ""))) +
+    theme_tree2() +
+    theme(text = element_text(size = 8),
+          legend.position = c(0.1, 0.75),
+          legend.key.size = unit(0.25, "cm"))
+  
+  p <- p %<+% node_data
+  
+  p <- p + geom_text(aes(label = bootstrap), hjust = 1, vjust = -0.4, size = 2)
+  
+  print(p)
+  
+  # Cladogram
+  
+  c <- ggtree(tree_with_bs, branch.length = "none", size=0.25) %<+% tip_data +# Use the `%<+%` operator to attach data
+    geom_tiplab(aes(label = label, fill = color),
+                geom = "label",
+                size = 2,
+                align = FALSE,
+                offset = -.4, linesize = 0.25) +  # Add tip labels as boxes
+    #   #geom_text2(aes(label = branch.length), vjust = 1.5, hjust = 1.5, size = 2, col = "red") +  # Add branch length labels
+    scale_fill_manual(values = source_type_colors,
+                      name=NULL,
+                      labels=c("Embryo","Shoot","Tree"),
+                      guide = guide_legend(override.aes = list(label = ""))) +
+    theme_tree2() +
+    theme(text = element_text(size = 6), legend.position = c(0.1, 0.75), legend.key.size = unit(0.25,"cm"),
+          axis.title.x = element_blank(),      # Remove x-axis title
+          axis.text.x = element_blank(),       # Remove x-axis text
+          axis.ticks.x = element_blank(),      # Remove x-axis ticks
+          axis.line.x = element_blank()        #  Remove x-axis line
+    )
+  
+  
+  c <- c %<+% node_data
+  c <- c + geom_text(aes(label = bootstrap), hjust = 1, vjust = -0.4, size = 2)
+  
+  print(c)
+  
+  return(list(tree=tree, plot=p, cladogram=c, branch_muts=branch_muts, bs_upgma=bs_upgma, tips = tip_data, nodes = node_data))
+}
+```
+
+## Old dendrogram plot
+```{r, eval=FALSE}
+p <- ggtree(tree_with_bs, branch.length = "none", layout = "rectangular", size = 0.25) %<+% tip_data +
+  geom_tiplab(aes(label = label, fill = color),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              #angle = 270,
+              #hjust = 1,
+              #vjust = 0.5,
+              #offset = 0.1,
+              linesize = 0.25) +
+  
+  scale_fill_manual(values = source_type_colors, name = NULL,
+                    labels = c("Embryo", "Shoot", "Tree"),
+                    guide = guide_legend(override.aes = list(label = ""))) +
+  scale_x_continuous(expand = c(0,12)) +
+  theme_tree2() +
+  theme(text = element_text(size = 6),
+        #legend.position = c(0.01, 0.9),
+        legend.key.size = unit(0.25, "cm"))
+
+p <- p %<+% node_data
+
+#p <- p + geom_text(aes(label = bootstrap), hjust = 1, vjust = -0.4, size = 2)
+
+#p <- p + layout_dendrogram()
+
+p <- rotate(p, 27)
+
+p <- rotate(p, 37)
+
+p <- rotate(p, 36)
+
+p
+
+p <- p + theme(
+  text = element_text(size = 6),
+  legend.position = c(0.39, 0.9),
+  legend.key.size = unit(0.15, "cm"),
+  axis.line.x = element_blank(),      # Remove x-axis line
+  axis.text.x = element_blank(),      # Remove x-axis text
+  axis.ticks.x = element_blank(),     # Remove x-axis ticks
+  axis.title.x = element_blank(),# Remove x-axis title
+  plot.margin = margin(t = 0,  # Top margin
+                       r = -3.5,  # Right margin
+                       b = 0,  # Bottom margin
+                       l = -4,  # Left margin
+                       unit = "cm")
+) 
+
+p + geom_text2(aes(label = node), hjust = -0.3, size = 3)
+
+p <- rotate(p, 23)
+
+p <- rotate(p, 36)
+
+p
+ggsave("./Figures/Phylogeny/dendrogram_for_y_axis.pdf",height = 3.0, width = 2)
+```
 
 ## Plot
-```{r}
+```{r, eval=FALSE}
 mutations_filt <- mutations[medQUAL >= 25 & medDPREAL >= 10 & MAPP==T & SNP == T]
 
 tree<-make_tree(mutations_filt)
@@ -261,47 +1000,81 @@ nodes <- tree$node_data
 plot <- tree$p
 
 plot +
-geom_text2(aes(label = node), hjust = -0.3, size = 3)
+  geom_text2(aes(label = node), hjust = -0.3, size = 3)
+
+plot
 
 plot_new <- rotate(plot, 27)
 
 plot_new <- rotate(plot_new, 37)
 
+plot_new <- rotate(plot_new, 36)
+
+plot_new <- rotate(plot_new, 23)
+
+plot_new <- rotate(plot_new, 36)
+
+max_x <- max(plot_new$data$x)
+
+plot_new <- plot_new + expand_limits(x = max_x * 1.2)
+
+
+
 plot_new +
-  theme(legend.position = c(.05,.85))
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut.pdf", height = 4, width = 7)
+  #scale_x_continuous(expand = c(-1, 0)) +
+  theme(legend.position = c(.1,.85),
+        plot.margin = margin(t = 0, r = -1, b = 0, l = 0, unit = "cm"))
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut.pdf", height = 2.7, width = 4)
+
+plot_new +
+  scale_x_continuous(expand = c(0,150)) +
+  theme(legend.position = c(.2,.85),
+        plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm"))  +
+  geom_text2(aes(label = ""))
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables.pdf", height = 3.0, width = 1.5)
+
 
 clad <- tree$cladogram
-  
+
 clad_new <- rotate(clad, 27)
 
 clad_new
-ggsave("./Figures/Phylogeny/all_sample_cladogram.pdf", height = 6, width = 6.2)
+#ggsave("./Figures/Phylogeny/all_sample_cladogram.pdf", height = 6, width = 6.2)
 ```
 
 ## Playing with plotting
-```{r}
-p <- ggtree(exp_tree, branch.length = "edge.length", layout = "dendrogram", size = 0.25) %<+% tips +
-    geom_tiplab(aes(label = label, fill = color),
-                geom = "label",
-                size = 2,
-                align = FALSE,
-                offset = -0.3, linesize = 0.25) +
+```{r, eval=FALSE}
+p <- ggtree(exp_tree, branch.length = 0.001, layout = "rectangular", size = 0.25) %<+% tips +
+  geom_tiplab(aes(label = label, fill = color),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              #rotate = 270,
+              offset = 0.1,
+              linesize = 0.25) +
+  
+  scale_fill_manual(values = source_type_colors, name = NULL,
+                    labels = c("Embryo", "Shoot", "Tree"),
+                    guide = guide_legend(override.aes = list(label = ""))) +
+  theme_tree2() +
+  scale_x_continuous(expand = c(0,0.5)) +
+  theme(text = element_text(size = 8),
+        legend.position = "none",
+        legend.key.size = unit(0.25, "cm"))
 
-    scale_fill_manual(values = source_type_colors, name = NULL,
-                      labels = c("Embryo", "Shoot", "Tree"),
-                      guide = guide_legend(override.aes = list(label = ""))) +
-    theme_tree2() +
-    theme(text = element_text(size = 8),
-          legend.position = c(0.1, 0.75),
-          legend.key.size = unit(0.25, "cm"))
+p <- rotate(p, 27)
+
+p <- rotate(p, 37)
+
+p <- rotate(p, 36)
 
 p
+#p + layout_dendrogram()
+#ggsave("~/Desktop/test_dend.pdf",height = 3.3, width = 2.88)
 
-p <- p %<+% nodes
+#p <- p %<+% nodes
 
-p <- p + geom_text(aes(label = bootstrap), hjust = 1, vjust = -0.4, size = 2)
+#p <- p + geom_text(aes(label = bootstrap), hjust = 1, vjust = -0.4, size = 2)
 
 print(p)
 ```
-

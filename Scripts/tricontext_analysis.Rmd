@@ -1,0 +1,90 @@
+---
+title: "snp_tricontext_analysis"
+author: "Matthew Davis"
+date: "2024-11-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r, message=FALSE}
+library(polymorphology2)
+#library(tidyverse)
+library(parallel)
+```
+
+## Functions
+```{r}
+fasta_trimer_freq<-function(fasta, stop = NULL){
+  fasta_windows<-rbindlist(lapply(1:length(fasta), function(i){
+    data.table(CHROM=names(fasta)[i], START=1, STOP=length(fasta[[i]]), ID=i)
+    data.table(CHROM=names(fasta)[i], START=1, STOP=ifelse(is.null(stop), length(fasta[[i]]), stop), ID=i)
+    
+  }))[!is.na(CHROM)]
+  trimer_freq<-Nmerfrequency(features = fasta_windows, fasta=fasta, Nmer = 3, mode="counts")
+  trimer_freq<-rbindlist(lapply(1:ncol(trimer_freq), function(i){
+    data.table(TRI=names(trimer_freq)[i], N=sum(trimer_freq[[i]]))
+  }))
+  
+  trimer_freq<-trimer_freq[!grepl("ID|N|V", TRI)]
+}
+```
+
+# Calculate trimer frequency
+## Read in fasta
+```{r, eval=FALSE}
+fasta <- read.fasta("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+```
+
+## Filter fasta for only chromosomes
+```{r, eval=FALSE}
+names(fasta)<-as.numeric(gsub("NC_0499(..).1_RagTag", "\\1", names(fasta)))
+fasta <- fasta[!is.na(names(fasta))]
+```
+
+## Calculate trimer frequency
+This takes about 2 hours
+```{r, eval=FALSE}
+## Needs library(parallel)
+freq_trimer <- fasta_trimer_freq(fasta, stop = NULL)
+```
+
+## Write trimer frequency for ref_chandler_primary
+```{r, eval=FALSE}
+fwrite(freq_trimer, "./Data/Trimer_Frequency/ref_chandler_primary_chr_only_trimer_freq.csv")
+```
+
+## Read in data
+```{r}
+mutations <- fread("./Data/VCFs/Parsed/mutations.tsv")
+freq_trimer <- fread("./Data/Trimer_Frequency/ref_chandler_primary_chr_only_trimer_freq.csv")
+```
+
+# Prepare data
+## Filter mutations for SNPs
+```{r}
+snps <- mutations[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T & SNP == T]
+indels <- mutations[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T & SNP == F]
+```
+
+
+# Plotting data
+## Polymorphlolgy plotting funciton
+```{r}
+tree_plot <- plot_tricontexts(snps[CULTURETYPE=="tree",.(UNIQUE, TRICONTEXT)]$TRICONTEXT, full=T, trimer_freq = freq_trimer, x_text = F)
+tree_plot$plot +
+ theme(plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.01, unit = "cm"))
+ggsave("./Figures/Tricontext/tree_tricontext.pdf", height = .9, width = 3.7)
+shoot_plot <- plot_tricontexts(snps[CULTURETYPE=="shoot",.(UNIQUE, TRICONTEXT)]$TRICONTEXT, full=T, trimer_freq = freq_trimer, x_text = F)
+shoot_plot$plot +
+  theme(plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.01, unit = "cm"))
+ggsave("./Figures/Tricontext/shoot_tricontext.pdf", height =.9, width = 3.7)
+embryo_plot <- plot_tricontexts(snps[CULTURETYPE=="embryo",.(UNIQUE, TRICONTEXT)]$TRICONTEXT, full=T, trimer_freq = freq_trimer,  x_text = T)
+embryo_plot$plot +
+  theme(plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.01, unit = "cm"))
+ggsave("./Figures/Tricontext/embryo_tricontext.pdf", height = 1.75, width = 7.4)
+```

@@ -44,7 +44,6 @@ read.PBSV <- function(data_path){
   
   return(sv.vcf)
 }
-
 ```
 
 ## Read in data and rename chromosomes

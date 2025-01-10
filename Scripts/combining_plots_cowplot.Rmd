@@ -1,0 +1,36 @@
+---
+title: "combining_plots_cowplot"
+author: "Matthew Davis"
+date: "2024-12-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(cowplot)
+```
+
+## Read in data
+```{r}
+heatmap <- readRDS("./Data/Plot_Objects/depth_in_5_windows_per_chr.rds")
+labels <- readRDS("./Data/Plot_Objects/all_sample_branch_is_mut_for_lables_both.rds")
+```
+
+# Combine plots
+## combine phylogeny and aneuploidy depth heatmap
+```{r}
+plot_grid(
+  labels, 
+  heatmap, 
+  ncol = 2, 
+  align = "v", 
+  axis = "tb",
+  hjust = -5
+)
+```
+

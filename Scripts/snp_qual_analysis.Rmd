@@ -43,8 +43,6 @@ mut_per_qual <- function(mut_table, qual_range = 20:40){
   
   return(mut_table)
 }
-
-
 ```
 
 
@@ -69,18 +67,11 @@ qual_table <- mut_per_qual(snps)
 ### Organize levels and add defining columns
 ```{r}
 levels <- c("ref_chandler", "tree2", "cr2_hifi",
-            "cr21_1", "cr21_2", "cr2_11A", "cr2_12A",
-            "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A",
-            "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
-            "cr2_18A", "cr2_18A1",
-            "cr85", "cr10", "cr13", "cr22")
-
-levels <- c("ref_chandler", "tree2", "cr2_hifi",
-            "cr2_11A", "cr2_12A", "cr2_13A",
-            "cr21_1", "cr21_2", "cr2_18A",
-            "cr2_15A", "cr2_15A1", "cr2_16A",
-            "cr2_18A1", "cr2_17A1", "cr2_17A2",
-            "cr2_16A1", "cr2_16A2",  
+            "cr2_16A2", "cr2_16A1", "cr2_17A2",
+            "cr2_17A1", "cr2_18A1", "cr2_16A",
+            "cr2_15A1", "cr2_15A", "cr2_18A",
+            "cr21_2", "cr21_1", "cr2_12A",
+            "cr2_13A", "cr2_11A",
             "cr85", "cr10", "cr13", "cr22")
 
 qual_table$SOURCE <- factor(qual_table$SOURCE, levels = levels)
@@ -120,9 +111,9 @@ qual_table <- qual_table %>%
   mutate(
     qvalue_rescaled = rescale(qvalue, to = c(0, 1)),  # Rescale qvalue to the range [0, 1]
     color_gradient = case_when(
-      CULTURETYPE == "tree" ~ gradient_n_pal(c("grey80", "mediumseagreen", "darkseagreen4"))(qvalue_rescaled),
-      CULTURETYPE == "shoot" ~ gradient_n_pal(c("grey80", "darkolivegreen4","darkseagreen2"))(qvalue_rescaled),
-      CULTURETYPE == "embryo" ~ gradient_n_pal(c("grey80", "lightgoldenrod","goldenrod1"))(qvalue_rescaled)
+      CULTURETYPE == "tree" ~ gradient_n_pal(c("grey80", "#B4C5B4", "darkseagreen4"))(qvalue_rescaled),
+      CULTURETYPE == "shoot" ~ gradient_n_pal(c("grey80", "#D9F6D9","darkseagreen2"))(qvalue_rescaled),
+      CULTURETYPE == "embryo" ~ gradient_n_pal(c("grey80", "#FFE092","goldenrod1"))(qvalue_rescaled)
     )
   )
 ```
@@ -136,14 +127,14 @@ qual_table %>%
   scale_color_viridis(name = "Quality\nThreshold", option = "cividis") +
   labs(y = "Number of Mutations", x = "Individual") +
   facet_grid(~TYPE, scales = "free", space = "free") +
-  scale_x_discrete(labels = c("ref_chandler" = "Reference Tree", "tree2" = "Tree 2",
-                              "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 1", "cr21_2" = "Embryo 2",
-                              "cr2_11A" = "11A", "cr2_12A" = "12A", "cr2_13A" = "13A",
-                              "cr2_15A" = "15A", "cr2_15A1" = "15A1", "cr2_16A" = "16A",
-                              "cr2_16A1" = "16A1", "cr2_16A2" = "16A2", "cr2_17A1" = "17A1",
-                              "cr2_17A2" = "17A2", "cr2_18A" = "18A", "cr2_18A1" = "18A1",
-                              "cr85" = "Chandler '85", "cr10" = "Chandler '10", "cr13" = "Chandler '13",
-                              "cr22" = "Chandler '22")) +
+  scale_x_discrete(labels = c("ref_chandler" = "Reference", "tree2" = "Tree",
+  "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+  "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
+  "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
+  "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
+  "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
+  "cr85" = "S 1985", "cr10" = "S 2010",
+  "cr13" = "S 2013", "cr22" = "S 2022")) +
   theme_classic(base_size = 6) +
   theme(legend.title = element_text(hjust = 0.5),
         axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
@@ -168,14 +159,15 @@ qual_table %>%
   scale_x_discrete(
     labels = c(
       "ref_chandler" = "Reference", "tree2" = "Tree",
-      "cr2_hifi" = "Embryo HiFi", "cr21_1" = "Embryo 4", "cr21_2" = "Embryo 5",
-      "cr2_11A" = "Embryo 1", "cr2_12A" = "Embryo 2", "cr2_13A" = "Embryo 3",
-      "cr2_15A" = "Embryo 7", "cr2_15A1" = "Embryo 8", "cr2_16A" = "Embryo 9",
-      "cr2_16A1" = "Embryo 13", "cr2_16A2" = "Embryo 14", "cr2_17A1" = "Embryo 11",
-      "cr2_17A2" = "Embryo 12", "cr2_18A" = "Embryo 6", "cr2_18A1" = "Embryo 10",
-      "cr85" = "Chandler '85", "cr10" = "Chandler '10",
-      "cr13" = "Chandler '13", "cr22" = "Chandler '22"
-    )
+  "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+  "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
+  "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
+  "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
+  "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
+  "cr85" = "S 1985", "cr10" = "S 2010",
+  "cr13" = "S 2013", "cr22" = "S 2022"
+    ),
+  #expand = c(.1,0)
   ) +
   geom_text_repel(
     data = filter(qual_table, label == "Quality\n 20"),  # Replace with the condition for the first label
@@ -199,12 +191,12 @@ qual_table %>%
     axis.text.x = element_text(angle = 35, vjust = 1, hjust = 1),
     axis.title.x = element_blank(),
     strip.background = element_blank(),
-    strip.text = element_text(face = "bold"),
+    #strip.text = element_text(face = "bold"),
     legend.position = "none",
-    panel.spacing = unit(0.1, "lines"),
-    plot.margin = unit(c(-.01, -.01, -.01, -.01), "mm")
+    #panel.spacing = unit(.5, "cm"),
+    plot.margin = unit(c(0, 0, 0, 0), "cm")
   )
-ggsave("./Figures/Quality_Analysis/medquality_comparison.pdf", height = 1.33, width = 3.5)
-ggsave("./Figures/Quality_Analysis/medquality_comparison.png", height = 1.33, width = 3.5)
+ggsave("./Figures/Quality_Analysis/medquality_comparison.pdf", height = 1.5, width = 4)
+ggsave("./Figures/Quality_Analysis/medquality_comparison.png", height = 1.5, width = 4)
 ```
 
