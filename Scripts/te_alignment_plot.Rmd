@@ -1,0 +1,68 @@
+---
+title: "te_alignment_plot"
+author: "Matthew Davis"
+date: "2025-02-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggenomics)
+```
+
+## Function
+```{r}
+
+```
+
+## Read in data
+```{r}
+align_5500 <- ggread_fasta("./Data/Alignments/all_5500_trimmed_mafft_alignment.fasta")
+align_900 <- ggread_fasta("./Data/Alignments/all_900_trimmed_mafft_alignment.fasta")
+```
+
+# Prepare data
+## Create data table
+```{r}
+table_5000 <- data.table(NAME = names(align_5500), SEQUENCE = as.character(align_5500))
+
+long_5000 <- table_5000[, .(NUCLEOTIDE = unlist(strsplit(SEQUENCE, "")),
+                                POSITION = rep(1:nchar(SEQUENCE), .N)),
+                           by = NAME]
+
+table_900 <- data.table(NAME = names(align_900), SEQUENCE = as.character(align_900))
+
+long_900 <- table_900[, .(NUCLEOTIDE = unlist(strsplit(SEQUENCE, "")),
+                                POSITION = rep(1:nchar(SEQUENCE), .N)),
+                           by = NAME]
+```
+
+## Set colors
+```{r}
+color_map <- c("A" = "red", "C" = "blue", "G" = "yellow", "T" = "green", "-" = "grey")
+long_5000$COLOR <- color_map[long_5000$NUCLEOTIDE]
+long_900$COLOR <- color_map[long_900$NUCLEOTIDE]
+```
+
+# Plot
+```{r}
+ggplot(long_5000, aes(x = POSITION, y = NAME, fill = COLOR)) +
+  geom_tile(aes(width = 1, height = 1), show.legend = FALSE) +
+  scale_fill_identity() +
+  theme_classic() +
+  theme(axis.text.y = element_text(size = 5)) +  # Adjust size of y-axis text if needed
+  labs(x = "Position in Sequence", y = "NAME")
+
+ggplot(long_900, aes(x = POSITION, y = NAME, fill = COLOR)) +
+  geom_tile(aes(width = 1, height = 1), show.legend = FALSE) +
+  scale_fill_identity() +
+  theme_classic() +
+  theme(axis.text.y = element_text(size = 5)) +  # Adjust size of y-axis text if needed
+  labs(x = "Position in Sequence", y = "NAME")
+```
+

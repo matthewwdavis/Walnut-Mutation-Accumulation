@@ -1,0 +1,163 @@
+---
+title: "dating_duplications"
+author: "Matthew Davis"
+date: "2025-01-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## library
+```{r}
+library(ggenomics)
+library(ggpubr)
+```
+
+## Functions
+```{r}
+
+```
+
+## Read in data
+```{r}
+muts <- fread("./Data/VCFs/Parsed/mutations.tsv")
+# Maybe calculate length of chromosomes 4 and 9 to noramlize
+```
+
+## Filter mutations
+```{r}
+dup_muts <- muts[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T & CHROM %in% c(4,9)]
+```
+
+## Levels and labels
+```{r}
+plot_levels <- c("cr2_16A2","cr2_16A1","cr2_17A2","cr2_17A1",
+                 "cr2_18A1","cr2_16A","cr2_hifi","cr2_15A1",
+                 "cr2_15A","cr2_18A", "cr21_2","cr21_1",
+                 "cr2_12A","cr2_13A","cr2_11A", "cr85", "cr10",
+                 "cr13", "cr22", "tree2", "ref_chandler")
+
+new_labels = c("ref_chandler" = "Reference", "tree2" = "Tree",
+               "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+               "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
+               "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
+               "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
+               "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
+               "cr85" = "S 1985", "cr10" = "S 2010",
+               "cr13" = "S 2013", "cr22" = "S 2022")
+```
+
+# Exploratory plotting
+## SNP frequencies for each chromosome
+```{r}
+dup_muts %>%
+  ggplot(aes(x = VAFREAL)) +
+  geom_histogram(aes(fill = as.factor(CHROM)), alpha = 0.5) +
+  geom_vline(xintercept = 0.33, linetype = 2) +
+  geom_vline(xintercept = 0.66, linetype = 2) +
+  facet_wrap(~SOURCE) +
+  theme_classic()
+
+dup_muts %>%
+  ggplot(aes(x = as.factor(CHROM), y = VAFREAL)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0.33, linetype = 2) +
+  geom_hline(yintercept = 0.66, linetype = 2) +
+  facet_grid(~SOURCE) +
+  stat_compare_means(method = "t.test", comparisons = list(c("4", "9")), label = "p.signif") +
+  theme_classic() +
+  theme(
+    strip.background = element_blank()
+  )
+```
+
+# Data exploration
+## Percent snps at 33 and 66
+```{r}
+dup_muts %>%
+  group_by(SOURCE, CHROM) %>%
+  summarise(
+    MEANVAF = mean(VAFREAL)
+  )
+
+small_muts <- dup_muts[VAFREAL >= 0.23 & VAFREAL <= 0.43 | VAFREAL >= 0.56 & VAFREAL <= 0.76]
+
+small_muts[, TIME := fifelse(VAFREAL >= 0.23 & VAFREAL <= 0.43, "post", NA)]
+small_muts[, TIME := fifelse(VAFREAL >= 0.56 & VAFREAL <= 0.76, "pre", TIME)]
+
+small_muts %>%
+  group_by(SOURCE, CHROM) %>%
+  summarise(
+    NUM_POST = sum(TIME == "post", na.rm = TRUE),
+    NUM_PRE = sum(TIME == "pre", na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  pivot_longer(cols = c(NUM_POST, NUM_PRE), 
+               names_to = "TIME",
+               values_to = "COUNT") %>%
+  ggplot(aes(x = as.factor(CHROM), y = COUNT, fill = TIME)) +
+  geom_bar(stat = "identity") +
+  facet_grid(~SOURCE) +
+  theme_classic()
+```
+
+## chi sq test to determine pre and post duplication
+```{r}
+dup_muts[, PVALUE := chisq.test(c(REFDP, ALTDP), p = c(0.5, 0.5))$p.value, by = 1:nrow(dup_muts)]
+dup_muts[, TIME :=  fifelse(PVALUE < 0.01 & VAFREAL > 0.5, "pre_dup_mut", NA)]
+dup_muts[, TIME :=  fifelse(PVALUE < 0.01 & VAFREAL < 0.5, "post_dup_mut", TIME)]
+```
+
+
+
+## Plot pre and post dup muts
+## Set levels
+```{r}
+dup_muts$SOURCE <- factor(dup_muts$SOURCE, levels = plot_levels)
+dup_muts$CHROM <- factor(dup_muts$CHROM, levels = c(9,4))
+```
+
+x axis should be CHROM, y axis should be count
+```{r}
+dup_muts %>%
+  filter(!is.na(TIME)) %>%
+  ggplot(aes(x = as.factor(CHROM), fill = TIME)) +
+  geom_bar(stat = "count") +
+  facet_grid(SOURCE ~ ., scales = "free_y", labeller = labeller(SOURCE = new_labels)) +
+  theme_classic() +
+  theme(
+    strip.background = element_blank(), 
+    #strip.text = element_text(angle = 90, hjust = 1)
+  )
+
+dup_muts %>%
+  filter(!is.na(TIME), CULTURETYPE %in% "embryo") %>%
+  ggplot(aes(y = as.factor(CHROM), fill = TIME)) +
+  geom_bar(stat = "count", color = "black", linewidth = 0.25) +
+  facet_grid(SOURCE ~ ., space = "free", switch = "y", labeller = labeller(SOURCE = new_labels)) +
+  scale_fill_manual(
+    values = c("post_dup_mut" = "#92a8d1", "pre_dup_mut" = "#d192b0"),
+    labels = c("post_dup_mut" = "Mutations post duplication", "pre_dup_mut" = "Mutations pre duplication")) +
+  scale_y_discrete(position = "right") +
+  labs(x = "Number of Mutations") +
+  theme_classic(base_size = 6) +
+  theme(
+    strip.placement = "outside",
+    strip.background = element_blank(),
+    strip.text = element_blank(),
+    axis.line.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_blank(),
+    legend.position = c(0.82,.2),
+    legend.title = element_blank(),
+    legend.key.size = unit(0.2, units = "cm"),
+    panel.spacing.x = unit(.01, "cm"),
+    plot.margin = margin(t = 0.05, r = 0.0, b = 0.0, l = -0.25, unit = "cm")
+  )
+ggsave("./Figures/Dating_Genomic_Instability/chr49_mutations.pdf", height = 1.9, width = 2.55)
+```
+

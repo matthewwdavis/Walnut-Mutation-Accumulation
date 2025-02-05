@@ -1,0 +1,1107 @@
+---
+title: "te_near_genes"
+author: "Matthew Davis"
+date: "2025-01-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Setup
+## Libraries
+```{r, message=FALSE}
+library(ggenomics)
+library(parallel)
+library(foreach)
+library(doParallel)
+library(ggpubr)
+```
+
+## Functions
+```{r}
+in_near_gene <- function(sv, genes){
+  
+  for (i in 1:nrow(sv)) {
+    sv_row <- sv[i]
+    
+    relevant_genes <- genes[CHROM == sv_row$CHROM & HAP == sv_row$HAP]
+    
+    abs_diff_start <- abs(relevant_genes$START - sv_row$POS)
+    abs_diff_stop <- abs(relevant_genes$STOP - sv_row$POS)
+    
+    is_genic <- any(sv_row$POS >= relevant_genes$START & sv_row$POS <= relevant_genes$STOP)
+    
+    sv[i, `:=`(CLOSEST_START = min(abs_diff_start), CLOSEST_STOP = min(abs_diff_stop), GENIC = is_genic)]
+  }
+}
+
+sim_in_near_gene <- function(sv, genes, cores = 8){
+  
+  # Set up parallel
+  num_cores <- cores
+  cl <- makeCluster(num_cores)
+  registerDoParallel(cl)
+  
+  # Create a list to store the outputs
+  random_sv_list <- foreach(iteration = 1:10000, .packages = 'data.table') %dopar% {
+    
+    # Randomize the simulation position for each iteration
+    sv[, SIM_POS := sample(1:CHROM_LENGTH, 1), by = .I]
+    
+    # Create columns
+    sv[, `:=`(SIM_START = NA_integer_, SIM_STOP = NA_integer_, SIM_GENIC = FALSE)]
+    
+    # Calculate the closest gene positions
+    sv[, `:=`(
+      SIM_START = sapply(1:nrow(sv), function(i) {
+        sv_row <- sv[i]
+        relevant_genes <- genes[CHROM == sv_row$CHROM & HAP == sv_row$HAP]
+        abs_diff_start <- abs(relevant_genes$START - sv_row$SIM_POS)
+        min(abs_diff_start)
+      }),
+      SIM_STOP = sapply(1:nrow(sv), function(i) {
+        sv_row <- sv[i]
+        relevant_genes <- genes[CHROM == sv_row$CHROM & HAP == sv_row$HAP]
+        abs_diff_stop <- abs(relevant_genes$STOP - sv_row$SIM_POS)
+        min(abs_diff_stop)
+      })
+    )]
+    
+    # Check if SIM_POS falls within any START-STOP range
+    sv[, SIM_GENIC := sapply(1:nrow(sv), function(i) {
+      sv_row <- sv[i]
+      relevant_genes <- genes[CHROM == sv_row$CHROM & HAP == sv_row$HAP]
+      any(sv_row$SIM_POS >= relevant_genes$START & sv_row$SIM_POS <= relevant_genes$STOP)
+    })]
+    
+    # Return the result of each iteration
+    return(copy(sv))
+  }
+  
+  # Stop the cluster after the computation is done
+  stopCluster(cl)
+  
+  return(random_sv_list)
+}
+
+sim_list_means <- function(sim_list){
+  
+  # Create empty variable for loop
+  sim_means <- c()
+  
+  for (i in 1:length(sim_list)) {
+    
+    sim_means[[i]] <- sim_list[[i]] %>%
+      group_by(SOURCE, TE) %>%
+      summarise(
+        NUMBER = n(),
+        MEAN_SIMSTART = mean(SIM_START),
+        MEAN_SIMSTOP = mean(SIM_STOP),
+        TOTAL_SIM_GENIC = sum(SIM_GENIC),
+        PROP_SIM_GENIC = TOTAL_SIM_GENIC/NUMBER
+      ) %>%
+      ungroup()
+  }
+  
+  sim_means_table <- rbindlist(sim_means)
+  
+  return(sim_means_table)
+}
+
+sim_prox_table <- function(sim_means_table){
+  
+  prox_sim_means <- sim_means_table %>%
+    pivot_longer(cols = c(MEAN_SIMSTART, MEAN_SIMSTOP), names_to = "LOCATION", values_to = "DISTANCE")
+  setDT(prox_sim_means)
+  prox_sim_means[, LOCATION := fifelse(LOCATION == "MEAN_SIMSTART", "start", "stop")]
+  prox_sim_means[, UNIQUE := paste(SOURCE, TE, LOCATION, sep = "_")]
+  
+  return(prox_sim_means)
+}
+
+real_prox_table <- function(real_means_table){
+  
+  prox_real_means <- real_means_table %>%
+    pivot_longer(cols = c(MEAN_CLOSESTART, MEAN_CLOSESTOP), names_to = "LOCATION", values_to = "DISTANCE")
+  setDT(prox_real_means)
+  prox_real_means[, LOCATION := fifelse(LOCATION == "MEAN_CLOSESTART", "start", "stop")]
+  prox_real_means[, UNIQUE := paste(SOURCE, TE, LOCATION, sep = "_")]
+  
+  return(prox_real_means)
+}
+```
+
+## Read in data
+```{r}
+sv <- fread("./Data/VCFs/SV_VCF/Parsed/parsed_ins_dels_pbsv.vcf")
+h1genes <- fread("./Data/GFFs/Parsed/hap1_genes_good.tsv")
+h2genes <- fread("./Data/GFFs/Parsed/hap2_genes_good.tsv")
+combo_fasta <- ggread_fasta("./Data/Fastas/ref_chandler_combohap_default_scaffold.fasta")
+fasta_5000 <- fread("./Data/Fastas/TEs/all_5000_fasta_table.tsv")
+fasta_900 <- fread("./Data/Fastas/TEs/all_900_fasta_table.tsv")
+```
+
+## Combine genes and create length column
+```{r}
+genes <- rbind(h1genes, h2genes)
+genes[, LENGTH := abs(STOP - START)]
+```
+
+## Create new NAME column
+```{r}
+sv[, NUM := seq_len(.N), by = SVLEN]
+sv[, NAME := paste(SVLEN, CHROM, POS, HAP, NUM, sep = "_")]
+```
+
+## Extract names vector
+```{r}
+fasta_5000[, NAME := gsub("_\\(reversed\\)", "", NAME)]
+name_5000 <- fasta_5000$NAME
+
+fasta_900[, NAME := gsub("_\\(reversed\\)", "", NAME)]
+# Remove one of the split tandem duplicates
+fasta_900[, NAME := sub("(*.)(-[0-9])", "\\1", NAME)]
+fasta_900 <- fasta_900[-.N]
+name_900 <- fasta_900$NAME
+```
+
+# Calculate distance of SVs to the nearest gene
+## Label TEs
+```{r}
+sv[, TE := fifelse(NAME %in% name_5000, "te_5453", "sv")]
+sv[, TE := fifelse(NAME %in% name_900, "te_899", TE)]
+
+sv %>%
+  group_by(SOURCE, TE) %>%
+  summarise(
+    NUMBER = n()
+  )
+```
+
+## Find the nearest gene to each SV considering haplotype
+```{r}
+# Add columns
+sv[, `:=`(CLOSEST_START = NA_integer_, CLOSEST_STOP = NA_integer_, GENIC = FALSE)]
+
+# Create insertion only data
+sv_ins <- sv[SVTYPE %in% "INS"]
+
+# Loop to identify proximity to genes
+in_near_gene(sv, genes)
+in_near_gene(sv_ins, genes)
+```
+
+## Look at data summary
+```{r}
+real_means <- sv %>%
+  group_by(SOURCE, TE) %>%
+  summarise(
+    NUMBER = n(),
+    MEAN_CLOSESTART = mean(CLOSEST_START),
+    MEAN_CLOSESTOP = mean(CLOSEST_STOP),
+    TOTAL_GENIC = sum(GENIC),
+    PROP_GENIC = TOTAL_GENIC/NUMBER
+  ) %>%
+  ungroup()
+
+real_means_ins <- sv_ins %>%
+  group_by(SOURCE, TE) %>%
+  summarise(
+    NUMBER = n(),
+    MEAN_CLOSESTART = mean(CLOSEST_START),
+    MEAN_CLOSESTOP = mean(CLOSEST_STOP),
+    TOTAL_GENIC = sum(GENIC),
+    PROP_GENIC = TOTAL_GENIC/NUMBER
+  ) %>%
+  ungroup()
+
+setDT(real_means)
+setDT(real_means_ins)
+```
+
+## Plot distribution of data
+```{r}
+sv %>%
+  ggplot(aes(x = CLOSEST_START, fill = TE)) +
+  geom_histogram(alpha = 0.33)+
+  facet_grid(~SOURCE) +
+  theme_classic()
+
+sv %>%
+  ggplot(aes(x = CLOSEST_STOP, fill = TE)) +
+  geom_histogram(alpha = 0.33)+
+  facet_grid(~SOURCE) +
+  theme_classic()
+
+sv_ins %>%
+  ggplot(aes(x = CLOSEST_START, fill = TE)) +
+  geom_histogram(alpha = 0.33)+
+  facet_grid(~SOURCE) +
+  theme_classic()
+
+sv_ins %>%
+  ggplot(aes(x = CLOSEST_STOP, fill = TE)) +
+  geom_histogram(alpha = 0.33)+
+  facet_grid(~SOURCE) +
+  theme_classic()
+```
+
+# Simulate te insertions
+## Create fasta length table
+```{r}
+# Create table
+fasta.table <- data.table(CHROM = names(combo_fasta), LENGTH = width(combo_fasta))
+fasta.table <- fasta.table[grepl("NC_049", fasta.table$CHROM), ]
+
+#Adjust and rename
+fasta.table[, HAP := sub(".*(hap\\d+).*", "\\1", CHROM)]
+fasta.table[, HAP := gsub("hap1", "A", HAP)]
+fasta.table[, HAP := gsub("hap2", "B", HAP)]
+fasta.table[, CHROM := as.numeric(sub("NC_0499(..).*", "\\1", CHROM))]
+```
+
+## Add a length column to sv
+```{r}
+sv <- merge(sv, fasta.table[, .(CHROM, HAP, CHROM_LENGTH = LENGTH)], by = c("CHROM", "HAP"), all.x = TRUE)
+sv_ins <- merge(sv_ins, fasta.table[, .(CHROM, HAP, CHROM_LENGTH = LENGTH)], by = c("CHROM", "HAP"), all.x = TRUE)
+```
+
+## Running Simulation Loop
+```{r, eval=FALSE}
+random_sv_list <- sim_in_near_gene(sv, genes)
+save(random_sv_list, file = "./Data/VCFs/SV_VCF/Parsed/random_locations_denovo_sv_list.RData")
+
+random_ins_list <- sim_in_near_gene(sv_ins, genes)
+save(random_ins_list, file = "./Data/VCFs/SV_VCF/Parsed/random_locations_denovo_insertion_list.RData")
+```
+
+## Read in list and adjust
+```{r}
+load("./Data/VCFs/SV_VCF/Parsed/random_locations_denovo_sv_list.RData")
+load("./Data/VCFs/SV_VCF/Parsed/random_locations_denovo_insertion_list.RData")
+
+sim_sv_table <- rbindlist(random_sv_list)
+sim_sv_table[, DATA := "simulated"]
+head(sim_sv_table)
+
+sim_ins_table <- rbindlist(random_ins_list)
+sim_ins_table[, DATA := "simulated"]
+head(sim_ins_table)
+```
+
+## Summarize each table
+```{r, message=FALSE}
+sim_sv_means <- sim_list_means(random_sv_list)
+sim_ins_means <- sim_list_means(random_ins_list)
+```
+
+# Compare simulations to real data
+## Create a combinded data table
+```{r}
+sv[, DATA := "real"]
+sv_ins[, DATA := "real"]
+
+small_sv <- sv[, .(CHROM, HAP, POS, UNIQUE, SVTYPE, SVLEN, VAF, SOURCE, TE, CLOSEST_START, CLOSEST_STOP, GENIC, DATA)]
+small_ins <- sv[, .(CHROM, HAP, POS, UNIQUE, SVTYPE, SVLEN, VAF, SOURCE, TE, CLOSEST_START, CLOSEST_STOP, GENIC, DATA)]
+
+
+small_sv_sim <- sim_sv_table[, .(CHROM, HAP, POS, UNIQUE, SVTYPE, SVLEN, VAF, SOURCE, TE, SIM_START, SIM_STOP, SIM_GENIC, DATA)]
+small_ins_sim <- sim_ins_table[, .(CHROM, HAP, POS, UNIQUE, SVTYPE, SVLEN, VAF, SOURCE, TE, SIM_START, SIM_STOP, SIM_GENIC, DATA)]
+
+setnames(small_sv, c("CLOSEST_START", "CLOSEST_STOP"), c("START", "STOP"))
+setnames(small_ins, c("CLOSEST_START", "CLOSEST_STOP"), c("START", "STOP"))
+
+setnames(small_sv_sim, c("SIM_START", "SIM_STOP", "SIM_GENIC"), c("START", "STOP", "GENIC"))
+setnames(small_ins_sim, c("SIM_START", "SIM_STOP", "SIM_GENIC"), c("START", "STOP", "GENIC"))
+
+
+combo_sv <- rbind(small_sv, small_sv_sim)
+combo_ins <- rbind(small_ins, small_ins_sim)
+```
+
+## Boxplot comparing START positions
+```{r}
+combo_sv %>%
+  ggplot(aes(x = DATA, y = START)) +
+  geom_boxplot() +
+  facet_grid(SOURCE ~ TE) +
+  stat_compare_means(method = "wilcox.test", comparisons = list(c("real", "simulated"))) +
+  theme_classic()
+
+combo_sv %>%
+  ggplot(aes(x = DATA, y = log(START))) +
+  geom_boxplot() +
+  facet_grid(SOURCE ~ TE) +
+  theme_classic()
+
+combo_ins %>%
+  ggplot(aes(x = DATA, y = START)) +
+  geom_boxplot() +
+  facet_grid(SOURCE ~ TE) +
+  stat_compare_means(method = "wilcox.test", comparisons = list(c("real", "simulated"))) +
+  theme_classic()
+
+combo_ins %>%
+  ggplot(aes(x = DATA, y = log(START))) +
+  geom_boxplot() +
+  facet_grid(SOURCE ~ TE) +
+  theme_classic()
+```
+
+## Boxplots comparing STOP positions
+```{r}
+combo_sv %>%
+  ggplot(aes(x = DATA, y = STOP)) +
+  geom_boxplot() +
+  facet_grid(SOURCE ~ TE) +
+  stat_compare_means(method = "wilcox.test", comparisons = list(c("real", "simulated"))) +
+  theme_classic()
+
+combo_sv %>%
+  ggplot(aes(x = DATA, y = log(STOP))) +
+  geom_boxplot() +
+  facet_grid(SOURCE ~ TE) +
+  theme_classic()
+
+combo_ins %>%
+  ggplot(aes(x = DATA, y = STOP)) +
+  geom_boxplot() +
+  facet_grid(SOURCE ~ TE) +
+  stat_compare_means(method = "wilcox.test", comparisons = list(c("real", "simulated"))) +
+  theme_classic()
+
+combo_ins %>%
+  ggplot(aes(x = DATA, y = log(STOP))) +
+  geom_boxplot() +
+  facet_grid(SOURCE ~ TE) +
+  theme_classic()
+```
+
+# Plot to compare data means
+## Distribution of start proximity
+```{r}
+real_means
+real_means_ins
+
+sim_sv_means %>%
+  filter(TE == "te_5453") %>%
+  ggplot(aes(x = MEAN_SIMSTART)) +
+  geom_histogram() +
+  geom_vline(xintercept = 4389.588, linetype = 2, color = "red2") +
+  labs(x = "Distance from gene start (bp)", y = "Number of simulations") +
+  theme_classic() +
+  theme()
+
+sim_ins_means %>%
+  filter(TE == "te_5453") %>%
+  ggplot(aes(x = MEAN_SIMSTART)) +
+  geom_histogram() +
+  geom_vline(xintercept = 4389.588, linetype = 2, color = "red2") +
+  labs(x = "Distance from gene start (bp)", y = "Number of simulations") +
+  theme_classic() +
+  theme()
+```
+
+## Distribution of stop proximity
+```{r}
+real_means
+real_means_ins
+
+sim_sv_means %>%
+  filter(TE == "te_5453") %>%
+  ggplot(aes(x = MEAN_SIMSTOP)) +
+  geom_histogram() +
+  geom_vline(xintercept = 4614.191, linetype = 2, color = "red2") +
+  labs(x = "Distance from gene start (bp)", y = "Number of simulations") +
+  theme_classic() +
+  theme()
+
+sim_ins_means %>%
+  filter(TE == "te_5453") %>%
+  ggplot(aes(x = MEAN_SIMSTOP)) +
+  geom_histogram() +
+  geom_vline(xintercept = 4614.191, linetype = 2, color = "red2") +
+  labs(x = "Distance from gene start (bp)", y = "Number of simulations") +
+  theme_classic() +
+  theme()
+```
+
+## Comparing proportion of gene landing
+```{r}
+real_means
+real_means_ins
+
+sim_sv_means %>%
+  filter(TE == "te_5453") %>%
+  ggplot(aes(x = PROP_SIM_GENIC)) +
+  geom_histogram() +
+  geom_vline(xintercept = 0.5190840, linetype = 2, color = "red2") +
+  labs(x = "Proportion in gene bodies", y = "Number of simulations") +
+  theme_classic() +
+  theme()
+
+sim_ins_means %>%
+  filter(TE == "te_5453") %>%
+  ggplot(aes(x = PROP_SIM_GENIC)) +
+  geom_histogram() +
+  geom_vline(xintercept = 0.5190840, linetype = 2, color = "red2") +
+  labs(x = "Proportion in gene bodies", y = "Number of simulations") +
+  theme_classic() +
+  theme()
+```
+
+## Violin plots
+```{r}
+sim_sv_means %>%
+  filter(TE == "te_5453") %>%
+  ggplot(aes(x = MEAN_SIMSTART, y = TE)) +
+  geom_jitter(alpha = 0.1) +
+  geom_violin(fill = NA) +
+  geom_point(data = real_means[TE == "te_5453"], aes(x = MEAN_CLOSESTART, y = TE, color = TE)) +
+  scale_fill_manual(values = ) +
+  theme_classic() +
+  theme()
+```
+
+# Plot realtionships
+## Reshape data to long for proximity to genes
+```{r}
+prox_sim_sv_means <- sim_prox_table(sim_sv_means)
+prox_sim_ins_means <- sim_prox_table(sim_ins_means)
+
+prox_real_means <- real_prox_table(real_means)
+prox_real_means_ins <- real_prox_table(real_means_ins)
+```
+
+## Reshape data for genic proportion
+```{r}
+sim_sv_means[, UNIQUE := paste(SOURCE, TE, sep = "_")]
+sim_sv_means[, GENIC := PROP_SIM_GENIC]
+
+sim_ins_means[, UNIQUE := paste(SOURCE, TE, sep = "_")]
+sim_ins_means[, GENIC := PROP_SIM_GENIC]
+
+real_means[, UNIQUE := paste(SOURCE, TE, sep = "_")]
+real_means[, GENIC := PROP_GENIC]
+
+real_means_ins[, UNIQUE := paste(SOURCE, TE, sep = "_")]
+real_means_ins[, GENIC := PROP_GENIC]
+```
+
+## Identify pseudo-pvalues
+Need to figure this out
+```{r, eval=FALSE}
+prop.table(table(sim_ins_means[TE %in% "te_899", MEAN_SIMSTART] < real_means_ins[TE %in% "te_899", MEAN_CLOSESTART]))
+prop.table(table(sim_ins_means[TE %in% "te_899", MEAN_SIMSTOP] < real_means_ins[TE %in% "te_899", MEAN_CLOSESTOP]))
+prop.table(table(sim_ins_means[TE %in% "te_899", PROP_SIM_GENIC] < real_means_ins[TE %in% "te_899", PROP_GENIC]))
+
+prop.table(table(sim_ins_means[TE %in% "te_5453", MEAN_SIMSTART] < real_means_ins[TE %in% "te_5453", MEAN_CLOSESTART]))
+prop.table(table(sim_ins_means[TE %in% "te_5453", MEAN_SIMSTOP] < real_means_ins[TE %in% "te_5453", MEAN_CLOSESTOP]))
+prop.table(table(sim_ins_means[TE %in% "te_5453", PROP_SIM_GENIC] < real_means_ins[TE %in% "te_5453", PROP_GENIC]))
+```
+
+
+## Setting levels
+```{r}
+means_levels <- c("ref_chandler_sv_stop", "ref_chandler_sv_start", "term_chandler_sv_stop", "term_chandler_sv_start", "cr2_te_5453_stop", "cr2_te_5453_start","cr2_te_899_stop","cr2_te_899_start", "cr2_sv_stop", "cr2_sv_start")
+genes_levels <- c("ref_chandler_sv", "term_chandler_sv", "cr2_te_5453", "cr2_te_899", "cr2_sv")
+
+prox_sim_sv_means$UNIQUE <- factor(prox_sim_sv_means$UNIQUE, levels = means_levels)
+prox_sim_ins_means$UNIQUE <- factor(prox_sim_ins_means$UNIQUE, levels = means_levels)
+
+prox_real_means$UNIQUE <- factor(prox_real_means$UNIQUE, levels = means_levels)
+prox_real_means_ins$UNIQUE <- factor(prox_real_means_ins$UNIQUE, levels = means_levels)
+
+
+sim_sv_means$UNIQUE <- factor(sim_sv_means$UNIQUE, levels = genes_levels)
+sim_ins_means$UNIQUE <- factor(sim_ins_means$UNIQUE, levels = genes_levels)
+
+real_means$UNIQUE <- factor(real_means$UNIQUE, levels = genes_levels)
+real_means_ins$UNIQUE <- factor(real_means_ins$UNIQUE, levels = genes_levels)
+```
+
+## Plot proximity to both start and stop
+```{r}
+prox_sim_sv_means %>%
+  ggplot(aes(x = DISTANCE, y = UNIQUE)) +
+  geom_violin(aes(fill = SOURCE), alpha = 0.75) +
+  geom_point(data = prox_real_means, aes(x = DISTANCE, y = UNIQUE, color = TE)) +
+  scale_fill_manual(
+    values = c("cr2" = "goldenrod1",
+               "ref_chandler" = "darkseagreen4",
+               "term_chandler" = "darkseagreen3"),
+    labels = c("cr2" = "E HiFi",
+               "ref_chandler" = "Reference",
+               "term_chandler" = "Tree")) +
+  scale_color_manual(
+    values = c("sv" = "grey30",
+               "te_5453" = "#DA8392",
+               "te_899" = "#FBC5AD"),
+    labels = c("sv" = "Other SV",
+               "te_5453" = "5453 bp TE",
+               "te_899" = "899bp TE")) +
+  labs(x = "Distance from site (bp)") +
+  theme_classic(base_size = 6) +
+  theme(
+    axis.title.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.key.size = unit(0.2, "cm"),
+    legend.position = c(0.8,0.9)
+  )
+```
+
+## Plot proximity to start
+```{r}
+prox_sim_sv_means %>%
+  filter(LOCATION == "start") %>%
+  ggplot(aes(x = DISTANCE, y = UNIQUE)) +
+  geom_violin(aes(fill = SOURCE), alpha = 0.75) +
+  geom_point(data = prox_real_means[LOCATION == "start"], aes(x = DISTANCE, y = UNIQUE, color = TE)) +
+  scale_fill_manual(
+    values = c("cr2" = "goldenrod1",
+               "ref_chandler" = "darkseagreen4",
+               "term_chandler" = "darkseagreen3"),
+    labels = c("cr2" = "E HiFi",
+               "ref_chandler" = "Reference",
+               "term_chandler" = "Tree")) +
+  scale_color_manual(
+    values = c("sv" = "grey30",
+               "te_5453" = "#eb7287",
+               "te_899" = "#7287eb"),
+    labels = c("sv" = "Other SV",
+               "te_5453" = "5453 bp TE",
+               "te_899" = "899bp TE")) +
+  scale_y_discrete(
+    labels = c("cr2_sv_start" = "E HiFi other SV",
+               "cr2_te_5453_start" = "E HiFi 5453 bp",
+               "cr2_te_899_start" = "E HiFi 899 bp",
+               "ref_chandler_sv_start" = "Reference other SV",
+               "term_chandler_sv_start" = "Tree other SV"
+    )
+  ) +
+  labs(x = "Distance from gene start (bp)", fill = "Individual", color = "Type of variant") +
+  theme_classic(base_size = 6) +
+  theme(
+    axis.title.y = element_blank(),
+    #axis.text.y = element_blank(),
+    #axis.ticks.y = element_blank(),
+    legend.key.size = unit(0.2, "cm"),
+    legend.position = "none",
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0.5, r = 0.05, b = 0, l = 0, unit = "cm")
+  )
+
+ggsave("./Figures/Transposable_Elements/sv_simulation_v_real_to_gene_start.pdf", height = 2.5, width = 2.95)
+ggsave("./Figures/Transposable_Elements/sv_simulation_v_real_to_gene_start.png", height = 2.5, width = 2.95)
+
+prox_sim_ins_means %>%
+  filter(LOCATION == "start") %>%
+  ggplot(aes(x = DISTANCE, y = UNIQUE)) +
+  geom_violin(aes(fill = SOURCE), alpha = 0.75) +
+  geom_point(data = prox_real_means_ins[LOCATION == "start"], aes(x = DISTANCE, y = UNIQUE, color = TE)) +
+  scale_fill_manual(
+    values = c("cr2" = "goldenrod1",
+               "ref_chandler" = "darkseagreen4",
+               "term_chandler" = "darkseagreen3"),
+    labels = c("cr2" = "E HiFi",
+               "ref_chandler" = "Reference",
+               "term_chandler" = "Tree")) +
+  scale_color_manual(
+    values = c("sv" = "grey30",
+               "te_5453" = "#eb7287",
+               "te_899" = "#7287eb"),
+    labels = c("sv" = "Other SV",
+               "te_5453" = "5453 bp TE",
+               "te_899" = "899bp TE")) +
+  scale_y_discrete(
+    labels = c("cr2_sv_start" = "E HiFi other SV",
+               "cr2_te_5453_start" = "E HiFi 5453 bp",
+               "cr2_te_899_start" = "E HiFi 899 bp",
+               "ref_chandler_sv_start" = "Reference other SV",
+               "term_chandler_sv_start" = "Tree other SV"
+    )
+  ) +
+  labs(x = "Distance from gene start (bp)", fill = "Individual", color = "Type of variant") +
+  theme_classic(base_size = 6) +
+  theme(
+    axis.title.y = element_blank(),
+    #axis.text.y = element_blank(),
+    #axis.ticks.y = element_blank(),
+    legend.key.size = unit(0.2, "cm"),
+    legend.position = "none",
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0.5, r = 0.05, b = 0, l = 0, unit = "cm")
+  )
+```
+
+## Plot proximity to stop
+```{r}
+prox_sim_sv_means %>%
+  filter(LOCATION == "stop") %>%
+  ggplot(aes(x = DISTANCE, y = UNIQUE)) +
+  geom_violin(aes(fill = SOURCE), alpha = 0.75) +
+  geom_point(data = prox_real_means[LOCATION == "stop"], aes(x = DISTANCE, y = UNIQUE, color = TE)) +
+  scale_fill_manual(
+    values = c("cr2" = "goldenrod1",
+               "ref_chandler" = "darkseagreen4",
+               "term_chandler" = "darkseagreen3"),
+    labels = c("cr2" = "E HiFi",
+               "ref_chandler" = "Reference",
+               "term_chandler" = "Tree")) +
+  scale_color_manual(
+    values = c("sv" = "grey30",
+               "te_5453" = "#eb7287",
+               "te_899" = "#7287eb"),
+    labels = c("sv" = "Other SV",
+               "te_5453" = "5453 bp TE",
+               "te_899" = "899bp TE")) +
+  labs(x = "Distance from gene end (bp)", fill = "Individual", color = "Type of variant") +
+  theme_classic(base_size = 6) +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    legend.key.size = unit(0.2, "cm"),
+    legend.position = "none",
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0.5, r = 0.05, b = 0, l = 0, unit = "cm")
+  )
+
+ggsave("./Figures/Transposable_Elements/sv_simulation_v_real_to_gene_stop.pdf", height = 2.5, width = 2.3)
+ggsave("./Figures/Transposable_Elements/sv_simulation_v_real_to_gene_stop.png", height = 2.5, width = 2.3)
+
+prox_sim_ins_means %>%
+  filter(LOCATION == "stop") %>%
+  ggplot(aes(x = DISTANCE, y = UNIQUE)) +
+  geom_violin(aes(fill = SOURCE), alpha = 0.75) +
+  geom_point(data = prox_real_means_ins[LOCATION == "stop"], aes(x = DISTANCE, y = UNIQUE, color = TE)) +
+  scale_fill_manual(
+    values = c("cr2" = "goldenrod1",
+               "ref_chandler" = "darkseagreen4",
+               "term_chandler" = "darkseagreen3"),
+    labels = c("cr2" = "E HiFi",
+               "ref_chandler" = "Reference",
+               "term_chandler" = "Tree")) +
+  scale_color_manual(
+    values = c("sv" = "grey30",
+               "te_5453" = "#eb7287",
+               "te_899" = "#7287eb"),
+    labels = c("sv" = "Other SV",
+               "te_5453" = "5453 bp TE",
+               "te_899" = "899bp TE")) +
+  labs(x = "Distance from gene end (bp)", fill = "Individual", color = "Type of variant") +
+  theme_classic(base_size = 6) +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    legend.key.size = unit(0.2, "cm"),
+    legend.position = "none",
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0.5, r = 0.05, b = 0, l = 0, unit = "cm")
+  )
+```
+
+## Plot the inside of the 
+```{r}
+ggplot(sim_sv_means, aes(x = GENIC, y = UNIQUE)) +
+  geom_violin(aes(fill = SOURCE), alpha = 0.6) +
+  geom_point(data = real_means, aes(x = GENIC, y = UNIQUE, color = TE)) +
+  scale_fill_manual(
+    values = c("cr2" = "goldenrod1",
+               "ref_chandler" = "darkseagreen4",
+               "term_chandler" = "darkseagreen3"),
+    labels = c("cr2" = "E HiFi",
+               "ref_chandler" = "Reference",
+               "term_chandler" = "Tree")) +
+  scale_color_manual(
+    values = c("sv" = "grey33",
+               "te_899" = "#7287eb",
+               "te_5453" = "#eb7287"
+    ),
+    labels = c("sv" = "Other SV",
+               "te_5453" = "5453 bp TE",
+               "te_899" = "899 bp TE")) +
+  labs(x = "Proportion within gene body", fill = "Simulated distribution", color = "Observed") +
+  guides(fill = guide_legend(order = 1), color = guide_legend(order = 2)) +
+  theme_classic(base_size = 6) +
+  theme(    
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    legend.position = c(0.81,0.91),
+    legend.box = "veritcal",
+    legend.spacing.y = unit(-0.1, "cm"),
+    legend.key.size = unit(0.2, "cm"),
+    legend.background = element_rect(fill = NA, color = NA),
+    legend.key = element_rect(fill = NA, color = NA),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0.5, r = 0.05, b = 0, l = 0, unit = "cm")
+  )
+
+ggsave("./Figures/Transposable_Elements/sv_simulation_v_real_in_gene.pdf", height = 2.5, width = 2.3)
+ggsave("./Figures/Transposable_Elements/sv_simulation_v_real_in_gene.png", height = 2.5, width = 2.3)
+
+ggplot(sim_ins_means, aes(x = GENIC, y = UNIQUE)) +
+  geom_violin(aes(fill = SOURCE), alpha = 0.6) +
+  geom_point(data = real_means_ins, aes(x = GENIC, y = UNIQUE, color = TE)) +
+  scale_fill_manual(
+    values = c("cr2" = "goldenrod1",
+               "ref_chandler" = "darkseagreen4",
+               "term_chandler" = "darkseagreen3"),
+    labels = c("cr2" = "E HiFi",
+               "ref_chandler" = "Reference",
+               "term_chandler" = "Tree")) +
+  scale_color_manual(
+    values = c("sv" = "grey33",
+               "te_899" = "#7287eb",
+               "te_5453" = "#eb7287"
+    ),
+    labels = c("sv" = "Other SV",
+               "te_5453" = "5453 bp TE",
+               "te_899" = "899 bp TE")) +
+  labs(x = "Proportion within gene body", fill = "Simulated distribution", color = "Observed") +
+  guides(fill = guide_legend(order = 1), color = guide_legend(order = 2)) +
+  theme_classic(base_size = 6) +
+  theme(    
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    legend.position = c(0.81,0.91),
+    legend.box = "veritcal",
+    legend.spacing.y = unit(-0.1, "cm"),
+    legend.key.size = unit(0.2, "cm"),
+    legend.background = element_rect(fill = NA, color = NA),
+    legend.key = element_rect(fill = NA, color = NA),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0.5, r = 0.05, b = 0, l = 0, unit = "cm")
+  )
+```
+
+# Only plotting areas of interest
+## Plot 900 class TEs
+```{r}
+## Start location
+prox_sim_ins_means %>%
+  filter(LOCATION == "start", TE == "te_899") %>%
+  summarise(mean_distance = mean(DISTANCE, na.rm = TRUE))
+prox_real_means_ins[LOCATION %in% "start" & TE %in% "te_899"]
+
+prox_sim_ins_means %>%
+  filter(LOCATION %in% "start",
+         TE %in% "te_899") %>%
+  ggplot(aes(x = DISTANCE, y = UNIQUE)) +
+  geom_violin(aes(fill = SOURCE), alpha = 0.95, color = "grey50") +
+  geom_point(data = prox_real_means_ins[LOCATION %in% "start" & TE %in% "te_899"],
+             aes(x = DISTANCE, y = UNIQUE, color = TE),
+             size = 2) +
+  geom_segment(aes(x = 5974.629, xend = 12316.6, y = 1.12, yend = 1.12), 
+               linewidth = 0.25, color = "black") + 
+  geom_segment(aes(x = 5974.629, xend = 5974.629, y = 1.1, yend = 1.12), 
+               linewidth = 0.25, color = "black") +
+  geom_segment(aes(x = 12316.6, xend = 12316.6, y = 1.1, yend = 1.12), 
+               linewidth = 0.25, color = "black") + 
+  annotate("text", x = (5974.629 + 12316.6) / 2, y = 1.2, 
+           label = "0.0051", size = 2)  +
+  geom_segment(aes(x = -Inf, xend = Inf, y = Inf, yend = Inf), color = "black", linewidth = 0.5) +
+  geom_segment(aes(x = -Inf, xend = -Inf, y = -Inf, yend = Inf), color = "black", linewidth = 0.5) +
+  geom_segment(aes(x = -Inf, xend = Inf, y = -Inf, yend = -Inf), color = "black", linewidth = 0.5) +
+  scale_fill_manual(
+    values = c("cr2" = "grey90"),
+    labels = c("cr2" = "E HiFi")) +
+  scale_color_manual(
+    values = c("te_899" = "#7287eb"),
+    labels = c("te_899" = "900 class TE")) +
+  labs(x = "Distance from gene start (bp)", fill = "Individual", color = "Type of variant") +
+  theme_classic(base_size = 6) +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    legend.key.size = unit(0.2, "cm"),
+    legend.position = "none",
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0.1, r = 0.1, b = 0.1, l = 0.1, unit = "cm")
+  )
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_start_900.pdf", height = 1, width = 1.25)
+
+## stop location
+prox_sim_ins_means %>%
+  filter(LOCATION == "stop", TE == "te_899") %>%
+  summarise(mean_distance = mean(DISTANCE, na.rm = TRUE))
+prox_real_means_ins[LOCATION %in% "stop" & TE %in% "te_899"]
+
+prox_sim_ins_means %>%
+  filter(LOCATION %in% "stop",
+         TE %in% "te_899") %>%
+  ggplot(aes(x = DISTANCE, y = UNIQUE)) +
+  geom_violin(aes(fill = SOURCE), alpha = 0.95, color = "grey50") +
+  geom_point(data = prox_real_means_ins[LOCATION %in% "stop" & TE %in% "te_899"],
+             aes(x = DISTANCE, y = UNIQUE, color = TE),
+             size = 2) +
+  geom_segment(aes(x = 5673.286, xend = 12344.29, y = 1.12, yend = 1.12), 
+               linewidth = 0.25, color = "black") + 
+  geom_segment(aes(x = 5673.286, xend = 5673.286, y = 1.1, yend = 1.12), 
+               linewidth = 0.25, color = "black") + 
+  geom_segment(aes(x = 12344.29, xend = 12344.29, y = 1.1, yend = 1.12), 
+               linewidth = 0.25, color = "black") +  
+  annotate("text", x = (5673.286 + 12344.29) / 2, y = 1.2, 
+           label = "0.0031", size = 2)  + 
+  geom_segment(aes(x = -Inf, xend = Inf, y = Inf, yend = Inf), color = "black", linewidth = 0.5) +
+  geom_segment(aes(x = -Inf, xend = Inf, y = -Inf, yend = -Inf), color = "black", linewidth = 0.5) +
+  scale_fill_manual(
+    values = c("cr2" = "grey90"),
+    labels = c("cr2" = "E HiFi")) +
+  scale_color_manual(
+    values = c("te_899" = "#7287eb"),
+    labels = c("te_899" = "900 class TE")) +
+  labs(x = "Distance from gene stop (bp)", fill = "Individual", color = "Type of variant") +
+  theme_classic(base_size = 6) +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    legend.key.size = unit(0.2, "cm"),
+    legend.position = "none",
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0.1, r = 0.1, b = 0.1, l = 0.1, unit = "cm")
+  )
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_stop_900.pdf", height = 1, width = 1.25)
+
+## Genic location
+sim_ins_means %>%
+  filter( TE == "te_899") %>%
+  summarise(mean_gene = mean(PROP_SIM_GENIC, na.rm = TRUE))
+real_means_ins %>%
+  filter( TE == "te_899") %>%
+  summarise(mean_gene = mean(PROP_GENIC, na.rm = TRUE))
+
+sim_ins_means %>%
+  filter(TE %in% "te_899") %>%
+  ggplot(aes(x = GENIC, y = UNIQUE)) +
+  geom_violin(aes(fill = SOURCE),
+              alpha = 0.95,
+              color = "grey50") +
+  geom_point(data = real_means_ins[TE %in% "te_899"],
+             aes(x = GENIC,
+                 y = UNIQUE,
+                 color = TE),
+             size = 2) +
+  geom_segment(aes(x = 0.1714286, xend = 0.2933971, y = 1.12, yend = 1.12), 
+               linewidth = 0.25, color = "black") + 
+  geom_segment(aes(x = 0.1714286, xend = 0.1714286, y = 1.1, yend = 1.12), 
+               linewidth = 0.25, color = "black") + 
+  geom_segment(aes(x = 0.2933971, xend = 0.2933971, y = 1.1, yend = 1.12), 
+               linewidth = 0.25, color = "black") +  
+  annotate("text", x = (0.1714286 + 0.2933971) / 2, y = 1.2, 
+           label = "0.0326", size = 2)  + 
+  geom_segment(aes(x = -Inf, xend = Inf, y = Inf, yend = Inf), color = "black", linewidth = 0.5) +
+  geom_segment(aes(x = Inf, xend = Inf, y = -Inf, yend = Inf), color = "black", linewidth = 0.5) +
+  geom_segment(aes(x = -Inf, xend = Inf, y = -Inf, yend = -Inf), color = "black", linewidth = 0.5) +
+  scale_fill_manual(
+    values = c("cr2" = "grey90"
+    ),
+    labels = c("cr2" = "Simulation"
+    )) +
+  scale_color_manual(
+    values = c(
+      "te_899" = "#7287eb"
+    ),
+    labels = c(
+      "te_899" = "900 class")) +
+  scale_x_continuous(breaks = c(0.2, 0.4, 0.6)) +
+  labs(x = "Proportion within gene body", fill = "Simulated distribution", color = "Observed") +
+  guides(fill = guide_legend(order = 1), color = guide_legend(order = 2)) +
+  theme_classic(base_size = 6) +
+  theme(    
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    legend.title = element_blank(),
+    legend.position = c(0.77,0.82),
+    legend.box = "veritcal",
+    legend.box.spacing = unit(0, "cm"),
+    legend.spacing.y = unit(-0.2, "cm"),
+    legend.key.size = unit(0.2, "cm"),
+    legend.background = element_rect(fill = NA, color = NA),
+    legend.key = element_rect(fill = NA, color = NA),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0.1, r = 0.1, b = 0.1, l = 0.1, unit = "cm")
+  )
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_genes_900.pdf", height = 1, width = 1.25)
+```
+
+## Plot 5500 class TEs
+```{r}
+## Start location
+prox_sim_ins_means %>%
+  filter(LOCATION == "start", TE == "te_5453") %>%
+  summarise(mean_distance = mean(DISTANCE, na.rm = TRUE))
+prox_real_means_ins[LOCATION %in% "start" & TE %in% "te_5453"]
+
+prox_sim_ins_means %>%
+  filter(LOCATION %in% "start",
+         TE %in% "te_5453") %>%
+  ggplot(aes(x = DISTANCE, y = UNIQUE)) +
+  geom_violin(aes(fill = SOURCE), alpha = 0.95, color = "grey50") +
+  geom_point(data = prox_real_means_ins[LOCATION %in% "start" & TE %in% "te_5453"],
+             aes(x = DISTANCE, y = UNIQUE, color = TE),
+             size = 2) +
+  geom_segment(aes(x = 4389.588, xend = 12740.23, y = 1.12, yend = 1.12), 
+               linewidth = 0.25, color = "black") + 
+  geom_segment(aes(x = 4389.588, xend = 4389.588, y = 1.1, yend = 1.12), 
+               linewidth = 0.25, color = "black") +
+  geom_segment(aes(x = 12740.23, xend = 12740.23, y = 1.1, yend = 1.12), 
+               linewidth = 0.25, color = "black") + 
+  annotate("text", x = (4389.588 + 12740.23) / 2, y = 1.2, 
+           label = "0", size = 2)  +
+  geom_segment(aes(x = -Inf, xend = Inf, y = Inf, yend = Inf), color = "black", linewidth = 0.5) +
+  geom_segment(aes(x = -Inf, xend = -Inf, y = -Inf, yend = Inf), color = "black", linewidth = 0.5) +
+  geom_segment(aes(x = -Inf, xend = Inf, y = -Inf, yend = -Inf), color = "black", linewidth = 0.5) +
+  scale_fill_manual(
+    values = c("cr2" = "grey90"),
+    labels = c("cr2" = "E HiFi")) +
+  scale_color_manual(
+    values = c("te_5453" = "#eb7287"),
+    labels = c("te_5453" = "5500 class TE")) +
+  labs(x = "Distance from gene start (bp)", fill = "Individual", color = "Type of variant") +
+  theme_classic(base_size = 6) +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    legend.key.size = unit(0.2, "cm"),
+    legend.position = "none",
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0.1, r = 0.1, b = 0.1, l = 0.1, unit = "cm")
+  )
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_start_5500.pdf", height = 1, width = 1.25)
+
+## stop location
+prox_sim_ins_means %>%
+  filter(LOCATION == "stop", TE == "te_5453") %>%
+  summarise(mean_distance = mean(DISTANCE, na.rm = TRUE))
+prox_real_means_ins[LOCATION %in% "stop" & TE %in% "te_5453"]
+
+prox_sim_ins_means %>%
+  filter(LOCATION %in% "stop",
+         TE %in% "te_5453") %>%
+  ggplot(aes(x = DISTANCE, y = UNIQUE)) +
+  geom_violin(aes(fill = SOURCE), alpha = 0.95, color = "grey50") +
+  geom_point(data = prox_real_means_ins[LOCATION %in% "stop" & TE %in% "te_5453"],
+             aes(x = DISTANCE, y = UNIQUE, color = TE),
+             size = 2) +
+  geom_segment(aes(x = 4614.191, xend = 12722.25, y = 1.12, yend = 1.12), 
+               linewidth = 0.25, color = "black") + 
+  geom_segment(aes(x = 4614.191, xend = 4614.191, y = 1.1, yend = 1.12), 
+               linewidth = 0.25, color = "black") + 
+  geom_segment(aes(x = 12722.25, xend = 12722.25, y = 1.1, yend = 1.12), 
+               linewidth = 0.25, color = "black") +  
+  annotate("text", x = (4614.191 + 12722.25) / 2, y = 1.2, 
+           label = "0", size = 2)  + 
+  geom_segment(aes(x = -Inf, xend = Inf, y = Inf, yend = Inf), color = "black", linewidth = 0.5) +
+  geom_segment(aes(x = -Inf, xend = Inf, y = -Inf, yend = -Inf), color = "black", linewidth = 0.5) +
+  scale_fill_manual(
+    values = c("cr2" = "grey90"),
+    labels = c("cr2" = "E HiFi")) +
+  scale_color_manual(
+    values = c("te_5453" = "#eb7287"),
+    labels = c("te_5453" = "5500 class TE")) +
+  labs(x = "Distance from gene stop (bp)", fill = "Individual", color = "Type of variant") +
+  theme_classic(base_size = 6) +
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    legend.key.size = unit(0.2, "cm"),
+    legend.position = "none",
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0.1, r = 0.1, b = 0.1, l = 0.1, unit = "cm")
+  )
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_stop_5500.pdf", height = 1, width = 1.25)
+
+## Genic location
+sim_ins_means %>%
+  filter( TE == "te_5453") %>%
+  summarise(mean_gene = mean(PROP_SIM_GENIC, na.rm = TRUE))
+real_means_ins %>%
+  filter( TE == "te_5453") %>%
+  summarise(mean_gene = mean(PROP_GENIC, na.rm = TRUE))
+
+sim_ins_means %>%
+  filter(TE %in% "te_5453") %>%
+  ggplot(aes(x = GENIC, y = UNIQUE)) +
+  geom_violin(aes(fill = SOURCE),
+              alpha = 0.95,
+              color = "grey50") +
+  geom_point(data = real_means_ins[TE %in% "te_5453"],
+             aes(x = GENIC,
+                 y = UNIQUE,
+                 color = TE)) +
+  geom_segment(aes(x = 0.519084, xend = 0.2803687, y = 1.12, yend = 1.12), 
+               linewidth = 0.25, color = "black") + 
+  geom_segment(aes(x = 0.519084, xend = 0.519084, y = 1.1, yend = 1.12), 
+               linewidth = 0.25, color = "black") + 
+  geom_segment(aes(x = 0.2803687, xend = 0.2803687, y = 1.1, yend = 1.12), 
+               linewidth = 0.25, color = "black") +  
+  annotate("text", x = (0.519084 + 0.2803687) / 2, y = 1.2, 
+           label = "0", size = 2)  + 
+  geom_segment(aes(x = -Inf, xend = Inf, y = Inf, yend = Inf), color = "black", linewidth = 0.5) +
+  geom_segment(aes(x = Inf, xend = Inf, y = -Inf, yend = Inf), color = "black", linewidth = 0.5) +
+  geom_segment(aes(x = -Inf, xend = Inf, y = -Inf, yend = -Inf), color = "black", linewidth = 0.5) +
+  scale_fill_manual(
+    values = c("cr2" = "grey90"
+    ),
+    labels = c("cr2" = "Simulation"
+    )) +
+  scale_color_manual(
+    values = c(
+      "te_5453" = "#eb7287"
+    ),
+    labels = c(
+      "te_5453" = "5500 class")) +
+  scale_x_continuous(breaks = c(0.2, 0.4, 0.6)) +
+  labs(x = "Proportion within gene body", fill = "Simulated distribution", color = "Observed") +
+  guides(fill = guide_legend(order = 1), color = guide_legend(order = 2)) +
+  theme_classic(base_size = 6) +
+  theme(    
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    legend.title = element_blank(),
+    legend.position = c(0.77,0.82),
+    legend.box = "veritcal",
+    legend.box.spacing = unit(0, "cm"),
+    legend.spacing.y = unit(-0.2, "cm"),
+    legend.key.size = unit(0.2, "cm"),
+    legend.background = element_rect(fill = NA, color = NA),
+    legend.key = element_rect(fill = NA, color = NA),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0.1, r = 0.1, b = 0.1, l = 0.1, unit = "cm")
+  )
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_genes_5500.pdf", height = 1, width = 1.25)
+```

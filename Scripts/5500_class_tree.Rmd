@@ -1,0 +1,93 @@
+---
+title: "5500_class_tree"
+author: "Matthew Davis"
+date: "2025-02-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Library
+```{r, message=FALSE}
+library(ggenomics)
+library(Biostrings)
+library(msa)
+library(phangorn)
+library(ggtree)
+```
+
+## Functions
+```{r}
+bs_plot <- function(phydata, bootstraps = 1e2){
+  
+  upgma_func <- function(x) upgma(dist.ml(x))
+  
+  upgma_tree <- upgma(dist.ml(phydata))
+  
+  bs_upgma <- bootstrap.phyDat(phydata, upgma_func , bs = bootstraps)
+  
+  plotBS(upgma_tree, bs_upgma, main="UPGMA")
+  
+  bs_upgma_tree <- plotBS(upgma_tree, bs_upgma, main="UPGMA")
+  
+  return(bs_upgma_tree)
+}
+```
+
+## Read in data
+```{r}
+align_5500 <- ggread_fasta("./Data/Alignments/all_5500_trimmed_mafft_alignment.fasta")
+align_900 <- ggread_fasta("./Data/Alignments/all_900_trimmed_mafft_alignment.fasta")
+```
+
+# Prepare data
+## Create matrix
+```{r}
+matrix_5500 <- as.matrix(align_5500)
+matrix_900 <- as.matrix(align_900)
+```
+
+## Create phy data objects
+```{r}
+phy_5500 <- phyDat(matrix_5500, type = "DNA")
+phy_900 <- phyDat(matrix_900, type = "DNA")
+```
+
+## Bootstrap UPGMA
+```{r}
+bs_5500 <- bs_plot(phy_5500, bootstraps = 1e2)
+bs_900 <- bs_plot(phy_900, bootstraps = 1e2)
+```
+
+# Plotting trees
+## 5500 class tree
+```{r}
+ggtree(bs_5500, branch.length = "edge.length", layout = "unrooted") #+
+  # geom_tiplab(aes(label = label),
+  #             geom = "label",
+  #             size = 2,
+  #             align = FALSE,
+  #             linesize = 0.25) +
+  # geom_nodelab(aes(label = node),
+  #              geom = "text",
+  #              #vjust = 1,
+  #              size = 2,
+  #              align = FALSE)
+
+ggtree(bs_900, branch.length = "edge.length", layout = "unrooted") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = node),
+               geom = "text",
+               #vjust = 1,
+               size = 2,
+               align = FALSE)
+
+```
+

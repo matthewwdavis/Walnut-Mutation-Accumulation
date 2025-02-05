@@ -1,0 +1,197 @@
+---
+title: "make_te_tree"
+author: "Matthew Davis"
+date: "2025-01-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Library
+```{r, message=FALSE}
+library(ggenomics)
+library(Biostrings)
+library(msa)
+library(phangorn)
+library(ggtree)
+```
+
+## Functions
+```{r}
+bs_plot <- function(phydata, bootstraps = 1e2){
+  
+  upgma_func <- function(x) upgma(dist.ml(x))
+  
+  upgma_tree <- upgma(dist.ml(phydata))
+  
+  bs_upgma <- bootstrap.phyDat(phydata, upgma_func , bs = bootstraps)
+  
+  plotBS(upgma_tree, bs_upgma, main="UPGMA")
+  
+  bs_upgma_tree <- plotBS(upgma_tree, bs_upgma, main="UPGMA")
+  
+  return(bs_upgma_tree)
+}
+
+count_tips_per_node <- function(tree) {
+  if (!inherits(tree, "phylo")) {
+    stop("Input must be a phylo object.")
+  }
+  
+  internal_nodes <- (Ntip(tree) + 1):max(tree$edge)
+  node_tips <- sapply(internal_nodes, function(node) {
+    length(Descendants(tree, node, type = "tips")[[1]])
+  })
+  
+  return(setNames(node_tips, internal_nodes))
+}
+```
+
+## Read in data, make combined file
+```{r}
+te_5453 <- ggread_fasta("./Data/Fastas/TEs/TE_5453_trimmed alignment.fasta")
+te_899 <- ggread_fasta("./Data/Fastas/TEs/TE_899_trimmed alignment.fasta")
+te_all <- c(te_5453, te_899)
+```
+
+# Align and prepare sequences
+## MSA with muscle
+```{r}
+muscle_align_899 <- msa(te_899, method = "Muscle")
+muscle_align_5453 <- msa(te_5453, method = "Muscle")
+muscle_align_te <- msa(te_all, method = "Muscle")
+```
+
+## View the MSA
+```{r, eval = FALSE}
+print(muscle_align_899, show = "complete")
+print(muscle_align_5453, show = "complete")
+```
+
+
+## Create matrix
+```{r}
+muscle_matrix_899 <- as.matrix(muscle_align_899)
+muscle_matrix_5453 <- as.matrix(muscle_align_5453)
+muscle_matrix_te <- as.matrix(muscle_align_te)
+```
+
+## Create phy data objects
+```{r}
+muscle_phy_899 <- phyDat(muscle_matrix_899, type = "DNA")
+muscle_phy_5453 <- phyDat(muscle_matrix_5453, type = "DNA")
+muscle_phy_te <- phyDat(muscle_matrix_te, type = "DNA")
+```
+
+# Plot
+## Bootstrap UPGMA
+```{r}
+muscle_bs_upgma_899 <- bs_plot(muscle_phy_899, bootstraps = 1e2)
+muscle_bs_upgma_5453 <- bs_plot(muscle_phy_5453, bootstraps = 1e2)
+muscle_bs_upgma_te <- bs_plot(muscle_phy_te, bootstraps = 1e2)
+```
+
+## Use ggtree
+```{r}
+ggtree(muscle_bs_upgma_899, branch.length = "edge.length", layout = "rectangular") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = label),
+               geom = "text",
+               #vjust = 1,
+               size = 2,
+               align = FALSE)
+
+ggtree(muscle_bs_upgma_5453, branch.length = "edge.length", layout = "rectangular") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = node),
+               geom = "text",
+               #vjust = 1,
+               size = 2,
+               align = FALSE)
+
+ggtree(muscle_bs_upgma_te, branch.length = "none", layout = "daylight" ) +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = label),
+               geom = "text",
+               #vjust = 1,
+               size = 2,
+               align = FALSE)
+```
+
+## Look at number of members in each clade
+```{r}
+count_tips_per_node(muscle_bs_upgma_899)
+count_tips_per_node(muscle_bs_upgma_5453)
+count_tips_per_node(muscle_bs_upgma_te)
+```
+
+## Try collapsing polytomies
+```{r}
+tree_899 <- ggtree(muscle_bs_upgma_899, branch.length = "edge.length", layout = "rectangular") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = label),
+               geom = "text",
+               #vjust = 1,
+               size = 2,
+               align = FALSE) +
+  geom_point2(aes(subset=node==27), color='darkgreen', size=5, shape = 17)
+
+collapse(tree_899, 27, 'max')
+
+tree_5453 <- ggtree(muscle_bs_upgma_5453, branch.length = "edge.length", layout = "rectangular") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = label),
+               geom = "text",
+               #vjust = 1,
+               size = 2,
+               align = FALSE) #+
+  #geom_point2(aes(subset=node==116), color='darkgreen', size=5, shape = 17)
+
+collapse(tree_5453, 116, 'mixed', fill = "steelblue")
+
+tree_te <- ggtree(muscle_bs_upgma_te, branch.length = "none", layout = "daylight") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = label),
+               geom = "text",
+               #vjust = 1,
+               size = 2,
+               align = FALSE) #+
+  #geom_point2(aes(subset=node==116), color='darkgreen', size=5, shape = 17)
+
+collapse(tree_te, 118, 'min', fill = "steelblue") %>%
+  collapse(119, 'max', fill = "red")
+```
+
+
+## Save tree file
+```{r, eval = FALSE}
+write.tree(phy = muscle_bs_upgma_5453, file = "~/Desktop/muscle_bs_upgma_5453.tree")
+```
+

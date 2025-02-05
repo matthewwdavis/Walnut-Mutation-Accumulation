@@ -10,7 +10,406 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 # Setup
 ## Libraries
-```{r, message=FALSE}
+```{r}
+library(ggenomics)
+library(ggVennDiagram)
+```
+
+## Read in data
+```{r}
+# De novo ins and deletions
+sv <- fread("./Data/VCFs/SV_VCF/Parsed/parsed_ins_dels_pbsv.vcf")
+```
+
+# Look at distributions
+## VAF density
+```{r}
+# All VAF
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  ggplot(aes(x = VAF)) +
+  geom_density() +
+  theme_classic(base_size = 6)
+
+# VAF by type
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  ggplot(aes(x = VAF, color = SVTYPE)) +
+  geom_density(linewidth = 1.5) +
+  theme_classic(base_size = 6)
+```
+
+## Distributions of lengths
+```{r}
+# All lengths
+sv %>%
+  #filter(SOURCE == "cr2") %>%
+  ggplot(aes(x = SVLEN, fill = SOURCE)) +
+  geom_histogram(alpha = 0.5, bins = 100) +
+  theme_classic(base_size = 6)
+
+# By SVTYPE
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  ggplot(aes(x = abs(SVLEN), color = SVTYPE)) +
+  geom_density(linewidth = 1.5) +
+  xlim(0,1000) +
+  theme_classic(base_size = 6)
+
+# Vast majority of SVs are very small. A filter of >= 50 drops the SV count in half
+
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  filter(abs(SVLEN) >= 50) %>%
+  ggplot(aes(x = abs(SVLEN), color = SVTYPE)) +
+  geom_density(linewidth = 1.5) +
+  theme_classic(base_size = 6)
+
+# Looking at the 5453 BP Insertion
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  filter(abs(SVLEN) >= 4000 & abs(SVLEN) <= 6000) %>%
+  ggplot(aes(x = abs(SVLEN), fill = SVTYPE)) +
+  geom_histogram(alpha = .5) +
+  scale_x_continuous(breaks = seq(4000, 6000, by = 100)) +
+  theme_classic(base_size = 6)
+
+# Shrink the region
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  filter(abs(SVLEN) >= 5450 & abs(SVLEN) <= 5460) %>%
+  ggplot(aes(x = abs(SVLEN), fill = SVTYPE)) +
+  geom_histogram(binwidth = 5, alpha = .5) +
+  scale_x_continuous(breaks = seq(5450, 5460, by = 1)) +
+  theme_classic(base_size = 6)
+```
+
+## which length occurs the most often?
+```{r}
+# Look at SV >= 500. 5453 is still by far the most common
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  group_by(SVLEN_abs = abs(SVLEN)) %>%  # Rename the grouping column
+  summarise(Count = n()) %>%            # Count occurrences
+  arrange(desc(Count)) %>%               # Arrange by count
+  filter(SVLEN_abs >= 500)               # Filter based on the new column name
+
+
+# Look at separation of DEL and INS
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  group_by(SVLEN) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count)) %>%
+  filter(SVLEN >= 500 | SVLEN <= -500)
+
+# Zoom into the 5453 region
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  group_by(SVLEN) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count)) %>%
+  filter(SVLEN >= 5450 & SVLEN <= 5460)
+```
+
+## Look at VAF of the 5453 bp
+```{r}
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  filter(SVLEN >= 5450 & SVLEN <= 5460) %>% 
+  ggplot(aes(x = VAF)) +
+  geom_histogram() +
+  coord_cartesian(xlim = c(0.0, 1.0)) +
+  theme_classic()
+
+
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  filter(SVLEN == 5453) %>% 
+  ggplot(aes(x = VAF, fill = ifelse(VAF == 1.0, "red", "grey50"))) +
+  geom_histogram(bins = 10, show.legend = FALSE) +
+  scale_fill_identity() +
+  labs(x = "Variant Allele Frequency", y = "Number of Variants") + 
+  coord_cartesian(xlim = c(0.0, 1.0)) +
+  theme_classic(base_size = 6)
+ggsave("./Figures/VAF_Analysis/vaf_ins_5453_high.pdf", height = 1, width = 2)
+ggsave("./Figures/VAF_Analysis/vaf_ins_5453_high.png", height = 1, width = 2)
+
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  filter(SVLEN == 5453) %>% 
+  ggplot(aes(x = VAF, fill = ifelse(VAF < 1.0, "red", "grey50"))) +
+  geom_histogram(bins = 35, show.legend = FALSE) +
+  scale_fill_identity() +
+  labs(x = "Variant Allele Frequency", y = "Number of Variants") + 
+  coord_cartesian(xlim = c(0.0, 1.0)) +
+  theme_classic(base_size = 6)
+ggsave("./Figures/VAF_Analysis/vaf_ins_5453_low.pdf", height = 1, width = 2)
+ggsave("./Figures/VAF_Analysis/vaf_ins_5453_low.png", height = 1, width = 2)
+
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  filter(SVLEN == 5453) %>% 
+  ggplot(aes(x = VAF, fill =  "#eb7287")) +
+  geom_histogram(bins = 35, show.legend = FALSE) +
+  scale_fill_identity() +
+  labs(x = "Variant Allele Frequency", y = "Number of Variants") + 
+  coord_cartesian(xlim = c(0.0, 1.0)) +
+  theme_classic(base_size = 6)
+
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  filter(SVLEN == 899) %>% 
+  ggplot(aes(x = VAF, fill =  "#7287eb")) +
+  geom_histogram(bins = 35, show.legend = FALSE) +
+  scale_fill_identity() +
+  labs(x = "Variant Allele Frequency", y = "Number of Variants") + 
+  coord_cartesian(xlim = c(0.0, 1.0)) +
+  theme_classic(base_size = 6)
+
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  filter(SVLEN %in% c(899, 5453)) %>% 
+  ggplot(aes(x = VAF, fill =  as.factor(SVLEN))) +
+  geom_histogram(position = "dodge", color = "black", linewidth = 0.15) +
+  #geom_bar(stat = "count", position = "dodge", width = 0.15, color = "black", linewidth = 0.2) +
+  scale_fill_manual(
+    values = c(
+      "5453" = "#eb7287",
+      "899" = "#7287eb"
+    ),
+    labels = c(
+      "5453" = "5453 bp TE",
+      "899" = "899 bp TE"
+    )
+  ) +
+  labs(x = "Variant Allele Frequency", y = "Number of Variants") + 
+  coord_cartesian(xlim = c(0.0, 1.0)) +
+  theme_classic(base_size = 6) +
+   theme(
+    legend.key.size = unit(0.2, "cm"),
+    legend.title = element_blank(),
+    legend.position = c(.15, .87),
+    legend.background = element_rect(fill = "transparent"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+    plot.title = element_text(hjust = 0.5),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    plot.margin = margin(t = 0.02, r = 0.0, b = 0.0, l = 0.02, unit = "cm")
+  )
+ggsave("./Figures/Transposable_Elements/te_5453_899_vaf.pdf", height = 1, width = 2)
+ggsave("./Figures/Transposable_Elements/te_5453_899_vaf.png", height = 1, width = 2)
+```
+
+# Regions to extract for IGV
+```{r}
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  filter(SVLEN == 5453 & VAF == 1.0 & DP >= 10) 
+
+sv %>%
+  filter(SOURCE == "cr2") %>%
+  filter(SVLEN == 5453 & VAF >=0.2 & VAF <= 0.3 & DP >= 10)
+```
+
+# Histograms comparing INS and DEL in samples
+## Faceted sample
+```{r}
+sv %>%
+  ggplot(aes(x = SVLEN)) +
+  geom_histogram() +
+  scale_x_continuous(limits = c(0,7500)) +
+  facet_grid(~SOURCE,  scales = "free") +
+  theme_classic()
+```
+
+## Create a color column in the table
+```{r}
+## Continue to work on this
+setDT(sv)
+sv[, TE := fifelse(SVLEN %in% 5353:5553, "te_5453", "sv")]
+sv[, TE := fifelse(SVLEN %in% 799:999, "te_899", TE)]
+```
+
+## CR2
+```{r}
+sv %>%
+  filter(SOURCE %in% "cr2") %>%
+  ggplot(aes(x = SVLEN, fill = TE)) +
+  geom_histogram(binwidth = 110) +
+  scale_x_continuous(
+    limits = c(0,6500),
+    breaks = c(0, 899, 5453, 6500)
+  ) +
+  scale_y_continuous(
+    limits = c(0,150)
+  ) +
+  scale_fill_manual(
+    values = c("sv" = "grey75",
+               "te_5453" = "#eb7287",
+               "te_899" = "#7287eb"),
+    labels = c("sv" = "Other SV",
+               "te_5453" = "5453 bp TE",
+               "te_899" = "899 bp TE")
+  ) +
+  labs(x = "Length of Variant", y = "Number of Variants", title = "E HiFi") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.key.size = unit(0.2, "cm"),
+    legend.title = element_blank(),
+    legend.position = c(.15, .8),
+    legend.background = element_rect(fill = "transparent"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+    plot.title = element_text(hjust = 0.5),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    plot.margin = margin(t = 0.01, r = 0.05, b = 0.01, l = 0.01, unit = "cm")
+  )
+
+ggsave("./Figures/SV_Calling/cr2_dn_sv_histogram.pdf", height = 1, width = 2)
+ggsave("./Figures/SV_Calling/cr2_dn_sv_histogram.png", height = 1, width = 2)
+```
+
+## Try geom_bar for cleaner results
+```{r}
+sv %>%
+  filter(SOURCE %in% "cr2") %>%
+  mutate(SVLEN_bin = cut(SVLEN, breaks = seq(0, max(SVLEN, na.rm = TRUE), by = 1000), right = FALSE)) %>%
+  count(SVLEN_bin, TE) %>%  # Count occurrences per bin
+  ggplot(aes(x = SVLEN_bin, y = n, fill = TE)) +
+  geom_bar(stat = "identity") +  # Bar plot with bin counts
+  scale_x_discrete(guide = guide_axis(angle = 90)) +  # Rotate x labels for better readability
+  scale_y_continuous(limits = c(0, 150)) +
+  scale_fill_manual(
+    values = c("sv" = "grey75",
+               "te_5453" = "#eb7287",
+               "te_899" = "#7287eb"),
+    labels = c("sv" = "Other SV",
+               "te_5453" = "5453 bp TE",
+               "te_899" = "899 bp TE")
+  ) +
+  labs(x = "Length of Variant (binned)", y = "Number of Variants", title = "E HiFi") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.key.size = unit(0.2, "cm"),
+    legend.title = element_blank(),
+    legend.position = c(.15, .8),
+    legend.background = element_rect(fill = "transparent"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+    plot.title = element_text(hjust = 0.5),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    plot.margin = margin(t = 0.01, r = 0.05, b = 0.01, l = 0.01, unit = "cm")
+  )
+
+```
+
+
+## Ref
+```{r}
+sv %>%
+  filter(SOURCE %in% "ref_chandler") %>%
+  ggplot(aes(x = SVLEN, fill = TE)) +
+  geom_histogram(bins = 35) +
+  scale_x_continuous(
+    limits = c(0,7500),
+    breaks = c(0, 899, 5453, 7500)
+  ) +
+    scale_y_continuous(
+    limits = c(0, 150)
+  ) +
+  scale_fill_manual(
+    values = c("sv" = "grey75"),
+    labels = c("sv" = "Other SV")
+  )+
+  labs(x = "Length of Variant", y = "Number of Variants", title = "Reference") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.key.size = unit(0.2, "cm"),
+    legend.title = element_blank(),
+    legend.position = c(.87, .8),
+    legend.background = element_rect(fill = "transparent"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+    plot.title = element_text(hjust = 0.5),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    plot.margin = margin(t = 0.01, r = 0.05, b = 0.01, l = 0.01, unit = "cm")
+  )
+ggsave("./Figures/SV_Calling/ref_chandler_dn_sv_histogram.pdf", height = 1, width = 2.2)
+ggsave("./Figures/SV_Calling/ref_chandler_dn_sv_histogram.png", height = 1, width = 2.2)
+```
+
+# Tree
+```{r}
+sv %>%
+  filter(SOURCE %in% "term_chandler") %>%
+  ggplot(aes(x = SVLEN, fill = TE)) +
+  geom_histogram(bins = 35) +
+  scale_x_continuous(
+    limits = c(0,7500),
+    breaks = c(0, 899, 5453, 7500)
+  ) +
+    scale_y_continuous(
+    limits = c(0,150)
+  ) +
+  scale_fill_manual(
+    values = c("sv" = "grey75"),
+    labels = c("sv" = "Other SV")
+  )+
+  labs(x = "Length of Variant", y = "Number of Variants", title = "Tree") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.key.size = unit(0.2, "cm"),
+    legend.title = element_blank(),
+    legend.position = c(.87, .8),
+    legend.background = element_rect(fill = "transparent"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+    plot.title = element_text(hjust = 0.5),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    plot.margin = margin(t = 0.01, r = 0.05, b = 0.01, l = 0.01, unit = "cm")
+  )
+ggsave("./Figures/SV_Calling/term_chandler_dn_sv_histogram.pdf", height = 1, width = 2.2)
+ggsave("./Figures/SV_Calling/term_chandler_dn_sv_histogram.png", height = 1, width = 2.2)
+```
+
+## Ref and Tree combined
+```{r}
+sv %>%
+  filter(SOURCE %in% c("ref_chandler", "term_chandler")) %>%
+  ggplot(aes(x = SVLEN, fill = SOURCE)) +
+  geom_histogram(bins = 35) +
+  scale_x_continuous(
+    limits = c(0,6500),
+    breaks = c(0, 899, 5453, 6500)
+  ) +
+  scale_y_continuous(
+    limits = c(0,150)
+  ) +
+  scale_fill_manual(
+    values = c("ref_chandler" = "darkolivegreen4",
+              "term_chandler"  = "darkolivegreen3"
+              ),
+    labels = c("ref_chandler" = "Reference",
+               "term_chandler" = "Tree"
+               )
+  ) +
+  labs(x = "Length of Variant", y = "Number of Variants", title = "Reference and Tree") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.key.size = unit(0.2, "cm"),
+    legend.title = element_blank(),
+    legend.position = c(.15, .8),
+    legend.background = element_rect(fill = "transparent"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+    plot.title = element_text(hjust = 0.5),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    plot.margin = margin(t = 0.01, r = 0.05, b = 0.01, l = 0.01, unit = "cm")
+  )
+
+ggsave("./Figures/SV_Calling/ref_term_chandler_dn_sv_histogram.pdf", height = 1, width = 2)
+ggsave("./Figures/SV_Calling/ref_term_chandler_dn_sv_histogram.png", height = 1, width = 2)
+```
+
+
+# Archive
+## Libraries
+```{r, message=FALSE, eval=FALSE}
 library(data.table)
 library(tidyverse)
 library(polymorphology2)
@@ -18,7 +417,7 @@ library(ggVennDiagram)
 ```
 
 ## Functions
-```{r}
+```{r, eval=FALSE}
 read.PBSV <- function(data_path){
   
   sv.vcf <- fread(data_path, skip = "#CHROM")
@@ -60,7 +459,7 @@ rename_chr_haps <- function(pbsv){
 ```
 
 ## Read in data
-```{r}
+```{r, eval=FALSE}
 cr2sv <- read.PBSV("./Data/VCFs/SV_VCF/cr2_combohap.sv.vcf")
 refsv <- read.PBSV("./Data/VCFs/SV_VCF/ref_chandler_combohap.sv.vcf")
 termsv <- read.PBSV("./Data/VCFs/SV_VCF/term_chandler_combohap.sv.vcf")
@@ -68,14 +467,14 @@ termsv <- read.PBSV("./Data/VCFs/SV_VCF/term_chandler_combohap.sv.vcf")
 
 # Filtering data
 ## Select for chromosomes and rename
-```{r}
+```{r, eval=FALSE}
 cr2sv <- rename_chr_haps(cr2sv)
 refsv <- rename_chr_haps(refsv)
 termsv <- rename_chr_haps(termsv)
 ```
 
 ## Create UNIQUE column
-```{r}
+```{r, eval=FALSE}
 cr2sv <- cr2sv %>%
   mutate(UNIQUE = paste(CHROM,POS, sep = "_"))
 
@@ -87,151 +486,22 @@ termsv <- termsv %>%
 ```
 
 ## Look at overlap of structural variants
-```{r}
+```{r, eval=FALSE}
 ## Make a list
 sv_list <- list(
-    cr2 = cr2sv$UNIQUE,
-    ref = refsv$UNIQUE,
-    term = termsv$UNIQUE
+  cr2 = cr2sv$UNIQUE,
+  ref = refsv$UNIQUE,
+  term = termsv$UNIQUE
 )
 
 # Create the Venn diagram
 ggVennDiagram(sv_list)
 ```
 
+
 ## Find denovo sites in cr2
-```{r}
+```{r, eval=FALSE}
 dn_cr2sv <- cr2sv %>%
   anti_join(refsv, by = "UNIQUE") %>%
   anti_join(termsv, by = "UNIQUE")
 ```
-
-# Look at distributions
-## VAF density
-```{r}
-# All VAF
-dn_cr2sv %>%
-  ggplot(aes(x = VAF)) +
-  geom_density() +
-  theme_classic(base_size = 6)
-
-# VAF by type
-dn_cr2sv %>%
-  ggplot(aes(x = VAF, color = SVTYPE)) +
-  geom_density(linewidth = 1.5) +
-  theme_classic(base_size = 6)
-
-# Only deletions and insertions
-dn_cr2sv %>%
-  filter(SVTYPE %in% c("INS", "DEL")) %>%
-  ggplot(aes(x = VAF, color = SVTYPE)) +
-  geom_density(linewidth = 1.5) +
-  theme_classic(base_size = 6)
-```
-
-## Distributions of lengths
-```{r}
-# All lengths
-dn_cr2sv %>%
-  ggplot(aes(x = SVLEN)) +
-  geom_density() +
-  theme_classic(base_size = 6)
-
-# By SVTYPE
-dn_cr2sv %>%
-  ggplot(aes(x = abs(SVLEN), color = SVTYPE)) +
-  geom_density(linewidth = 1.5) +
-  xlim(0,1000) +
-  theme_classic(base_size = 6)
-
-# Vast majority of SVs are very small. A filter of >= 50 drops the SV count in half
-
-dn_cr2sv %>% 
-  filter(abs(SVLEN) >= 50) %>%
-  ggplot(aes(x = abs(SVLEN), color = SVTYPE)) +
-  geom_density(linewidth = 1.5) +
-  theme_classic(base_size = 6)
-
-# Looking at the 5453 BP Insertion
-dn_cr2sv %>% 
-  filter(abs(SVLEN) >= 4000 & abs(SVLEN) <= 6000) %>%
-  ggplot(aes(x = abs(SVLEN), fill = SVTYPE)) +
-  geom_histogram(alpha = .5) +
-  scale_x_continuous(breaks = seq(4000, 6000, by = 100)) +
-  theme_classic(base_size = 6)
-
-# Shrink the region
-dn_cr2sv %>% 
-  filter(abs(SVLEN) >= 5450 & abs(SVLEN) <= 5460) %>%
-  ggplot(aes(x = abs(SVLEN), fill = SVTYPE)) +
-  geom_histogram(binwidth = 5, alpha = .5) +
-  scale_x_continuous(breaks = seq(5450, 5460, by = 1)) +
-  theme_classic(base_size = 6)
-```
-## which length occurs the most often?
-```{r}
-# Look at SV >= 500. 5453 is still by far the most common
-dn_cr2sv %>%
-  group_by(SVLEN_abs = abs(SVLEN)) %>%  # Rename the grouping column
-  summarise(Count = n()) %>%            # Count occurrences
-  arrange(desc(Count)) %>%               # Arrange by count
-  filter(SVLEN_abs >= 500)               # Filter based on the new column name
-
-
-# Look at separation of DEL and INS
-dn_cr2sv %>%
-  group_by(SVLEN) %>%
-  summarise(Count = n()) %>%
-  arrange(desc(Count)) %>%
-  filter(SVLEN >= 500 | SVLEN <= -500)
-
-# Zoom into the 5453 region
-dn_cr2sv %>%
-  group_by(SVLEN) %>%
-  summarise(Count = n()) %>%
-  arrange(desc(Count)) %>%
-  filter(SVLEN >= 5450 & SVLEN <= 5460)
-```
-
-## Look at VAF of the 5453 bp
-```{r}
-dn_cr2sv %>%
-  filter(SVLEN >= 5450 & SVLEN <= 5460) %>% 
-  ggplot(aes(x = VAF)) +
-  geom_histogram() +
-  coord_cartesian(xlim = c(0.0, 1.0)) +
-  theme_classic()
-
-
-dn_cr2sv %>%
-  filter(SVLEN == 5453) %>% 
-  ggplot(aes(x = VAF, fill = ifelse(VAF == 1.0, "red", "grey50"))) +
-  geom_histogram(bins = 10, show.legend = FALSE) +
-  scale_fill_identity() +
-  labs(x = "Variant Allele Frequency", y = "Number of Variants") + 
-  coord_cartesian(xlim = c(0.0, 1.0)) +
-  theme_classic(base_size = 6)
-ggsave("./Figures/VAF_Analysis/vaf_ins_5453_high.pdf", height = 1, width = 2)
-ggsave("./Figures/VAF_Analysis/vaf_ins_5453_high.png", height = 1, width = 2)
-
-dn_cr2sv %>%
-  filter(SVLEN == 5453) %>% 
-  ggplot(aes(x = VAF, fill = ifelse(VAF < 1.0, "red", "grey50"))) +
-  geom_histogram(bins = 10, show.legend = FALSE) +
-  scale_fill_identity() +
-  labs(x = "Variant Allele Frequency", y = "Number of Variants") + 
-  coord_cartesian(xlim = c(0.0, 1.0)) +
-  theme_classic(base_size = 6)
-ggsave("./Figures/VAF_Analysis/vaf_ins_5453_low.pdf", height = 1, width = 2)
-ggsave("./Figures/VAF_Analysis/vaf_ins_5453_low.png", height = 1, width = 2)
-```
-
-# Regions to extract for IGV
-```{r}
-dn_cr2sv %>%
-  filter(SVLEN == 5453 & VAF == 1.0 & DP >= 10) 
-
-dn_cr2sv %>%
-  filter(SVLEN == 5453 & VAF >=0.2 & VAF <= 0.3 & DP >= 10)
-```
-

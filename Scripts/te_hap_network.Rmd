@@ -1,0 +1,66 @@
+---
+title: "te_hap_network"
+author: "Matthew Davis"
+date: "2025-02-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r, message=FALSE}
+library(ggenomics)
+library(geneHapR)
+```
+
+## Funcitons
+
+## Read in sequences
+```{r}
+fasta_5000 <- import_seqs("./Data/Alignments/all_5500_trimmed_mafft_alignment.fasta", format = "fasta")
+fasta_900 <- import_seqs("./Data/Alignments/all_900_trimmed_mafft_alignment.fasta", format = "fasta")
+```
+
+# Prepare data for plotting
+## Generate hap table
+```{r}
+hap_5000 <- seqs2hap(fasta_5000,
+                      Ref = names(fasta_5000)[1],
+                      maxGapsPerSeq = 1)
+hap_900 <- seqs2hap(fasta_900,
+                    Ref = names(fasta_900)[16])
+```
+
+## Add annotations to hap result
+```{r}
+
+```
+
+## Look at hap summary
+```{r}
+summ_5000 <- hap_summary(hap_5000)
+```
+
+# Plotting
+## 
+```{r}
+plotHapTable(summ_5000)
+
+```
+
+```{r}
+hapNet <- get_hapNet(summ_5000)
+```
+
+```{r}
+plotHapNet(hapNet,
+          size = "freq",
+          scale = 1,
+          #show.mutation = 3,
+          legend = FALSE,
+          labels.cex = 0.0001)
+```
+

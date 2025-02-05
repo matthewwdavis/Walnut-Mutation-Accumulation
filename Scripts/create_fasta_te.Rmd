@@ -1,0 +1,48 @@
+---
+title: "create_fasta_te"
+author: "Matthew Davis"
+date: "2025-02-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Set up
+## Libraries
+```{r}
+library(ggnomics)
+```
+
+## Funcitons
+```{r}
+write_fasta <- function(table, name_col = "UNIQUE", seq_col = "ALT", file) {  
+  fasta_lines <- paste0(">", table[[name_col]], "\n", table[[seq_col]])
+  writeLines(fasta_lines, file)
+}
+```
+
+## Read in data
+```{r}
+sv <- fread("./Data/VCFs/SV_VCF/Parsed/parsed_ins_dels_pbsv.vcf")
+```
+
+# Write fasta
+## Create new unique
+```{r}
+sv[, NUM := seq_len(.N), by = SVLEN]
+sv[, UNIQUE := paste(SVLEN, CHROM, POS, HAP, NUM, sep = "_")]
+sv_ins <-  sv[SVTYPE %in% "INS"]
+```
+
+## Trim the first 10 bp off each ALT call
+```{r}
+sv_ins$ALT <- substr(sv_ins$ALT, 11, nchar(sv_ins$ALT))
+```
+
+## create fasta
+```{r}
+write_fasta(table = sv_ins, name_col = "UNIQUE", seq_col = "ALT", file = "./Data/Fastas/SVs/dn_sv_10bp_trimmed.fasta")
+```
+

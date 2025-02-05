@@ -51,10 +51,10 @@ annot_mut_effect<-function(i){
   AA <- seqinr::translate(toupper(CDS[[mod]]))
   genome_BPs<-fasta[[CHROM]][CDS_POS]
   genome_AA<-seqinr::translate(toupper(genome_BPs))
-
+  
   REF_genome<-toupper(fasta[[CHROM]][POS])
   if(REF_genome!=REF) return("REF_genome_mismatch")
-
+  
   CDS_dt<-data.table(cPOS=CDS_POS, BP=toupper(cds[[mod]]))
   if(DIR=="-") {
     CDS_dt$cPOS<-rev(CDS_dt$cPOS)
@@ -73,7 +73,7 @@ annot_mut_effect<-function(i){
   SYN=all(CDS_dt$AA==CDS_dt$newAA)
   message(i, mod, CDS_dt[which(CDS_dt$cPOS==POS)]$AA," to ", CDS_dt[which(CDS_dt$cPOS==POS)]$newAA)
   message(ifelse( SYN, "\tSyn","\tNon-Syn"))
-
+  
   effect<-CDS_dt[which(CDS_dt$cPOS==POS)]
   effect$gene_model<-mod
   effect$CHROM<-CHROM
@@ -89,11 +89,11 @@ vstrsplit<-function(x,...){
 CDS_codon_mutation_table <- function(CDS) {
   # Precompute mutations table
   muts <- data.table(table(REF = c("A", "T", "C", "G"), ALT = c("A", "T", "C", "G")))[REF != ALT]
-
+  
   # Create codon table with all possible mutations
   codons <- data.table(SEQINR.UTIL$CODON.AA)
   codons[, CODON := toupper(CODON)]
-
+  
   # Precompute the CODON_mutations_table
   CODON_mutations_table <- rbindlist(lapply(1:nrow(codons), function(i) {
     CODON <- codons$CODON[i]
@@ -109,7 +109,7 @@ CDS_codon_mutation_table <- function(CDS) {
     CODON_dt[, effect := ifelse(REFAA == ALTAA, "S", "N")]
     return(CODON_dt)
   }))
-
+  
   # Convert each CDS into a mutation table
   pb <- txtProgressBar(min = 0, max = length(CDS), style = 3)
   CDS_dt_all <- rbindlist(lapply(1:length(CDS), function(i) {
@@ -119,22 +119,22 @@ CDS_codon_mutation_table <- function(CDS) {
       message("Gene not multiple of 3")
       return(NULL)
     }
-
+    
     original_protein <- seqinr::translate(random_seq)
     CDS_dt <- data.table(POS = rep(1:3, times = length(random_seq) / 3),
                          DNAPOS = 1:length(random_seq),
                          REF = random_seq,
                          AA = rep(original_protein, each = 3))
-
+    
     # Extract codon for each amino acid
     codons_list <- sapply(seq(1, length(random_seq), by = 3), function(start) {
       paste(random_seq[start:(start + 2)], collapse = "")
     })
     CDS_dt[, REFCODON := rep(codons_list, each = 3)]
-
+    
     # Merge with mutations to add ALT column of all possible mutations at each codon
     CDS_dt_mutations_table <- unique(merge(CDS_dt, muts, by = "REF", allow.cartesian = TRUE))[order(DNAPOS)]
-
+    
     # Merge with CODON_mutations_table to annotate effect
     CDS_dt_mutations_table <- merge(CDS_dt_mutations_table, CODON_mutations_table, by = c("REFCODON", "REF", "POS", "ALT"))
     setTxtProgressBar(pb, i)
@@ -142,7 +142,7 @@ CDS_codon_mutation_table <- function(CDS) {
     return(CDS_dt_mutations_table[, .(REF, ALT, effect, GENE)])
   }))
   close(pb)
-
+  
   return(CDS_dt_all)
 }
 
@@ -156,21 +156,21 @@ mutation_probs<-function(muts, genome, cds=NULL){
     return(bp_freq)
   }))
   bp_freq<-bp_freq[REF %in% c("A","T","C","G"),.(N=sum(N)), by="REF"]
-
+  
   mutations<-data.table((table(REF=muts$REF, ALT=muts$ALT)))[REF!=ALT]
   mutations<-merge(mutations, bp_freq, by="REF")
   mutations$rawPROB=(mutations$N.x/(mutations$N.y))
-
+  
   if(!is.null(cds)){
     message("Calculating base pair frequencies from CDS...")
     bp_freqCDS<-rbindlist(lapply(1:length(cds), function(i){
-
+      
       bp_freq<-data.table(table(REF=cds[[i]]))[REF!="n"]
       bp_freq$REF<-toupper(bp_freq$REF)
       return(bp_freq)
     }))
     bp_freqCDS<-bp_freqCDS[REF %in% c("A","T","C","G"),.(CDSN=sum(N)), by="REF"]
-
+    
     mutations<-merge(mutations, bp_freqCDS, by="REF")
     mutations$rawPROB=(mutations$N.x/(mutations$N.y-mutations$CDSN))
   }
@@ -189,7 +189,7 @@ GvsIG<-function(mutations_data, REGIONS){
   REGIONS$ID<-1:nrow(REGIONS)
   REGIONS_mut<-sites_in_features(REGIONS,mutations_data, mode = "counts")
   REGIONS$mut<-REGIONS_mut$counts[match(REGIONS$ID, REGIONS_mut$ID)]
-
+  
   REGIONS_means<-REGIONS[,.(mut=sum(mut), LENGTH=sum(MAPP_LENGTH2), mutrate=sum(mut)/sum(MAPP_LENGTH2)), by=REGION]
   chitest<-chisq.test(REGIONS_means[,2:3])
   ratio<-REGIONS_means[REGION=="GENE"]$mutrate/REGIONS_means[REGION=="IG"]$mutrate
@@ -216,29 +216,46 @@ mapp <- read.bedGraph("./Data/Genmap/K150E0/ref_chandler_primary_default_scaffol
 
 # Genome
 fasta <- read.fasta("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+fastah1 <- read.fasta("./Data/Fastas/ref_chandler_hap1_default_scaffold.fasta")
+fastah2 <- read.fasta("./Data/Fastas/ref_chandler_hap2_default_scaffold.fasta")
 
 # Annotations
 gff <- read.GFF("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
+h1gff <- read.GFF("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_hap1_default_scaffold_chr_only_liftoff_a99s99.gff")
+h2gff <- read.GFF("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_hap2_default_scaffold_chr_only_liftoff_a99s99.gff")
 ```
 
 ### Rename chromosomes
 ```{r}
 gff$CHROM<-as.numeric(gsub("NC_0499(..).1_RagTag", "\\1", gff$CHROM))
 unique(gff$CHROM)
+h1gff$CHROM<-as.numeric(gsub("NC_0499(..).1_RagTag", "\\1", h1gff$CHROM))
+unique(gff$CHROM)
+h2gff$CHROM<-as.numeric(gsub("NC_0499(..).1_RagTag", "\\1", h2gff$CHROM))
+unique(gff$CHROM)
 
 mapp$CHROM<-as.numeric(gsub("NC_0499(..).1_RagTag", "\\1", mapp$CHROM))
 mapp <- mapp[!is.na(CHROM)]
-unique(gff$CHROM)
+unique(mapp$CHROM)
 
 names(fasta)<-as.numeric(gsub("NC_0499(..).1_RagTag", "\\1", names(fasta)))
 fasta <- fasta[!is.na(names(fasta))]
 unique(names(fasta))
+
+names(fastah1)<-as.numeric(gsub("NC_0499(..).1_RagTag", "\\1", names(fastah1)))
+fastah1 <- fastah1[!is.na(names(fastah1))]
+unique(names(fastah1))
+
+names(fastah2)<-as.numeric(gsub("NC_0499(..).1_RagTag", "\\1", names(fastah2)))
+fastah2 <- fastah2[!is.na(names(fastah2))]
+unique(names(fastah2))
 ```
 
 
 ## Extract data
 ### Extract genes and cds sequences 
 ```{r}
+# Primary
 genes <- gff %>%
   filter(TYPE %in% "gene")
 
@@ -260,10 +277,60 @@ sum(duplicated(cds$GENE))
 
 
 cds$ID <- 1:nrow(cds)
+
+# Hap 1
+
+h1genes <- h1gff %>%
+  filter(TYPE %in% "gene")
+
+h1genes$GENE <- gsub("ID=gene-(.+);Dbxref.+", "\\1", h1genes$INFO)
+
+sum(duplicated(h1genes$GENE))
+
+h1cds <- h1gff %>%
+  filter(TYPE %in% "CDS")
+
+h1cds$Parent <- gsub(".+Parent=(.+);Dbxref.+", "\\1", h1cds$INFO)
+sum(duplicated(h1cds$Parent))
+
+h1cds$Product <- gsub(".+product=(.+);protein_id.+", "\\1", h1cds$INFO)
+sum(duplicated(h1cds$Product))
+
+h1cds$GENE <- gsub(".+CDS;gene=(.+);product.+", "\\1", h1cds$INFO)
+sum(duplicated(h1cds$GENE))
+
+
+h1cds$ID <- 1:nrow(h1cds)
+
+# Hap 2
+
+h2genes <- h2gff %>%
+  filter(TYPE %in% "gene")
+
+h2genes$GENE <- gsub("ID=gene-(.+);Dbxref.+", "\\1", h2genes$INFO)
+
+sum(duplicated(h2genes$GENE))
+
+h2cds <- h2gff %>%
+  filter(TYPE %in% "CDS")
+
+h2cds$Parent <- gsub(".+Parent=(.+);Dbxref.+", "\\1", h2cds$INFO)
+sum(duplicated(h2cds$Parent))
+
+h2cds$Product <- gsub(".+product=(.+);protein_id.+", "\\1", h2cds$INFO)
+sum(duplicated(h2cds$Product))
+
+h2cds$GENE <- gsub(".+CDS;gene=(.+);product.+", "\\1", h2cds$INFO)
+sum(duplicated(h2cds$GENE))
+
+
+h2cds$ID <- 1:nrow(h2cds)
+
 ```
 
 ### Protein amino acids
 ```{r}
+# Primary
 proteins <- pblapply(unique(cds$Parent), function(p){
   cds_p <- cds[Parent == p]
   dir <- unique(cds_p$DIRECTION)
@@ -284,10 +351,56 @@ names(proteins) <- unique(cds$Parent)
 
 #proteins
 sum(duplicated(names(proteins)))
+
+# Hap 1
+h1proteins <- pblapply(unique(h1cds$Parent), function(p){
+  h1cds_p <- h1cds[Parent == p]
+  dir <- unique(h1cds_p$DIRECTION)
+  CHROM = h1cds_p$CHROM[1]
+  genome_seq <- paste(sapply(1:nrow(h1cds_p), function(r){
+    START = h1cds_p$START[r]
+    STOP = h1cds_p$STOP[r]
+    paste(fastah1[[CHROM]][START:STOP], collapse="")
+  }), collapse = "")
+  if(dir == "-"){
+    genome_seq <- revcomp(genome_seq)
+  }
+  genome_seq <- unlist(strsplit(genome_seq, split = ""))
+  AA_seq<-seqinr::translate(genome_seq)
+})
+
+names(h1proteins) <- unique(h1cds$Parent)
+
+#proteins
+sum(duplicated(names(h1proteins)))
+
+
+# Hap 2
+h2proteins <- pblapply(unique(h2cds$Parent), function(p){
+  h2cds_p <- h2cds[Parent == p]
+  dir <- unique(h2cds_p$DIRECTION)
+  CHROM = h2cds_p$CHROM[1]
+  genome_seq <- paste(sapply(1:nrow(h2cds_p), function(r){
+    START = h2cds_p$START[r]
+    STOP = h2cds_p$STOP[r]
+    paste(fastah2[[CHROM]][START:STOP], collapse="")
+  }), collapse = "")
+  if(dir == "-"){
+    genome_seq <- revcomp(genome_seq)
+  }
+  genome_seq <- unlist(strsplit(genome_seq, split = ""))
+  AA_seq<-seqinr::translate(genome_seq)
+})
+
+names(h2proteins) <- unique(h2cds$Parent)
+
+#proteins
+sum(duplicated(names(h2proteins)))
 ```
 
 ### Extract protein DNA sequences
 ```{r}
+# Primary
 protein_cds <- pblapply(unique(cds$Parent), function(p){
   cds_p <- cds[Parent == p]
   dir <- unique(cds_p$DIRECTION)
@@ -307,12 +420,57 @@ protein_cds <- pblapply(unique(cds$Parent), function(p){
 names(protein_cds)<-unique(cds$Parent)
 
 ##protein_cds
-sum(duplicated(names(proteins)))
+sum(duplicated(names(protein_cds)))
+
+# Hap 1
+protein_h1cds <- pblapply(unique(h1cds$Parent), function(p){
+  h1cds_p <- h1cds[Parent == p]
+  dir <- unique(h1cds_p$DIRECTION)
+  CHROM = h1cds_p$CHROM[1]
+  genome_seq <- paste(sapply(1:nrow(h1cds_p), function(r){
+    START = h1cds_p$START[r]
+    STOP = h1cds_p$STOP[r]
+    paste(fastah1[[CHROM]][START:STOP], collapse = "")
+  }), collapse = "")
+  if(dir == "-"){
+    genome_seq<-revcomp(genome_seq)
+  }
+  genome_seq<-unlist(strsplit(genome_seq, split=""))
+  return(genome_seq)
+})
+
+names(protein_h1cds)<-unique(h1cds$Parent)
+
+##protein_cds
+sum(duplicated(names(protein_h1cds)))
+
+# Hap 2
+protein_h2cds <- pblapply(unique(h2cds$Parent), function(p){
+  h2cds_p <- h2cds[Parent == p]
+  dir <- unique(h2cds_p$DIRECTION)
+  CHROM = h2cds_p$CHROM[1]
+  genome_seq <- paste(sapply(1:nrow(h2cds_p), function(r){
+    START = h2cds_p$START[r]
+    STOP = h2cds_p$STOP[r]
+    paste(fastah2[[CHROM]][START:STOP], collapse = "")
+  }), collapse = "")
+  if(dir == "-"){
+    genome_seq<-revcomp(genome_seq)
+  }
+  genome_seq<-unlist(strsplit(genome_seq, split=""))
+  return(genome_seq)
+})
+
+names(protein_h2cds)<-unique(h2cds$Parent)
+
+##protein_cds
+sum(duplicated(names(protein_h2cds)))
 ```
 
 ## Checking sequences
 ### Make sure protein sequences are correct (start with M, ends with *)
 ```{r}
+#Primary
 prot_check <- rbindlist(pblapply(names(proteins), function(p){
   codon1 <- proteins[[p]][1]
   codonend <- proteins[[p]][length(proteins[[p]])]
@@ -322,10 +480,33 @@ fill=T)
 
 prot_check$CHECK <- prot_check$codon1 == "M" & prot_check$codonend == "*"
 table(prot_check$CHECK)
+
+# Hap 1
+h1prot_check <- rbindlist(pblapply(names(h1proteins), function(p){
+  codon1 <- h1proteins[[p]][1]
+  codonend <- h1proteins[[p]][length(h1proteins[[p]])]
+  return(data.table(p, codon1, codonend))
+}), 
+fill=T)
+
+h1prot_check$CHECK <- h1prot_check$codon1 == "M" & h1prot_check$codonend == "*"
+table(h1prot_check$CHECK)
+
+# Hap 2
+h2prot_check <- rbindlist(pblapply(names(h2proteins), function(p){
+  codon1 <- h2proteins[[p]][1]
+  codonend <- h2proteins[[p]][length(h2proteins[[p]])]
+  return(data.table(p, codon1, codonend))
+}), 
+fill=T)
+
+h2prot_check$CHECK <- h2prot_check$codon1 == "M" & h2prot_check$codonend == "*"
+table(h2prot_check$CHECK)
 ```
 
 ### Only keep valid proteins in annotations
 ```{r}
+# Primary
 cds_good <- cds[Parent %in% prot_check[CHECK==T]$p]
 genes_good <- genes[GENE %in% cds_good$GENE]
 
@@ -334,11 +515,32 @@ nrow(cds_good)
 
 nrow(genes)
 nrow(genes_good)
+
+# Hap 1
+h1cds_good <- h1cds[Parent %in% h1prot_check[CHECK==T]$p]
+h1genes_good <- h1genes[GENE %in% h1cds_good$GENE]
+
+nrow(h1cds)
+nrow(h1cds_good)
+
+nrow(h1genes)
+nrow(h1genes_good)
+
+# Hap 2
+h2cds_good <- h2cds[Parent %in% h2prot_check[CHECK==T]$p]
+h2genes_good <- h2genes[GENE %in% h2cds_good$GENE]
+
+nrow(h2cds)
+nrow(h2cds_good)
+
+nrow(h2genes)
+nrow(h2genes_good)
 ```
 
 ## Intergenic space and mappability
 ### Identify intergenic space
 ```{r}
+# Primary
 intergenic <- genes_good[, .(
   TYPE = "intergenic",
   START = STOP + 1L,
@@ -350,7 +552,43 @@ intergenic <- intergenic[!is.na(STOP)]
 intergenic <- intergenic[START <= STOP]
 
 intergenic$ID<-1:nrow(intergenic)
+
+# Hap 1
+h1intergenic <- h1genes_good[, .(
+  TYPE = "intergenic",
+  START = STOP + 1L,
+  STOP = data.table::shift(START, type = "lead") - 1L
+), by = CHROM]
+
+h1intergenic <- h1intergenic[!is.na(STOP)]
+
+h1intergenic <- h1intergenic[START <= STOP]
+
+h1intergenic$ID<-1:nrow(h1intergenic)
+
+# Hap 2
+h2intergenic <- h2genes_good[, .(
+  TYPE = "intergenic",
+  START = STOP + 1L,
+  STOP = data.table::shift(START, type = "lead") - 1L
+), by = CHROM]
+
+h2intergenic <- h2intergenic[!is.na(STOP)]
+
+h2intergenic <- h2intergenic[START <= STOP]
+
+h2intergenic$ID<-1:nrow(h2intergenic)
 ```
+
+### Add hap column to haplotype gffs
+```{r}
+h1cds_good[, HAP := "A"]
+h1genes_good[, HAP := "A"]
+
+h2cds_good[, HAP := "B"]
+h2genes_good[, HAP := "B"]
+```
+
 
 ### Defining mappable regions
 ```{r}
@@ -584,6 +822,10 @@ mutations_save <- mutations %>%
 fwrite(mutations_save, "./Data/VCFs/Parsed/mutations.tsv", sep = "\t")
 fwrite(cds_good, "./Data/GFFs/Parsed/cds_good.tsv", sep = "\t")
 fwrite(genes_good, "./Data/GFFs/Parsed/genes_good.tsv", sep = "\t")
+fwrite(h1cds_good, "./Data/GFFs/Parsed/hap1_cds_good.tsv", sep = "\t")
+fwrite(h1genes_good, "./Data/GFFs/Parsed/hap1_genes_good.tsv", sep = "\t")
+fwrite(h2cds_good, "./Data/GFFs/Parsed/hap2_cds_good.tsv", sep = "\t")
+fwrite(h2genes_good, "./Data/GFFs/Parsed/hap2_genes_good.tsv", sep = "\t")
 ```
 
 # Try to implement HPs
@@ -616,7 +858,7 @@ mutations_neighbors <- rbindlist(pblapply((1:nrow(muts_small)), function(i){
   UNIQUE = muts_small$UNIQUE[i]
   up = paste0(toupper(fasta[[CHROM]][(POS-10):(POS-1)]), collapse="")
   down = paste0(toupper(fasta[[CHROM]][(POS+1):(POS+10)]), collapse="")
- return(data.table(UNIQUE, up, down))
+  return(data.table(UNIQUE, up, down))
 }))
 
 muts_hp <- merge(muts_small, mutations_neighbors, by="UNIQUE")
@@ -685,3 +927,372 @@ rm(chr1, chr2, chr3, chr4, chr5, chr6, chr7, chr8, chr9, chr10, chr11, chr12, ch
 
 fwrite(an_snps, "./Data/VCFs/Ancestral_SNPs/ancestral_snps_smaller.tsv")
 ```
+
+# Structural Variants
+## Libraries
+```{r, message=FALSE}
+library(ggenomics)
+library(polymorphology2)
+library(ggVennDiagram)
+library(vcfR)
+```
+
+## Functions
+```{r}
+read_pbsv <- function(file, chrom_label = "Chr", col_to_separate = "UnnamedSample", name){
+  # Read the VCF file using vcfR
+  vcf <- read.vcfR(file, verbose = FALSE)
+  
+  # Convert @fix and @gt slots to data.tables
+  fix <- as.data.table(vcf@fix)
+  gt <- as.data.table(vcf@gt)
+  all <- cbind(fix, gt)
+  
+  # Select chromosomes
+  vcf.table <- all[grepl(chrom_label, CHROM), ]
+  
+  # Remove columns with no information
+  vcf.table[, c("QUAL") := NULL]
+  
+  # Select passing variants then remove FILTER
+  vcf.table <- vcf.table[FILTER == "PASS"]
+  vcf.table[, FILTER := NULL]
+  
+  # Separate genotype information into distinct columns
+  ## Need to verify this is working properly
+  vcf.table <- vcf.table[, c("GT", "AD", "DP", "SAC") := tstrsplit(get(col_to_separate), ":", type.convert = TRUE)]
+  
+  # Removing unresolved SVs. Need to find a better way to do
+  vcf.table <- vcf.table[!grepl("pbsv.BND", ID), ] 
+  vcf.table <- vcf.table[!grepl("IMPRECISE", INFO), ]
+  vcf.table <- vcf.table[!grepl("NotFullySpanned", INFO), ]
+  
+  # Separate sv information
+  vcf.table <- vcf.table[, c("SVTYPE", "END", "SVLEN") := tstrsplit(get("INFO"), ";", type.convert = TRUE)]
+  
+  # Remove extraneous info from columns
+  vcf.table$SVTYPE <- sub(".*=", "", vcf.table$SVTYPE)
+  vcf.table$END <- sub(".*=", "", vcf.table$END)
+  vcf.table$SVLEN <- sub(".*=", "", vcf.table$SVLEN)
+  
+  # Separate allele depths into ref and alt
+  vcf.table[, c("REFAD", "ALTAD") := tstrsplit(AD, ",")]
+  vcf.table[, AD := NULL]
+  
+  # Remove the DP
+  vcf.table[, DP := NULL]
+  
+  # Change classes
+  vcf.table[, END := as.numeric(END)]
+  vcf.table[, SVLEN := as.numeric(SVLEN)]
+  vcf.table[, REFAD := as.numeric(REFAD)]
+  vcf.table[, ALTAD := as.numeric(ALTAD)]
+  
+  # Create unique identifier
+  vcf.table[, UNIQUE := paste(CHROM, POS, ALT, sep = "_")]
+  
+  # Recalculate DEPTH and VAF columns
+  vcf.table[, VAF := ALTAD/(REFAD + ALTAD)]
+  vcf.table[, DEPTH := REFAD + ALTAD]
+  
+  # Add source column
+  vcf.table[, SOURCE := name]
+  
+  # Remove extraneous columns to save space
+  vcf.table[, UnnamedSample := NULL]
+  vcf.table[, FORMAT := NULL]
+  vcf.table[, INFO := NULL]
+  
+  # Filter for Insertions and deletions
+  vcf.table <- vcf.table[SVTYPE %in% c("INS", "DEL")]
+  
+  # Change column order
+  setcolorder(vcf.table, c("CHROM", "POS", "END", "ID", "REF", "ALT", "GT", "SVTYPE", "SVLEN", "REFAD", "ALTAD", "DEPTH", "VAF", "SAC", "UNIQUE", "SOURCE"))
+  
+  return(vcf.table)
+  
+}
+
+rename_chr_haps <- function(pbsv){
+  
+  pbsv$HAP <- gsub("NC_0499(..).1_RagTag_(hap.)", "\\2", pbsv$CHROM)
+  
+  pbsv$CHROM <- gsub("NC_0499(..).1_RagTag_(hap.)", "\\1", pbsv$CHROM)
+  
+  pbsv$CHROM <- as.numeric(pbsv$CHROM)
+  
+  pbsv <- pbsv %>% 
+    filter(!grepl("h1t", CHROM)) %>%
+    filter(!grepl("h2t", CHROM)) %>%
+    filter(!grepl("NW_", CHROM))
+  
+  pbsv$HAP <- gsub("hap1", "A", pbsv$HAP)
+  pbsv$HAP <- gsub("hap2", "B", pbsv$HAP)
+  
+  return(pbsv)
+}
+```
+
+## Read in data
+```{r}
+cr2sv <- read_pbsv("./Data/VCFs/SV_VCF/cr2_combohap.sv.vcf", chrom_label = "NC_0499", name = "cr2_hifi")
+refsv <- read_pbsv("./Data/VCFs/SV_VCF/ref_chandler_combohap.sv.vcf", chrom_label = "NC_0499", name = "ref_chandler")
+termsv <- read_pbsv("./Data/VCFs/SV_VCF/term_chandler_combohap.sv.vcf", chrom_label = "NC_0499", name = "term_chandler")
+```
+
+## Filtering data
+## Select for chromosomes and rename
+```{r}
+cr2sv <- rename_chr_haps(cr2sv)
+refsv <- rename_chr_haps(refsv)
+termsv <- rename_chr_haps(termsv)
+```
+
+## Create UNIQUE column
+```{r}
+cr2sv <- cr2sv %>%
+  mutate(UNIQUE = paste(CHROM,HAP,POS, sep = "_"))
+
+refsv <- refsv %>%
+  mutate(UNIQUE = paste(CHROM,HAP,POS, sep = "_"))
+
+termsv <- termsv %>%
+  mutate(UNIQUE = paste(CHROM,HAP,POS, sep = "_"))
+```
+
+## Look at overlap of structural variants
+```{r}
+## Make a list
+sv_list <- list(
+  cr2 = cr2sv$UNIQUE,
+  ref = refsv$UNIQUE,
+  term = termsv$UNIQUE
+)
+
+# Create the Venn diagram
+ggVennDiagram(sv_list)
+```
+
+## Find denovo sites
+```{r}
+dn_cr2sv <- cr2sv %>%
+  anti_join(refsv, by = "UNIQUE") %>%
+  anti_join(termsv, by = "UNIQUE")
+
+dn_refsv <- refsv %>%
+  anti_join(cr2sv, by = "UNIQUE") %>%
+  anti_join(termsv, by = "UNIQUE")
+
+dn_termsv <- termsv %>%
+  anti_join(refsv, by = "UNIQUE") %>%
+  anti_join(cr2sv, by = "UNIQUE")
+
+dn_sv <- rbind(dn_cr2sv, dn_refsv, dn_termsv)
+```
+
+## Verify de novo sites
+```{r}
+## Make a list
+dn_sv_list <- list(
+  cr2 = dn_cr2sv$UNIQUE,
+  ref = dn_refsv$UNIQUE,
+  term = dn_termsv$UNIQUE
+)
+
+# Create the Venn diagram
+ggVennDiagram(dn_sv_list)
+```
+
+## Write the insertion and deletion table
+```{r}
+fwrite(dn_sv, "./Data/VCFs/SV_VCF/Parsed/parsed_ins_dels_pbsv.vcf", sep = "\t")
+```
+
+# Parsing primary SVs
+## Functions
+```{r}
+rename_chr_pri <- function(pbsv){
+
+  pbsv$CHROM <- gsub("NC_0499(..).1_RagTag", "\\1", pbsv$CHROM)
+  
+  pbsv$CHROM <- as.numeric(pbsv$CHROM)
+  
+  pbsv <- pbsv %>% 
+    filter(!grepl("h1t", CHROM))
+  
+  return(pbsv)
+}
+```
+
+## Read svs
+```{r}
+cr2sv <- read_pbsv("./Data/VCFs/SV_VCF/cr2_primary.sv.vcf", chrom_label = "NC_0499", name = "cr2_hifi")
+refsv <- read_pbsv("./Data/VCFs/SV_VCF/ref_chandler_primary.sv.vcf", chrom_label = "NC_0499", name = "ref_chandler")
+termsv <- read_pbsv("./Data/VCFs/SV_VCF/term_chandler_primary.sv.vcf", chrom_label = "NC_0499", name = "term_chandler")
+```
+
+## Filtering data
+## Select for chromosomes and rename
+```{r}
+cr2sv <- rename_chr_pri(cr2sv)
+refsv <- rename_chr_pri(refsv)
+termsv <- rename_chr_pri(termsv)
+```
+
+## Create UNIQUE column
+```{r}
+cr2sv <- cr2sv %>%
+  mutate(UNIQUE = paste(CHROM,POS, sep = "_"))
+
+refsv <- refsv %>%
+  mutate(UNIQUE = paste(CHROM,POS, sep = "_"))
+
+termsv <- termsv %>%
+  mutate(UNIQUE = paste(CHROM,POS, sep = "_"))
+```
+
+## Look at overlap of structural variants
+```{r}
+## Make a list
+sv_list <- list(
+  cr2 = cr2sv$UNIQUE,
+  ref = refsv$UNIQUE,
+  term = termsv$UNIQUE
+)
+
+# Create the Venn diagram
+ggVennDiagram(sv_list)
+```
+
+## Find denovo sites
+```{r}
+dn_cr2sv <- cr2sv %>%
+  anti_join(refsv, by = "UNIQUE") %>%
+  anti_join(termsv, by = "UNIQUE")
+
+dn_refsv <- refsv %>%
+  anti_join(cr2sv, by = "UNIQUE") %>%
+  anti_join(termsv, by = "UNIQUE")
+
+dn_termsv <- termsv %>%
+  anti_join(refsv, by = "UNIQUE") %>%
+  anti_join(cr2sv, by = "UNIQUE")
+
+dn_sv <- rbind(dn_cr2sv, dn_refsv, dn_termsv)
+```
+
+## Verify de novo sites
+```{r}
+## Make a list
+dn_sv_list <- list(
+  cr2 = dn_cr2sv$UNIQUE,
+  ref = dn_refsv$UNIQUE,
+  term = dn_termsv$UNIQUE
+)
+
+# Create the Venn diagram
+ggVennDiagram(dn_sv_list)
+```
+
+```{r}
+dn_sv %>%
+  ggplot(aes(x = SVLEN)) +
+  geom_histogram() +
+  facet_wrap(~SOURCE)
+
+min(abs(dn_sv$SVLEN))
+```
+
+
+## Write the insertion and deletion table
+```{r}
+fwrite(dn_sv, "./Data/VCFs/SV_VCF/Parsed/parsed_ins_dels_pbsv_primary.vcf", sep = "\t")
+```
+
+# Parse TE BLAST location tables
+## Read in data
+```{r}
+te_5453 <- fread("./Data/Blast_Tables/all_5000_trimmed_blastout.txt")
+te_899 <- fread("./Data/Blast_Tables/all_900_trimmed_blastout.txt")
+all_sv <- fread("./Data/Blast_Tables/dn_sv_10bp_trimmed_topmatch_blastout.txt")
+```
+
+## Add column headers
+```{r}
+colnames(te_5453) <- c("QSEQID", "SSEQID", "PCT_IDENTITY", "LENGTH", "MISMATCH", "GAPOPEN", "QSTART", "QEND", "SSTART", "SEND", "EVALUE", "BITSCORE")
+colnames(te_899) <- c("QSEQID", "SSEQID", "PCT_IDENTITY", "LENGTH", "MISMATCH", "GAPOPEN", "QSTART", "QEND", "SSTART", "SEND", "EVALUE", "BITSCORE")
+colnames(all_sv) <- c("QSEQID", "SSEQID", "PCT_IDENTITY", "LENGTH", "MISMATCH", "GAPOPEN", "QSTART", "QEND", "SSTART", "SEND", "EVALUE", "BITSCORE")
+```
+
+
+## Rename Chromosomes and create new hap column
+```{r}
+te_5453[, HAP := sub("NC_0499([0-9]+).1_RagTag_(hap[0-9]+)", "\\2", SSEQID)]
+te_5453[, HAP := fifelse(HAP == "hap1", "A", "B")]
+te_5453[, CHROM := as.numeric(sub("NC_0499([0-9]+).1_RagTag_(hap[0-9]+)", "\\1", SSEQID))]
+
+te_899[, HAP := sub("NC_0499([0-9]+).1_RagTag_(hap[0-9]+)", "\\2", SSEQID)]
+te_899[, HAP := fifelse(HAP == "hap1", "A", "B")]
+te_899[, CHROM := as.numeric(sub("NC_0499([0-9]+).1_RagTag_(hap[0-9]+)", "\\1", SSEQID))]
+
+all_sv <- all_sv[grepl("^NC_0499", SSEQID)]
+all_sv[, HAP := sub("NC_0499([0-9]+).1_RagTag_(hap[0-9]+)", "\\2", SSEQID)]
+all_sv[, HAP := fifelse(HAP == "hap1", "A", "B")]
+all_sv[, CHROM := as.numeric(sub("NC_0499([0-9]+).1_RagTag_(hap[0-9]+)", "\\1", SSEQID))]
+```
+
+## Assign strands
+The orientation of the strand affects which bp is start and end
+```{r}
+# Create strand column
+all_sv[, STRAND := fifelse(SSTART < SEND, "+", "-")]
+te_899[, STRAND := fifelse(SSTART < SEND, "+", "-")]
+te_5453[, STRAND := fifelse(SSTART < SEND, "+", "-")]
+
+# Make sure start is lower than end
+all_sv[SSTART > SEND, c("SSTART", "SEND") := .(SEND, SSTART)]
+te_899[SSTART > SEND, c("SSTART", "SEND") := .(SEND, SSTART)]
+te_5453[SSTART > SEND, c("SSTART", "SEND") := .(SEND, SSTART)]
+```
+
+## Create SVLEN column
+```{r}
+all_sv[, SVLEN := as.numeric(sub("([0-9]+)_.*", "\\1", QSEQID))]
+```
+
+
+## Select sequencest with highest bitscore
+```{r}
+top_te_5453 <- te_5453[ , .SD[which.max(BITSCORE)], by = QSEQID]
+
+top_te_899 <- te_899[ , .SD[which.max(BITSCORE)], by = QSEQID]
+
+top_sv <- all_sv[, .SD[which.max(BITSCORE)], by = QSEQID]
+```
+
+## Write out top hit tables
+```{r}
+fwrite(top_te_5453, "./Data/Blast_Tables/Parsed/te_5453_table.tsv", sep = "\t")
+fwrite(top_te_899, "./Data/Blast_Tables/Parsed/te_899_table.tsv", sep = "\t")
+fwrite(top_sv, "./Data/Blast_Tables/Parsed/sv_table.tsv", sep = "\t")
+```
+
+# Create fasta table for TEs
+## Read in fasta
+```{r}
+fasta_5000 <- ggread_fasta("./Data/Fastas/TEs/all_5000_trimmed.fasta")
+fasta_900 <- ggread_fasta("./Data/Fastas/TEs/all_900_trimmed.fasta")
+```
+
+## Convert to table
+```{r}
+table_5000 <- data.table(NAME = names(fasta_5000), SEQUENCE = as.character(fasta_5000))
+table_900 <- data.table(NAME = names(fasta_900), SEQUENCE = as.character(fasta_900))
+```
+
+## Write out the fasta
+```{r}
+fwrite(table_5000, "./Data/Fastas/TEs/all_5000_fasta_table.tsv", sep = "\t")
+fwrite(table_900, "./Data/Fastas/TEs/all_900_fasta_table.tsv", sep = "\t")
+```
+

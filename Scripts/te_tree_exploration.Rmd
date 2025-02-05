@@ -1,0 +1,334 @@
+---
+title: "te_tree"
+author: "Matthew Davis"
+date: "2025-01-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Library
+```{r, message=FALSE}
+library(ggenomics)
+library(Biostrings)
+library(msa)
+library(phangorn)
+library(ggtree)
+```
+
+## Functions
+```{r}
+bs_plot <- function(phydata, bootstraps = 1e3){
+  
+  upgma_func <- function(x) upgma(dist.ml(x))
+  
+  upgma_tree <- upgma(dist.ml(phydata))
+  
+  bs_upgma <- bootstrap.phyDat(phydata, upgma_func , bs = bootstraps)
+  
+  plotBS(upgma_tree, bs_upgma, main="UPGMA")
+  
+  bs_upgma_tree <- plotBS(upgma_tree, bs_upgma, main="UPGMA")
+  
+  return(bs_upgma_tree)
+  
+}
+```
+
+## Read in data
+```{r}
+sv <- fread("./Data/VCFs/SV_VCF/Parsed/parsed_ins_dels_pbsv.vcf")
+```
+
+# Prepare data
+## Filter sv
+```{r}
+sv <- sv[SOURCE %in% "cr2"]
+sv <- sv[SVLEN > 50]
+no_large <- sv[SVLEN < 9000]
+```
+
+# Align data
+## Filter for TEs and new unique column
+```{r}
+te_sv <- sv[SVLEN %in% c(899, 5453)]
+te_899 <- sv[SVLEN %in% 899]
+te_5453 <- sv[SVLEN %in% 5453]
+
+sv[, NUM := seq_len(.N), by = SVLEN]
+sv[, UNIQUE := paste(SVLEN, NUM, sep = "_")]
+
+no_large[, NUM := seq_len(.N), by = SVLEN]
+no_large[, UNIQUE := paste(SVLEN, NUM, sep = "_")]
+
+te_sv[, NUM := seq_len(.N), by = SVLEN]
+te_sv[, UNIQUE := paste(SVLEN, NUM, sep = "_")]
+
+te_899[, NUM := seq_len(.N), by = SVLEN]
+te_899[, UNIQUE := paste(SVLEN, NUM, sep = "_")]
+
+te_5453[, NUM := seq_len(.N), by = SVLEN]
+te_5453[, UNIQUE := paste(SVLEN, NUM, sep = "_")]
+```
+
+## Create a biostrings object for the SVs
+```{r}
+sv_stringset <-  DNAStringSet(sv$ALT)
+names(sv_stringset) <- sv$UNIQUE
+
+no_large_stringset <-  DNAStringSet(no_large$ALT)
+names(no_large_stringset) <- no_large$UNIQUE
+
+te_stringset <- DNAStringSet(te_sv$ALT)
+names(te_stringset) <- te_sv$UNIQUE
+
+te_899_stringset <- DNAStringSet(te_899$ALT)
+names(te_899_stringset) <- te_899$UNIQUE
+
+te_5453_stringset <- DNAStringSet(te_5453$ALT)
+names(te_5453_stringset) <- te_5453$UNIQUE
+```
+
+## Align with muscle
+```{r}
+muscle_align_sv <- msa(sv_stringset, method = "Muscle")
+muscle_align_no_large <- msa(no_large_stringset, method = "Muscle")
+muscle_align_te <- msa(te_stringset, method = "Muscle")
+muscle_align_899 <- msa(te_899_stringset, method = "Muscle")
+muscle_align_5453 <- msa(te_5453_stringset, method = "Muscle")
+
+#msaPrettyPrint(muscle_align_te, alFile = "./Data/Alignments/muscle_aligned_899_5453.fasta")
+```
+
+# Prepare alignments for plotting
+## Generate matrices from alignments
+```{r}
+muscle_matrix_sv <- as.matrix(muscle_align_sv)
+muscle_matrix_no_large <- as.matrix(muscle_align_no_large)
+muscle_matrix_te <- as.matrix(muscle_align_te)
+muscle_matrix_899 <- as.matrix(muscle_align_899)
+muscle_matrix_5453 <- as.matrix(muscle_align_5453)
+```
+
+## create phy data object
+```{r}
+muscle_sv_phy_data <- phyDat(muscle_matrix_sv, type = "DNA")
+muscle_no_large_phy_data <- phyDat(muscle_matrix_no_large, type = "DNA")
+muscle_te_phy_data <- phyDat(muscle_matrix_te, type = "DNA")
+muscle_899_phy_data <- phyDat(muscle_matrix_899, type = "DNA")
+muscle_5453_phy_data <- phyDat(muscle_matrix_5453, type = "DNA")
+```
+
+# Plotting
+## Create bootstrap UPGMA
+```{r}
+set.seed(42)
+
+muscle_sv_bs_upgma <- bs_plot(muscle_sv_phy_data, bootstraps = 1e3)
+muscle_no_large_bs_upgma <- bs_plot(muscle_no_large_phy_data, bootstraps = 1e3)
+muscle_te_bs_upgma <- bs_plot(muscle_te_phy_data, bootstraps = 1e3)
+muscle_899_bs_upgma <- bs_plot(muscle_899_phy_data, bootstraps = 1e3)
+muscle_5453_bs_upgma <- bs_plot(muscle_5453_phy_data, bootstraps = 1e3)
+```
+
+## Explore
+```{r}
+muscle_sv_bs_upgma$tip.label
+muscle_no_large_bs_upgma$tip.label
+muscle_te_bs_upgma$tip.label
+muscle_899_bs_upgma$tip.label
+muscle_5453_bs_upgma$tip.label
+```
+
+
+## GGtree
+```{r}
+ggtree(muscle_sv_bs_upgma, branch.length = "edge.length", layout = "daylight") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = label),
+               geom = "shadowtext",
+               #vjust = 1,
+               size = 2,
+               align = FALSE)
+
+ggtree(muscle_no_large_bs_upgma, branch.length = "edge.length", layout = "daylight") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = label),
+               geom = "shadowtext",
+               #vjust = 1,
+               size = 2,
+               align = FALSE)
+
+ggtree(muscle_te_bs_upgma, branch.length = "edge.length", layout = "daylight") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+               linesize = 0.25) 
+  # geom_nodelab(aes(label = label),
+  #              geom = "shadowtext",
+  #              #vjust = 1,
+  #              size = 2,
+  #              align = FALSE)  +
+  # geom_hilight(node = 121, fill = "skyblue")
+
+ggtree(muscle_899_bs_upgma, branch.length = "edge.length", layout = "daylight") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = label),
+               geom = "shadowtext",
+               #vjust = 1,
+               size = 2,
+               align = FALSE)
+
+ggtree(muscle_5453_bs_upgma, branch.length = "edge.length", layout = "daylight") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = node),
+               geom = "shadowtext",
+               #vjust = 1,
+               size = 2,
+               align = FALSE)
+```
+
+# Work on flipping reverse sequences
+```{r}
+count_tips_per_node <- function(tree) {
+  if (!inherits(tree, "phylo")) {
+    stop("Input must be a phylo object.")
+  }
+  
+  internal_nodes <- (Ntip(tree) + 1):max(tree$edge)
+  node_tips <- sapply(internal_nodes, function(node) {
+    length(Descendants(tree, node, type = "tips")[[1]])
+  })
+  
+  return(setNames(node_tips, internal_nodes))
+}
+
+count_tips_per_node(muscle_5453_bs_upgma)
+count_tips_per_node(muscle_899_bs_upgma)
+
+rev_5453 <- extract.clade(muscle_5453_bs_upgma, 93)
+for_5453 <- extract.clade(muscle_5453_bs_upgma, 94)
+rev_899 <- extract.clade(muscle_899_bs_upgma, 27)
+for_899 <- extract.clade(muscle_899_bs_upgma, 28)
+```
+
+## Sequences to reverse
+```{r}
+rev_5453 <- sv[UNIQUE %in% rev_5453$tip.label]
+for_5453 <- sv[UNIQUE %in% for_5453$tip.label]
+
+rev_5453_stringset <- reverseComplement(DNAStringSet(rev_5453$ALT))
+names(rev_5453_stringset) <- rev_5453$UNIQUE
+for_5453_stringset <- DNAStringSet(for_5453$ALT)
+names(for_5453_stringset) <- for_5453$UNIQUE
+
+full_5453_ss <- c(for_5453_stringset, rev_5453_stringset)
+
+rev_899 <- sv[UNIQUE %in% rev_899$tip.label]
+for_899 <- sv[UNIQUE %in% for_899$tip.label]
+
+rev_899_stringset <- reverseComplement(DNAStringSet(rev_899$ALT))
+names(rev_899_stringset) <- rev_899$UNIQUE
+for_899_stringset <- DNAStringSet(for_899$ALT)
+names(for_899_stringset) <- for_899$UNIQUE
+
+full_899_ss <- c(for_899_stringset, rev_899_stringset)
+
+full_te_ss <- c(full_5453_ss, full_899_ss)
+```
+
+## Align with msa
+```{r}
+muscle_align_5453_full <- msa(full_5453_ss, method = "Muscle")
+muscle_align_899_full <- msa(full_899_ss, method = "Muscle")
+muscle_align_te_full <- msa(full_te_ss, method = "Muscle")
+```
+
+## Matrix
+```{r}
+muscle_matrix_5453_full <- as.matrix(muscle_align_5453_full)
+muscle_matrix_899_full <- as.matrix(muscle_align_899_full)
+muscle_matrix_te_full <- as.matrix(muscle_align_te_full)
+```
+
+## Create phy data object
+```{r}
+muscle_5453_full_phy_data <- phyDat(muscle_matrix_5453_full, type = "DNA")
+muscle_899_full_phy_data <- phyDat(muscle_matrix_899_full, type = "DNA")
+muscle_te_full_phy_data <- phyDat(muscle_matrix_te_full, type = "DNA")
+```
+
+## bootstrap data
+```{r}
+muscle_5453_full_bs_upgma <- bs_plot(muscle_5453_full_phy_data, bootstraps = 1e3)
+muscle_899_full_bs_upgma <- bs_plot(muscle_899_full_phy_data, bootstraps = 1e3)
+muscle_te_full_bs_upgma <- bs_plot(muscle_te_full_phy_data, bootstraps = 1e3)
+```
+
+## Explore tip data
+```{r}
+muscle_5453_full_bs_upgma$tip.label
+muscle_899_full_bs_upgma$tip.label
+muscle_te_full_bs_upgma$tip.label
+```
+
+## Plotting
+```{r}
+ggtree(muscle_5453_full_bs_upgma, branch.length = "edge.length", layout = "equal_angle") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = label),
+               geom = "shadowtext",
+               #vjust = 1,
+               size = 2,
+               align = FALSE)
+
+ggtree(muscle_899_full_bs_upgma, branch.length = "edge.length", layout = "daylight") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = label),
+               geom = "shadowtext",
+               #vjust = 1,
+               size = 2,
+               align = FALSE)
+
+ggtree(muscle_te_full_bs_upgma, branch.length = "edge.length", layout = "daylight") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = label),
+               geom = "shadowtext",
+               #vjust = 1,
+               size = 2,
+               align = FALSE)
+count_tips_per_node(muscle_te_full_bs_upgma)
+```
+

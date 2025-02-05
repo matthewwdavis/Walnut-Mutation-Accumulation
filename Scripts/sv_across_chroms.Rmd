@@ -1,0 +1,61 @@
+---
+title: "sv_across_chroms"
+author: "Matthew Davis"
+date: "2025-01-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggenomics)
+```
+
+## Functions
+```{r}
+
+```
+
+## Read data
+```{r}
+sv <- fread("./Data/VCFs/SV_VCF/Parsed/parsed_ins_dels_pbsv.vcf")
+```
+
+# Prepare data to plot
+## Normalizing SV length by mean
+```{r}
+sv[, MEAN_LEN := mean(SVLEN), by = c("CHROM", "SOURCE")]
+sv[, SD_LEN := sd(SVLEN), by = c("SOURCE")]
+sv[, NORM_LEN := SVLEN/MEAN_LEN]
+sv[, Z_LEN := ((SVLEN - MEAN_LEN) / SD_LEN)]
+```
+
+# Plotting
+## Plot all sv
+```{r}
+sv %>% 
+  ggplot(aes(x = POS, y = Z_LEN, color = Z_LEN > 0)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "red", linetype = 4) +
+  facet_grid(SOURCE~CHROM+HAP, space = "free") +
+  scale_y_continuous(limits = c(-10, 5), breaks = c(-5,0,5)) +
+  scale_color_manual(values = c("TRUE" = "blue", "FALSE" = "red")) +
+  theme_linedraw(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_text(colour = "black"),
+    strip.text.x = element_text(margin = ggplot2::margin(t = 0, b = 0)),
+    strip.text.y = element_text(angle = 0),
+    panel.spacing.y = unit(0.05, "cm"),
+    panel.spacing.x = unit(0.05, "cm"),
+    legend.key.size = unit(.2, "cm"),
+    legend.position = "none",
+    plot.margin = ggplot2::margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+  )
+
+```
+

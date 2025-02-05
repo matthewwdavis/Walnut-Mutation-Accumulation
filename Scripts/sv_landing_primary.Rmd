@@ -1,0 +1,388 @@
+---
+title: "transposable_element_landing"
+author: "Matthew Davis"
+date: "2024-12-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggenomics)
+```
+
+## Functions
+```{r}
+# Annotating SVs
+rel_location <- function(sv_vcf, genes){
+  
+  # within gene bodies
+  sv_vcf[, GENIC := FALSE]
+  
+  sv_vcf[genes, on = .(CHROM, POS >= START, POS <= STOP), GENIC := TRUE]
+  
+  # Upstream of gene bodies
+  genes[, UPSTREAM_START := START - 5000]
+  sv_vcf[, UPSTREAM := FALSE]
+  
+  sv_vcf[genes, on = .(CHROM, POS > UPSTREAM_START, POS < START), UPSTREAM := TRUE]
+  
+  # Downstream of gene bodies
+  genes[, DOWNSTREAM_STOP := STOP + 5000]
+  sv_vcf[, DOWNSTREAM := FALSE]
+  
+  sv_vcf[genes, on = .(CHROM, POS > STOP, POS < DOWNSTREAM_STOP), DOWNSTREAM := TRUE]
+  
+  return(sv_vcf)
+  
+}
+
+## Create summary data
+summ_sv <- function(sv_ann){
+  
+  summ <- sv_ann[, .(COUNT = .N), by = c("SOURCE", "GENIC", "UPSTREAM", "DOWNSTREAM")]
+  
+  summ[, CLASS := fifelse(GENIC == TRUE & UPSTREAM == FALSE & DOWNSTREAM == FALSE, "genic", 
+                          fifelse(GENIC == TRUE & UPSTREAM == TRUE & DOWNSTREAM == FALSE, "genic+up",
+                                  fifelse(GENIC == TRUE & UPSTREAM == FALSE & DOWNSTREAM == TRUE, "genic+down",
+                                          fifelse(GENIC == TRUE & UPSTREAM == TRUE & DOWNSTREAM == TRUE, "genic+up+down",
+                                                  fifelse(GENIC == FALSE & UPSTREAM == TRUE & DOWNSTREAM == FALSE, "upstream",
+                                                          fifelse(GENIC == FALSE & UPSTREAM == TRUE & DOWNSTREAM == TRUE, "up+down",
+                                                                  fifelse(GENIC == FALSE & UPSTREAM == FALSE & DOWNSTREAM == TRUE, "downstream",
+                                                                          fifelse(GENIC == FALSE & UPSTREAM == FALSE & DOWNSTREAM == FALSE, "inter", NA))))))))]
+  
+  summ <- summ[, .(TOTAL_COUNT = sum(COUNT)), by = c("SOURCE", "CLASS")]
+  
+  summ[, PROPORTION := TOTAL_COUNT / sum(TOTAL_COUNT), by = c("SOURCE")]
+  
+  summ[, PCT := scales::percent(PROPORTION)]
+  
+  summ[grepl("genic", CLASS), GENE_CLASS := "genic"]
+  
+  summ[grepl("upstream", CLASS), GENE_CLASS := "near"]
+  
+  summ[grepl("downstream", CLASS), GENE_CLASS := "near"]
+  
+  summ[grepl("inter", CLASS), GENE_CLASS := "intergenic"]
+  
+  summ[grepl("up\\+down", CLASS), GENE_CLASS := "near"]
+  
+  return(summ)
+}
+
+# Create simple summary table
+simple_summary <- function(summ_table){
+  
+  # New summary table
+  small_sum_table <- summ_table %>%
+    group_by(SOURCE, GENE_CLASS) %>%
+    summarize(
+      TOTAL_COUNT = sum(TOTAL_COUNT),
+      PROPORTION = sum(PROPORTION),
+      PCT = scales::percent(PROPORTION),
+    )%>%
+    ungroup()
+  
+  return(small_sum_table)
+}
+```
+
+## Read in data
+```{r}
+genes <- fread("./Data/GFFs/Parsed/genes_good.tsv")
+sv <- fread("./Data/VCFs/SV_VCF/Parsed/parsed_ins_dels_pbsv_primary.vcf")
+fasta <- ggread_fasta("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+```
+
+## Create new labels
+```{r}
+new_labels = c(
+"cr2_hifi_te" = "TE",
+"cr2_hifi_sv" = "E HiFi",
+"ref_chandler_sv" = "Reference",
+"term_chandler_sv" = "Tree",
+"genome_genome" = "Genome\nComposition"
+)
+```
+
+
+# Prepare SV data
+## Filter svs for TE length and parse the CHROM column
+```{r}
+te.vcf <- sv[SVLEN %in% 5453]
+```
+
+## Find the where svs are located in reference to genes
+```{r}
+rel_location(te.vcf, genes)
+rel_location(sv, genes)
+```
+
+## Summarizing data
+```{r}
+te.summ <- summ_sv(te.vcf)
+sv.summ <- summ_sv(sv)
+```
+
+## Create simple table
+```{r}
+te_simp <- simple_summary(te.summ)
+sv_simp <- simple_summary(sv.summ)
+```
+
+# Prepare genome composition data
+## Total length of chromosomes
+```{r}
+fasta.table <- data.table(Chromosome = names(fasta), Length = width(fasta))
+fasta.table <- select_chr(fasta.table, chr_string = "NC_049")
+chrs <- sum(fasta.table$Length)
+```
+
+## Total gene length in genome
+```{r}
+genic <- sum(genes$LENGTH)
+```
+
+## Calculate non-genic space
+```{r}
+nongenic <- chrs - genic
+```
+
+## Rough estimate of bp +- 5000bp from genes
+```{r}
+updown_genes <- nrow(genes) * 10000
+```
+
+## Calculate non-gene associates space
+```{r}
+no_gene_assoc <- chrs - (genic + updown_genes)
+```
+
+## Creating table for genic/nongenic
+```{r}
+genespace <- data.table(GENE_CLASS = rep(c("genic", "intergenic")),
+                        BP = c(genic, nongenic))
+genespace[, PROPORTION := BP / sum(BP)]
+
+genespace[, PCT := scales::percent(PROPORTION)]
+```
+
+## Create 1 large table with everything
+```{r}
+setDT(te_simp)
+setDT(sv_simp)
+setDT(genespace)
+
+te_simp[, TYPE := "te"]
+te_simp[, TYPE := "sv"]
+genespace[, TYPE := "genome"]
+genespace[, SOURCE := "genome"]
+
+total_table <- rbind(te_simp, sv_simp, genespace, fill = TRUE)
+
+total_table[, UNIQUE := paste(SOURCE,TYPE, sep = "_")]
+```
+
+## Collapse +- 5000 into intergenic space
+```{r}
+temp_inter <- total_table[GENE_CLASS %in% c("intergenic", "near") & !SOURCE %in% c("genome")]
+temp_gen <- total_table[GENE_CLASS %in% c("genic") & !SOURCE %in% c("genome")]
+
+temp_inter <- temp_inter %>%
+  group_by(SOURCE, TYPE) %>%
+  summarise(
+    GENE_CLASS = "intergenic",
+    TOTAL_COUNT = sum(TOTAL_COUNT)
+  ) %>%
+  ungroup()
+
+total_small <- rbind(temp_gen, temp_inter, fill = TRUE)
+
+setDT(total_small)
+  
+total_small[, PROPORTION := TOTAL_COUNT / sum(TOTAL_COUNT), by = c("SOURCE", "TYPE")]
+  
+total_small[, PCT := scales::percent(PROPORTION)]
+
+total_small <- rbind(total_small, genespace, fill = TRUE)
+total_small[, UNIQUE := paste(SOURCE, TYPE, sep = "_")]
+
+total_small_levels <- c("cr2_hifi_te", "cr2_hifi_sv", "term_chandler_sv", "ref_chandler_sv", "genome_genome")
+
+total_small$UNIQUE <- factor(total_small$UNIQUE, levels = total_small_levels)
+```
+
+# Plotting
+## Set levels
+```{r}
+simp_levels <- c("genic", "near", "intergenic")
+
+te_simp$GENE_CLASS <- factor(te_simp$GENE_CLASS, levels = simp_levels)
+sv_simp$GENE_CLASS <- factor(sv_simp$GENE_CLASS, levels = simp_levels)
+total_table$GENE_CLASS <- factor(total_table$GENE_CLASS, levels = simp_levels)
+```
+
+## Pie chart of TE location
+```{r}
+ggplot(te_simp, aes(x = "", y = PROPORTION, fill = GENE_CLASS)) +
+  geom_bar(stat = "identity", width = 1, color = "white", linewidth = 0.1) +
+  geom_text(aes(label = PCT), 
+            position = position_stack(vjust = 0.5),  # Center labels in each slice
+            color = "black",
+            size = 1.8) +
+  coord_polar(theta = "y") +
+  labs(fill = "TE Location") +
+  scale_fill_manual(
+    values = c("genic" = "mediumseagreen", 
+               "near" = "#9ED9B8",
+               "intergenic" = "grey90"), 
+    labels = c("genic" = "Gene body", 
+               "near" = "\u00b1 5000bp from gene body",
+               "intergenic" = "Intergenic"),
+    breaks=c("intergenic",   "near", "genic")) +
+  guides(fill = guide_legend(nrow = 6)) +
+  theme_void(base_size = 6) +
+  theme(legend.position = c(1.13, 0.9),
+        legend.direction = "horizontal",
+        legend.title = element_blank(),
+        legend.title.position = "top",
+        legend.key.size = unit(0.15,"cm"),
+        plot.margin = ggplot2::margin(t = 1, r = 1.75, b = -0, l = -.4, unit = "cm"),
+  ) 
+ggsave("./Figures/Transposable_Elements/piechart_te_location_primary.pdf", height = 2, width = 2.2)
+ggsave("./Figures/Transposable_Elements/piechart_te_location_primary.png", height = 2, width = 2.2)
+```
+
+## Pie chart of all SVs, faceted
+```{r}
+ggplot(sv_simp, aes(x = "", y = PROPORTION, fill = GENE_CLASS)) +
+  geom_bar(stat = "identity", width = 1, color = "white", linewidth = 0.1) +
+  geom_text(aes(label = PCT), 
+            position = position_stack(vjust = 0.5),  # Center labels in each slice
+            color = "black",
+            size = 1.8) +
+  coord_polar(theta = "y") +
+  facet_grid(~SOURCE) +
+  labs(fill = "TE Location") +
+  scale_fill_manual(
+    values = c("genic" = "mediumseagreen", 
+               "near" = "#9ED9B8",
+               "intergenic" = "grey90"), 
+    labels = c("genic" = "Gene body", 
+               "near" = "\u00b1 5000bp from gene body",
+               "intergenic" = "Intergenic"),
+    breaks=c("intergenic",   "near", "genic")) +
+  guides(fill = guide_legend(nrow = 6)) +
+  theme_void(base_size = 6) +
+  theme(legend.position = c(.05, 1),
+        legend.direction = "horizontal",
+        legend.title = element_blank(),
+        legend.title.position = "top",
+        legend.key.size = unit(0.15,"cm"),
+        plot.margin = ggplot2::margin(t = 0, r = 0, b = 0, l = .4, unit = "cm"),
+  ) 
+ggsave("./Figures/Transposable_Elements/piechart_sv_location_primary_all_sample.pdf", height = 6, width = 6.6)
+ggsave("./Figures/Transposable_Elements/piechart_sv_location_primary_all_sample.png", height = 6, width = 6.6)
+```
+
+## Plotting genome composition
+```{r}
+ggplot(genespace, aes(x = "", y = PROPORTION, fill = GENE_CLASS)) +
+  geom_bar(stat = "identity", width = 1, color = "white", linewidth = 0.1) +
+  geom_text(aes(label = PCT), 
+            position = position_stack(vjust = 0.5),
+            color = "black",
+            size = 1.8) +
+  coord_polar(theta = "y") +
+  scale_fill_manual(
+    name = "Genome Composition",
+    values = c("genic" = "mediumseagreen", 
+               "intergenic" = "grey90"), 
+    labels = c("genic" = "Gene body", 
+               "intergenic" = "Intergenic"),
+    #breaks=c("Gene",   "Upstream", "Downstream", "Upstream+Downstream","Intergenic")
+  ) +
+  guides(fill = guide_legend(nrow = 6)) +
+  theme_void(base_size = 6) +
+  theme(legend.position = c(1.13, 0.9),
+        legend.direction = "horizontal",
+        legend.title = element_blank(),
+        legend.title.position = "top",
+        legend.key.size = unit(0.15,"cm"),
+        plot.margin = ggplot2::margin(t = 1, r = 1.75, b = -0, l = -.4, unit = "cm"),
+  ) 
+ggsave("./Figures/Genome_Composition/genic_and_nongenic_composition.pdf", height = 2, width = 2.2)
+ggsave("./Figures/Genome_Composition/genic_and_nongenic_composition.png", height = 2, width = 2.2)
+```
+
+## Bar chart of all
+```{r}
+ggplot(total_small, aes(x = PROPORTION, y = UNIQUE, fill = GENE_CLASS)) +
+  geom_bar(stat = "identity", color = "black") +
+  geom_text(aes(label = TOTAL_COUNT),
+            position = position_stack(vjust = 0.5),
+            color = "black",
+            size = 2) +
+  scale_fill_manual(values = c("genic" = "mediumseagreen", 
+                               "near" = "#9ED9B8",
+                               "intergenic" = "grey90"),
+                    labels = c("genic" = "Gene body",
+                               "intergenic" = "Intergenic",
+                               "near" = "\u00b1 5000bp from gene body")) +
+  scale_y_discrete(labels = new_labels) +
+  scale_x_continuous(labels = scales::percent) +
+  theme_classic(base_size = 6) +
+  theme(
+    axis.title = element_blank(),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.title = element_blank(),
+    legend.key.size = unit(0.2, "cm"),
+    legend.position = c(-0.06, 0.0),
+    plot.margin = ggplot2::margin(t = 0, r = -0.125, b = 0, l = 0, unit = "cm")
+  )
+ggsave("~/Desktop/test.pdf", height = 2, width = 3.5)
+```
+
+# Statistical test
+## Chi Sq for landing in genes condsidering +- 5000
+```{r}
+chisq.test(c(48, 10), p=c(0.2816, 0.7184))
+```
+
+## Chi Sq for landing in genes condsidering +- 5000
+```{r}
+chisq.test(c(48, 47), p=c(0.2816, 0.7184))
+```
+
+I may need to be a little more discerning on how I define upstream and downstream of a gene. For now, these are the results.
+
+## Chi sq for landing in +- 5000bp
+```{r}
+chisq.test(c(32, 58), p=c(0.53, 0.47))
+```
+
+
+## Chi sq for landing in gene and +- 5000bp
+```{r}
+chisq.test(c(80, 10), p=c(0.812, 0.188))
+```
+
+
+## All ChiSq for bar charts
+```{r}
+# CR2 SV
+chisq.test(c(219, 1135), p=c(0.2816, 0.7184))
+# CR2 TE
+chisq.test(c(43, 47), p=c(0.2816, 0.7184))
+# REF 
+chisq.test(c(90, 620), p=c(0.2816, 0.7184))
+# TERM
+chisq.test(c(103, 664), p=c(0.2816, 0.7184))
+```
+
+

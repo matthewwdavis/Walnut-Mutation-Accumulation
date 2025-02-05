@@ -201,7 +201,6 @@ setnames(gen_map, old = c("chr", "bp", "hap1", "hap2"), new = c("CHROM", "POS", 
 
 ## Phase snps
 ```{r}
-# Look back through this to make sure nothing funky is happening in this parsing
 phased_snps <- inner_join(an_snps, gen_map, by = c("CHROM", "POS"))
 
 phased_snps <- phased_snps %>%
@@ -209,19 +208,23 @@ phased_snps <- phased_snps %>%
   mutate(Variant_is_hap2 = case_when(ALT == Hap2 ~ TRUE, TRUE ~ FALSE))
 
 phased_snps <- phased_snps %>%
-  mutate(Haplotype = if_else(Variant_is_hap1 == TRUE, "hap1", "hap2"))
+  mutate(Haplotype = if_else(Variant_is_hap1 == TRUE, "A", "B"))
 
 phased_snps_small <- phased_snps %>%
-  select(CHROM, POS, VAF, Haplotype, SOURCE)
+  dplyr::select(CHROM, POS, REFDP, ALTDP, VAF, Haplotype, SOURCE)
 ```
 
 ## Create the reciprocal dataset
-I am only worrying about VAF now, but I will need to do this with a more sophisticated analysis later.
-This seems to have messed something up.
 ```{r}
 flip_phased_snps_small <- phased_snps_small %>%
-  mutate(Haplotype = ifelse(Haplotype == "hap1", "hap2", "hap1")) %>%
-  mutate(VAF = 1 - VAF)
+  mutate(Haplotype = ifelse(Haplotype == "A", "B", "A")) %>%
+  mutate(VAF = 1 - VAF) %>%
+  mutate(
+    TEMP = REFDP,
+    REFDP = ALTDP,
+    ALTDP = TEMP
+  ) %>%
+  dplyr::select(-TEMP) 
 
 flip_phased_snps_small
 ```
@@ -265,12 +268,6 @@ sum_vaf <- full_phased_snps %>%
   summarise(
     MEANVAFSEG = mean(VAF)
   )
-```
-
-## change haplotype names
-```{r}
-sum_vaf$Haplotype <- gsub("hap1", "A", sum_vaf$Haplotype)
-sum_vaf$Haplotype <- gsub("hap2", "B", sum_vaf$Haplotype)
 ```
 
 ## Plot windows
@@ -397,23 +394,17 @@ ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_chr_1116.png", height = 3.1, 
 
 ## Use more windows for chrom 9
 ```{r}
-setDT(phased_snps)
-phased_snps[, SEGMENT := cut(1:.N, breaks = 100, labels = FALSE), by = c("SOURCE", "CHROM", "Haplotype")]
+setDT(full_phased_snps)
+full_phased_snps[, SEGMENT := cut(1:.N, breaks = 100, labels = FALSE), by = c("SOURCE", "CHROM", "Haplotype")]
 ```
 
 ## Summarize VAF by segment
 ```{r}
-sum_vaf <- phased_snps %>%
+sum_vaf <- full_phased_snps %>%
   group_by(SOURCE, CHROM, Haplotype, SEGMENT) %>%
   summarise(
     MEANVAFSEG = mean(VAF)
   )
-```
-
-## change haplotype names
-```{r}
-sum_vaf$Haplotype <- gsub("hap1", "A", sum_vaf$Haplotype)
-sum_vaf$Haplotype <- gsub("hap2", "B", sum_vaf$Haplotype)
 ```
 
 ## Select for chromosome 9 (SR and Dup)
@@ -448,3 +439,148 @@ sum_vaf %>%
 ggsave("./Figures/Aneuploidy_VAF/VAF_in_100_windows_chr_9.pdf", height = .25, width = .71)
 ggsave("./Figures/Aneuploidy_VAF/VAF_in_100_windows_chr_9.png", height = .25, width = .71)
 ```
+
+# Color with Pvalue
+## Do 1 sample t test to get significant deviation from 0.5
+```{r}
+full_phased_snps[, SEGMENT := cut(1:.N, breaks = 250, labels = FALSE), by = c("SOURCE", "CHROM", "Haplotype")]
+## Test
+test <- full_phased_snps %>%
+  group_by(SOURCE, CHROM, Haplotype, SEGMENT) %>%
+  summarise(
+    SUMREFDP = sum(REFDP),
+    SUMALTDP = sum(ALTDP),
+    MEANVAFSEG = mean(VAF),
+    #TPVALUE = if (sd(VAF) > 0) t.test(VAF, mu = 0.5)$p.value else NA,
+    CHIPVALUE = chisq.test(c(SUMREFDP, SUMALTDP), p = c(0.5, 0.5))$p.value
+  ) %>%
+  mutate(
+    #TBON_PVALUE = p.adjust(TPVALUE, method = "bonferroni"),
+    #TFDR_PVALUE = p.adjust(TPVALUE, method = "BH"),
+    CHIBON_PVALUE = p.adjust(CHIPVALUE, method = "bonferroni"),
+    CHIFDR_PVALUE = p.adjust(CHIPVALUE, method = "BH")
+  )
+```
+
+## Classify for color
+```{r}
+setDT(test)
+test[, CLASSIFY :=  fifelse(MEANVAFSEG > 0.5 & CHIFDR_PVALUE < 0.01, "dup", "none") ]
+test[, CLASSIFY :=  fifelse(MEANVAFSEG < 0.5 & CHIFDR_PVALUE < 0.01, "del", CLASSIFY) ]
+```
+
+
+## Plot
+```{r}
+test %>%
+  filter(CHROM %in% c(4,9,11,12,16)) %>%
+  ggplot(aes(x = SEGMENT, y = MEANVAFSEG, color = CLASSIFY)) +
+  geom_point(size = 0.001) +
+  #geom_hline(yintercept = 0.5, linetype = 3) +
+  facet_grid(SOURCE~CHROM + Haplotype, space = "free", switch = "y") +
+  scale_color_manual(values = c(dup = "orangered3", del = "royalblue1", "none"  = "grey75")) +
+  scale_y_continuous(limits = c(0,1), breaks = c(0.5), position = "left") +
+  labs(x = "Position", y = "Allele Frequency") +
+  theme_classic(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text.x = element_text(color = "black", margin = margin(t = 0, b = 0)),
+    strip.text.y = element_blank(),
+    panel.border = element_rect(fill = NA),
+    panel.spacing.y = unit(0.05, "cm"),
+    panel.spacing.x = unit(0.05, "cm"),
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
+    axis.ticks.length.y = unit(0.51, "cm"),
+    axis.title.y = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+  )
+ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216.pdf", height = 2.5, width = 3.5)
+ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216.png", height = 3, width = 3.5)
+```
+
+## Try chi-sq with each SNP
+```{r}
+full_phased_snps[, PVALUE := chisq.test(c(REFDP, ALTDP), p = c(0.5, 0.5))$p.value, by = 1:nrow(full_phased_snps)]
+full_phased_snps[, FDR_PVALUE := p.adjust(PVALUE, method = "BH")]
+full_phased_snps[, BON_PVALUE := p.adjust(PVALUE, method = "bonferroni")]
+
+full_phased_snps
+```
+
+## Plot all SNPs, color by PVALUE
+```{r}
+full_phased_snps %>%
+  ggplot(aes(x = POS, y = VAF, color = FDR_PVALUE < 0.05)) +
+  geom_point(size = 0.1) +
+  geom_hline(yintercept = 0.5, linetype = 3) +
+  facet_grid(SOURCE~CHROM + Haplotype, space = "free", switch = "y") +
+  scale_color_manual(values = c("TRUE" = "orangered2", "FALSE" = "grey")) +
+  scale_y_continuous(breaks = c(0.5), position = "right") +
+  labs(x = "Position", y = "Allele Frequency") +
+  theme_linedraw(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text.x = element_text(color = "black", margin = margin(t = 0, b = 0)),
+    strip.text.y = element_blank(),
+    panel.border = element_rect(fill = NA),
+    panel.spacing.y = unit(0.05, "cm"),
+    panel.spacing.x = unit(0.05, "cm"),
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.y = element_blank(),
+    plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+  )
+
+## Correct for multiple testing.
+```
+
+## Create windows and summarize with average PVALUE
+```{r}
+full_phased_snps[, SEGMENT := cut(1:.N, breaks = 10, labels = FALSE), by = c("SOURCE", "CHROM", "Haplotype")]
+
+sum_test <- full_phased_snps %>%
+  group_by(SOURCE, CHROM, Haplotype, SEGMENT) %>%
+  summarise(
+    MEANVAF = mean(VAF),
+    MEANPVALUE = median(PVALUE)
+  )
+```
+
+## Try plotting
+```{r}
+sum_test %>%
+  ggplot(aes(x = SEGMENT, y = MEANVAF, color = MEANPVALUE < 0.05)) +
+  geom_point(size = 0.1) +
+  geom_hline(yintercept = 0.5, linetype = 3) +
+  facet_grid(SOURCE~CHROM + Haplotype, space = "free", switch = "y") +
+  scale_color_manual(values = c("TRUE" = "orangered2", "FALSE" = "grey")) +
+  scale_y_continuous(breaks = c(0.5), position = "right") +
+  labs(x = "Position", y = "Allele Frequency") +
+  theme_linedraw(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text.x = element_text(color = "black", margin = margin(t = 0, b = 0)),
+    strip.text.y = element_blank(),
+    panel.border = element_rect(fill = NA),
+    panel.spacing.y = unit(0.05, "cm"),
+    panel.spacing.x = unit(0.05, "cm"),
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.y = element_blank(),
+    plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+  )
+```
+

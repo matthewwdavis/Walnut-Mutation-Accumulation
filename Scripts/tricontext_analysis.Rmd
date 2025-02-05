@@ -13,8 +13,9 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Libraries
 ```{r, message=FALSE}
 library(polymorphology2)
-#library(tidyverse)
 library(parallel)
+library(ggenomics)
+library(ggtext)
 ```
 
 ## Functions
@@ -32,6 +33,7 @@ fasta_trimer_freq<-function(fasta, stop = NULL){
   
   trimer_freq<-trimer_freq[!grepl("ID|N|V", TRI)]
 }
+
 ```
 
 # Calculate trimer frequency
@@ -71,20 +73,136 @@ snps <- mutations[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T & SNP == T]
 indels <- mutations[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T & SNP == F]
 ```
 
-
 # Plotting data
-## Polymorphlolgy plotting funciton
+## Polymorphlolgy plotting function full data
 ```{r}
 tree_plot <- plot_tricontexts(snps[CULTURETYPE=="tree",.(UNIQUE, TRICONTEXT)]$TRICONTEXT, full=T, trimer_freq = freq_trimer, x_text = F)
 tree_plot$plot +
- theme(plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.01, unit = "cm"))
-ggsave("./Figures/Tricontext/tree_tricontext.pdf", height = .9, width = 3.7)
+  theme(
+    strip.text = element_text(face = "plain"),
+    plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.01, unit = "cm")
+  )
+ggsave("./Figures/Tricontext/tree_tricontext.pdf", height = 1, width = 3.75)
 shoot_plot <- plot_tricontexts(snps[CULTURETYPE=="shoot",.(UNIQUE, TRICONTEXT)]$TRICONTEXT, full=T, trimer_freq = freq_trimer, x_text = F)
 shoot_plot$plot +
-  theme(plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.01, unit = "cm"))
-ggsave("./Figures/Tricontext/shoot_tricontext.pdf", height =.9, width = 3.7)
+  theme(
+    strip.text = element_text(face = "plain"),
+    plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.01, unit = "cm")
+  )
+ggsave("./Figures/Tricontext/shoot_tricontext.pdf", height =1, width = 3.75)
 embryo_plot <- plot_tricontexts(snps[CULTURETYPE=="embryo",.(UNIQUE, TRICONTEXT)]$TRICONTEXT, full=T, trimer_freq = freq_trimer,  x_text = T)
 embryo_plot$plot +
+  theme(
+    strip.text = element_text(face = "plain"),
+    plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.01, unit = "cm")
+  )
+ggsave("./Figures/Tricontext/embryo_tricontext.pdf", height = 1.5, width = 7.5)
+```
+
+## Polymorphlolgy plotting function simple data
+```{r}
+tree_plot <- plot_tricontexts(snps[CULTURETYPE=="tree",.(UNIQUE, TRICONTEXT)]$TRICONTEXT, full=F, trimer_freq = freq_trimer, x_text = F)
+tree_plot$plot +
   theme(plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.01, unit = "cm"))
-ggsave("./Figures/Tricontext/embryo_tricontext.pdf", height = 1.75, width = 7.4)
+ggsave("./Figures/Tricontext/tree_tricontext_simple.pdf", height = .9, width = 3.7)
+shoot_plot <- plot_tricontexts(snps[CULTURETYPE=="shoot",.(UNIQUE, TRICONTEXT)]$TRICONTEXT, full=F, trimer_freq = freq_trimer, x_text = F)
+shoot_plot$plot +
+  theme(plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.01, unit = "cm"))
+ggsave("./Figures/Tricontext/shoot_tricontext_simple.pdf", height =.9, width = 3.7)
+embryo_plot <- plot_tricontexts(snps[CULTURETYPE=="embryo",.(UNIQUE, TRICONTEXT)]$TRICONTEXT, full=F, trimer_freq = freq_trimer,  x_text = T)
+embryo_plot$plot +
+  theme(plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.01, unit = "cm"))
+ggsave("./Figures/Tricontext/embryo_tricontext_simple.pdf", height = 1.75, width = 7.4)
+```
+
+# Plotting all individuals in tricontext
+## Colors, levels, labels
+```{r}
+mut_colors<-c(`C>A`="cyan3",`C>G`="black",`C>T`="red4",`T>A`="gray",`T>C`="green3",`T>G`="pink3")
+
+plot_levels <- c("ref_chandler", "tree2", "cr22", "cr13", "cr10", "cr85",
+                 "cr2_11A", "cr2_13A", "cr2_12A", "cr21_1", "cr21_2",
+                 "cr2_18A", "cr2_15A", "cr2_15A1", "cr2_hifi", "cr2_16A",
+                 "cr2_18A1", "cr2_17A1", "cr2_17A2", "cr2_16A1", "cr2_16A2")
+
+new_labels = c(
+  "ref_chandler" = "Reference", "tree2" = "Tree",
+  "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+  "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
+  "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
+  "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
+  "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
+  "cr85" = "S 1985", "cr10" = "S 2010",
+  "cr13" = "S 2013", "cr22" = "S 2022"
+)
+```
+
+## Prepare data for plotting
+```{r}
+# Tricontext plots plotting
+embryo_trimers <- data.table(table(SOURCE = snps$SOURCE, TRICONTEXT = snps$TRICONTEXT, MUT=snps$MUT, CULTURETYPE=snps$CULTURETYPE))[N > 0]
+embryo_trimers$TRI <- substr(embryo_trimers$TRICONTEXT, 1, 3)
+embryo_trimers$genome <- freq_trimer$N[match(embryo_trimers$TRI, freq_trimer$TRI)]
+
+embryo_trimers[, genomeprop := N/(genome)]
+embryo_trimers[, Nprop := genomeprop/sum(genomeprop), by= SOURCE]
+
+
+embryo_trimers$SOURCE <- factor(embryo_trimers$SOURCE, levels=plot_levels)
+
+## Plots no context
+embryo_monomers<-data.table(table(SOURCE = snps$SOURCE, MUT = snps$MUT))[N>0]
+embryo_monomers[,Nprop := N/sum(N), by = SOURCE]
+
+embryo_monomers$SOURCE<-factor(embryo_monomers$SOURCE, levels = plot_levels)
+```
+
+## Plot
+```{r}
+# Tricontext
+ggplot(embryo_trimers, aes(x = TRI, y = SOURCE, fill = MUT, size = genomeprop, alpha = genomeprop)) +
+  geom_point(shape = 22) +
+  facet_grid(~MUT, scales = "free_x", labeller = labeller(MUT = c(
+    `C>A` = "<span style = 'color: cyan3;'>C>A</span>",
+    `C>G` = "<span style = 'color: black;'>C>G</span>",
+    `C>T` = "<span style = 'color: red4;'>C>T</span>",
+    `T>A` = "<span style = 'color: grey;'>T>A</span>",
+    `T>C` = "<span style = 'color: green3;'>T>C</span>",
+    `T>G` = "<span style = 'color: pink3;'>T>G</span>"
+  ))) +
+  scale_size_continuous(range = c(0.25,3)) +
+  scale_fill_manual(values = mut_colors) +
+  scale_y_discrete(labels = new_labels) +
+  
+  theme_classic(base_size = 6) +
+  theme(
+    legend.position = "none",
+    strip.text = element_markdown(face = "bold"),
+    strip.background = element_blank(),
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(angle = 90,hjust = 1),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
+    axis.ticks.length.y = unit(0.5, "cm"),
+    panel.spacing.y = unit(0.05, "cm"),
+    panel.spacing.x = unit(0.05, "cm"),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0, r = 0.05, b = 0, l = 0, unit = "cm")
+  )
+ggsave("./Figures/Tricontext/sample_individual_tricontext.pdf", height = 3.2, width = 6.5)
+
+
+# Simple no context
+ggplot(embryo_monomers, aes(x = MUT, y = SOURCE, fill = MUT, size = N)) +
+  geom_point(shape = 22) +
+  theme_minimal(base_size = 6) +
+  theme(legend.position = "top")+
+  scale_size_continuous(range = c(0.25,5))+
+  facet_grid(~MUT, scales = "free_x")+
+  scale_fill_manual(values = mut_colors, guide = "none")
 ```

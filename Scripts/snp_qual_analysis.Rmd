@@ -56,11 +56,14 @@ mutations <- fread("./Data/VCFs/Parsed/mutations.tsv")
 ```{r}
 snps <- mutations %>%
   filter(SNP == TRUE, MAPP == TRUE)
+indels <- mutations %>%
+  filter(SNP == FALSE, MAPP == TRUE)
 ```
 
 ## SNP number per quality score
 ```{r}
 qual_table <- mut_per_qual(snps)
+qual_table_indels <- mut_per_qual(indels)
 ```
 
 ## Prep table for plotting
@@ -128,13 +131,13 @@ qual_table %>%
   labs(y = "Number of Mutations", x = "Individual") +
   facet_grid(~TYPE, scales = "free", space = "free") +
   scale_x_discrete(labels = c("ref_chandler" = "Reference", "tree2" = "Tree",
-  "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
-  "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
-  "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
-  "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
-  "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
-  "cr85" = "S 1985", "cr10" = "S 2010",
-  "cr13" = "S 2013", "cr22" = "S 2022")) +
+                              "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+                              "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
+                              "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
+                              "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
+                              "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
+                              "cr85" = "S 1985", "cr10" = "S 2010",
+                              "cr13" = "S 2013", "cr22" = "S 2022")) +
   theme_classic(base_size = 6) +
   theme(legend.title = element_text(hjust = 0.5),
         axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
@@ -144,8 +147,8 @@ qual_table %>%
         strip.text = element_text(face = "bold"),
         legend.position = "bottom",
         legend.key.size = unit(0.2, "cm"))
-# ggsave("./Figures/Quality_Analysis/medquality_comparison.pdf", height = 2, width = 4)
-# ggsave("./Figures/Quality_Analysis/medquality_comparison.png", height = 2, width = 4)
+# ggsave("./Figures/Quality_Analysis/medquality_comparison_snps.pdf", height = 2, width = 4)
+# ggsave("./Figures/Quality_Analysis/medquality_comparison_snps.png", height = 2, width = 4)
 ```
 
 ## Gradients based on culture type
@@ -159,15 +162,15 @@ qual_table %>%
   scale_x_discrete(
     labels = c(
       "ref_chandler" = "Reference", "tree2" = "Tree",
-  "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
-  "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
-  "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
-  "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
-  "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
-  "cr85" = "S 1985", "cr10" = "S 2010",
-  "cr13" = "S 2013", "cr22" = "S 2022"
+      "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+      "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
+      "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
+      "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
+      "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
+      "cr85" = "S 1985", "cr10" = "S 2010",
+      "cr13" = "S 2013", "cr22" = "S 2022"
     ),
-  #expand = c(.1,0)
+    #expand = c(.1,0)
   ) +
   geom_text_repel(
     data = filter(qual_table, label == "Quality\n 20"),  # Replace with the condition for the first label
@@ -196,7 +199,203 @@ qual_table %>%
     #panel.spacing = unit(.5, "cm"),
     plot.margin = unit(c(0, 0, 0, 0), "cm")
   )
-ggsave("./Figures/Quality_Analysis/medquality_comparison.pdf", height = 1.5, width = 4)
-ggsave("./Figures/Quality_Analysis/medquality_comparison.png", height = 1.5, width = 4)
+ggsave("./Figures/Quality_Analysis/medquality_comparison_snps.pdf", height = 1.5, width = 4)
+ggsave("./Figures/Quality_Analysis/medquality_comparison_snps.png", height = 1.5, width = 4)
+```
+
+## Flipped axes
+### Create new levels and geom_text labels
+```{r}
+# Levels
+levels <- c("ref_chandler", "tree2", "cr22", "cr13", "cr10", "cr85",
+            "cr2_11A", "cr2_13A", "cr2_12A",  "cr21_1", "cr21_2",
+            "cr2_18A", "cr2_15A", "cr2_15A1", "cr2_hifi", "cr2_16A",
+            "cr2_18A1", "cr2_17A1", "cr2_17A2", "cr2_16A1", "cr2_16A2")
+
+qual_table$SOURCE <- factor(qual_table$SOURCE, levels = levels)
+
+# Text
+# Add labels to annotate
+qual_table <- qual_table %>%
+  mutate(
+    label = ifelse(SOURCE == "cr2_16A2" & qvalue %in% c(20, 40), as.character(paste("Quality\n", qvalue)), NA)  # Create labels for qvalues 20 and 40
+  )
+
+# Rescale qvalues for plotting and add gradient
+qual_table <- qual_table %>%
+  mutate(
+    qvalue_rescaled = rescale(qvalue, to = c(0, 1)),  # Rescale qvalue to the range [0, 1]
+    color_gradient = case_when(
+      CULTURETYPE == "tree" ~ gradient_n_pal(c("grey80", "#B4C5B4", "darkseagreen4"))(qvalue_rescaled),
+      CULTURETYPE == "shoot" ~ gradient_n_pal(c("grey80", "#D9F6D9","darkseagreen2"))(qvalue_rescaled),
+      CULTURETYPE == "embryo" ~ gradient_n_pal(c("grey80", "#FFE092","goldenrod1"))(qvalue_rescaled)
+    )
+  )
+```
+
+## Plot flipped axes for SNPs
+```{r}
+qual_table %>%
+  ggplot(aes(x = medqual_muts, y = SOURCE)) +
+  geom_point(aes(color = color_gradient), size = 0.5) +
+  scale_color_identity(guide = "legend") +
+  labs(x = "Number of SBS", color = "q-value") +
+  #facet_grid(~TYPE, scales = "free", space = "free") +
+  scale_y_discrete(
+    labels = c(
+      "ref_chandler" = "Reference", "tree2" = "Tree",
+      "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+      "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
+      "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
+      "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
+      "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
+      "cr85" = "S 1985", "cr10" = "S 2010",
+      "cr13" = "S 2013", "cr22" = "S 2022"
+    )
+  ) +
+  scale_x_continuous(limits = c(0,3200), breaks = c(0, 1000, 2000, 3000)) +
+  geom_text_repel(
+    data = filter(qual_table, label == "Quality\n 20"),  # Replace with the condition for the first label
+    aes(label = label),
+    na.rm = TRUE,
+    size = 1,
+    segment.color = NA,
+    y = 22,
+    x = 2850
+  ) +
+  geom_text_repel(
+    data = filter(qual_table, label == "Quality\n 40"),  # Replace with the condition for the second label
+    aes(label = label),
+    na.rm = TRUE,
+    size = 1,
+    segment.color = NA,
+    y = 22,
+    x = 1300
+  ) +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.title = element_text(hjust = 0.5),
+    axis.text.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    strip.background = element_blank(),
+    legend.position = "none",
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = unit(c(0, 0.1, 0, 0), "cm")
+  )
+ggsave("./Figures/Quality_Analysis/medquality_comparison_snps_long.pdf", height = 2.81, width = .95)
+ggsave("./Figures/Quality_Analysis/medquality_comparison_snps_long.png", height = 2.81, width = .95)
+```
+
+# Plotting INDELS 
+## Organize levels and add defining columns
+```{r}
+# Levels
+levels <- c("ref_chandler", "tree2", "cr22", "cr13", "cr10", "cr85",
+            "cr2_11A", "cr2_13A", "cr2_12A",  "cr21_1", "cr21_2",
+            "cr2_18A", "cr2_15A", "cr2_15A1", "cr2_hifi", "cr2_16A",
+            "cr2_18A1", "cr2_17A1", "cr2_17A2", "cr2_16A1", "cr2_16A2")
+
+qual_table_indels$SOURCE <- factor(qual_table_indels$SOURCE, levels = levels)
+
+qual_table_indels <- qual_table_indels %>%
+  mutate(TYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "HiFi",
+    SOURCE %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1",
+                  "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1") ~ "Short Read Embryo",
+    SOURCE %in% c("cr85", "cr10", "cr13", "cr22") ~ "Short Read Shoot")) %>%
+  mutate(TYPE = factor(TYPE, levels = c("HiFi", "Short Read Embryo", "Short Read Shoot")))
+
+qual_table_indels <- qual_table_indels %>%
+  mutate(CULTURETYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2") ~ "tree",
+    SOURCE %in% c("cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A",
+                  "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2",
+                  "cr2_18A", "cr2_18A1") ~ "embryo",
+    SOURCE %in% c("cr85", "cr10", "cr13", "cr22") ~ "shoot")) %>%
+  mutate(SEQTYPE = case_when(
+    SOURCE %in% c("ref_chandler", "tree2", "cr2_hifi") ~ "long_read",
+    SOURCE %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", 
+                  "cr2_16A", "cr2_16A1","cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A",
+                  "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ "short_read"))
+```
+
+## Add plotting specific annotations
+```{r}
+# Text
+# Add labels to annotate
+qual_table_indels <- qual_table_indels %>%
+  mutate(
+    label = ifelse(SOURCE == "cr2_16A2" & qvalue %in% c(20, 40), as.character(paste("Quality\n", qvalue)), NA)  # Create labels for qvalues 20 and 40
+  )
+
+# Rescale qvalues for plotting and add gradient
+qual_table_indels <- qual_table_indels %>%
+  mutate(
+    qvalue_rescaled = rescale(qvalue, to = c(0, 1)),  # Rescale qvalue to the range [0, 1]
+    color_gradient = case_when(
+      CULTURETYPE == "tree" ~ gradient_n_pal(c("grey80", "#B4C5B4", "darkseagreen4"))(qvalue_rescaled),
+      CULTURETYPE == "shoot" ~ gradient_n_pal(c("grey80", "#D9F6D9","darkseagreen2"))(qvalue_rescaled),
+      CULTURETYPE == "embryo" ~ gradient_n_pal(c("grey80", "#FFE092","goldenrod1"))(qvalue_rescaled)
+    )
+  )
+```
+
+## Plot indels
+```{r}
+qual_table_indels %>%
+  ggplot(aes(x = medqual_muts, y = SOURCE)) +
+  geom_point(aes(color = color_gradient), size = 0.5) +
+  scale_color_identity(guide = "legend") +
+  labs(x = "Number of INDELs", color = "q-value") +
+  #facet_grid(~TYPE, scales = "free", space = "free") +
+  scale_y_discrete(
+    labels = c(
+      "ref_chandler" = "Reference", "tree2" = "Tree",
+      "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+      "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
+      "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
+      "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
+      "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
+      "cr85" = "S 1985", "cr10" = "S 2010",
+      "cr13" = "S 2013", "cr22" = "S 2022"
+    )
+  ) +
+  scale_x_continuous(limits = c(0,3200), breaks = c(0, 1000, 2000, 3000)) +
+  geom_text_repel(
+    data = filter(qual_table_indels, label == "Quality\n 20"),  # Replace with the condition for the first label
+    aes(label = label),
+    na.rm = TRUE,
+    size = 1,
+    segment.color = NA,
+    y = 22,
+    x = 2750
+  ) +
+  geom_text_repel(
+    data = filter(qual_table_indels, label == "Quality\n 40"),  # Replace with the condition for the second label
+    aes(label = label),
+    na.rm = TRUE,
+    size = 1,
+    segment.color = NA,
+    y = 22,
+    x = 550
+  ) +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.title = element_text(hjust = 0.5),
+    axis.text.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    strip.background = element_blank(),
+    legend.position = "none",
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = unit(c(0, 0.1, 0, 0), "cm")
+  )
+ggsave("./Figures/Quality_Analysis/medquality_comparison_indels_long.pdf", height = 2.81, width = .95)
+ggsave("./Figures/Quality_Analysis/medquality_comparison_indels_long.png", height = 2.81, width = .95)
 ```
 

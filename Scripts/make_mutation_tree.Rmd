@@ -29,7 +29,6 @@ make_tree_table <-function(mutations){
   row.names(mutations_matrix)<-mutations_matrix[,1]
   mutations_matrix<-mutations_matrix[,-1]
   
-  # Assume mutations_matrix is already defined (row names are Samples, colnames are UNIQUE)
   # Rows: samples, Columns: mutations
   
   # Step 1: Convert the binary mutation matrix into a phyDat object
@@ -234,8 +233,8 @@ chr4_node_data <- chr4_tree.table$node_data
 ```{r}
 mutations_filt_rna <- both_filt %>%
   filter(SOURCE %in% c(
-  "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A",
-  "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1"))
+    "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A",
+    "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", "cr2_18A1"))
 
 tree.table_rna <- make_tree_table(mutations_filt_rna)
 
@@ -421,14 +420,14 @@ both_max_x <- max(both_plot$data$x)
 both_plot <- both_plot + expand_limits(x = both_max_x * 1.2)
 
 both_plot_obj <- both_plot +
-  scale_x_continuous(expand = c(0,150)) +
-  theme(legend.position = c(.2,.9),
+  scale_x_continuous(expand = c(0.1,1100)) +
+  theme(legend.position = c(.25,.9),
         plot.margin = margin(t = 0, r = 0, b = -.1, l = 0, unit = "cm"),
         axis.line.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.text.x = element_blank())
 both_plot_obj
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_both.pdf", height = 2.8, width = 1.5)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_both.pdf", height = 2.85, width = 1)
 ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_presentation_lables_both.pdf", height = 4.97, width = 2)
 
 saveRDS(both_plot_obj, file = "./Data/Plot_Objects/all_sample_branch_is_mut_for_lables_both.rds")
@@ -442,11 +441,11 @@ both_plot <- both_plot + geom_text(
   size = 2
 )
 both_plot +
-  #scale_x_continuous(expand = c(-1, 0)) +
-  theme(legend.position = c(.05,.8),
-        plot.margin = margin(t = 0, r = -3.5, b = 0, l = -.5, unit = "cm"))
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both.pdf", height = 2.75, width = 7.4)
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both.png", height = 2.75, width = 7.4)
+  scale_x_continuous(expand = c(.2, 0)) +
+  theme(legend.position = c(.175,.9),
+        plot.margin = margin(t = 0, r = -1.9, b = 0, l = -0.85, unit = "cm"))
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both.pdf", height = 2.75, width = 3.06)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both.png", height = 2.75, width = 3.06)
 ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both_presentation.pdf", height = 3.33, width = 6.6)
 ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both_presentation.png", height = 3.33, width = 6.6)
 ```
@@ -495,7 +494,7 @@ noan_plot_obj <- noan_plot +
         axis.text.x = element_blank())
 noan_plot_obj
 ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_noan.pdf", height = 2.8, width = 1.5)
- 
+
 noan_plot <- noan_plot %<+% noan_node_data
 noan_plot <- noan_plot + geom_text(
   aes(label = ifelse(bootstrap < 1, round(bootstrap, 3), "")),
@@ -662,20 +661,84 @@ max_x <- max(plot_rna$data$x)
 
 max_x <- max(plot_rna$data$x)
 
-plot_rna <- plot_rna + expand_limits(x = max_x * 1.2)
+#plot_rna <- plot_rna + expand_limits(x = max_x * 1.2)
 
 plot_rna <- plot_rna +
-  scale_x_continuous(expand = c(0,500)) +
+  scale_x_continuous(expand = c(0.1,3000)) +
   theme(legend.position = "none",
         legend.key.size = unit(.2, units = "cm"),
-        plot.margin = margin(t = 0, r = -0, b = -.1, l = -0, unit = "cm"),
+        plot.margin = margin(t = 0.01, r = -0.2, b = -0.01, l = -0.5, unit = "cm"),
         axis.line.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.text.x = element_blank())
 plot_rna
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_rna.pdf", height = 1.8, width = 0.75)
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_rna.png", height = 1.8, width = 0.75)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_rna.pdf", height = 1.4, width = 0.5)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_rna.png", height = 1.4, width = 0.5)
 saveRDS(plot_rna, file = "./Data/Plot_Objects/snp_tree_rna_samples_plot.rds")
+
+# Extract chr12 deletion node
+library(tidytree)
+
+phylo_plot_rna <- as.phylo(plot_rna)
+
+node23_rna_tree <- tree_subset(phylo_plot_rna, 23, 0)
+
+node23_rna_plot <- ggtree(node23_rna_tree, branch.length = "edge.length", layout = "rectangular", size = 0.25) %<+% tip_data_rna +
+  geom_tiplab(aes(label = label, fill = color),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              #hjust = 0.5,
+              #vjust = 0.5,
+              offset = -0.3,
+              linesize = 0.25) +
+  scale_fill_manual(values = source_type_colors,
+                    name = NULL
+  ) +
+  scale_x_continuous(breaks = c(0,30), expand = c(0,100)) +
+  theme_tree2() +
+  theme(
+    text = element_text(size = 8),
+    legend.position = "none",
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.x = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0, r = 0.0, b = 0, l = -0.5, unit = "cm")
+  )
+node23_rna_plot
+ggsave("./Figures/Phylogeny/e78_branch_is_mut_for_lables_rna.pdf", height = 0.3, width = 0.25)
+
+# Chromosome 4 deletion node
+node19_rna_tree <- tree_subset(phylo_plot_rna, 19, 0)
+
+node19_rna_plot <- ggtree(node19_rna_tree, branch.length = "edge.length", layout = "rectangular", size = 0.25) %<+% tip_data_rna +
+  geom_tiplab(aes(label = label, fill = color),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              #hjust = 0.5,
+              #vjust = 0.5,
+              offset = -0.3,
+              linesize = 0.25) +
+  scale_fill_manual(values = source_type_colors,
+                    name = NULL
+  ) +
+  scale_x_continuous(breaks = c(0, 150), expand = c(0,500)) +
+  theme_tree2() +
+  theme(
+    text = element_text(size = 8),
+    legend.position = "none",
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.x = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0, r = 0.0, b = 0, l = -0.5, unit = "cm")
+  )
+node19_rna_plot
+ggsave("./Figures/Phylogeny/e56_branch_is_mut_for_lables_rna.pdf", height = 0.3, width = 0.25)
 ```
 
 ## Embryo tree with branch lengths
@@ -706,13 +769,21 @@ max_x <- max(plot_embryo$data$x)
 plot_embryo <- plot_embryo + expand_limits(x = max_x * 1.2)
 
 plot_embryo <- plot_embryo +
-  scale_x_continuous(expand = c(0,500)) +
   theme(legend.position = "none",
         legend.key.size = unit(.2, units = "cm"),
-        plot.margin = margin(t = 0, r = .1, b = -.1, l = -.4, unit = "cm"),
+        plot.margin = margin(t = 0, r = -2.5, b = 0, l = -0.75, unit = "cm"),
         axis.line.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.text.x = element_blank())
+plot_embryo +
+  theme(
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_embryos.pdf", height = 1.8, width = 5)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_embryos.png", height = 1.8, width = 5)
+
+plot_embryo <- plot_embryo +
+  scale_x_continuous(expand = c(0,500))
 plot_embryo
 ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_embryos.pdf", height = 1.8, width = 0.75)
 ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_embryos.png", height = 1.8, width = 0.75)

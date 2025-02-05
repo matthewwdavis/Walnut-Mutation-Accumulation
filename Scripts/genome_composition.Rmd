@@ -29,7 +29,6 @@ fasta.table <- select_chr(fasta.table, chr_string = "NC_049")
 chrs <- sum(fasta.table$Length)
 ```
 
-
 ## Total gene length in genome
 ```{r}
 genic <- sum(genes$LENGTH)
@@ -49,7 +48,6 @@ updown_genes <- nrow(genes) * 10000
 ```{r}
 no_gene_assoc <- chrs - (genic + updown_genes)
 ```
-
 
 # Plotting
 ## Creating table for genic/nongenic

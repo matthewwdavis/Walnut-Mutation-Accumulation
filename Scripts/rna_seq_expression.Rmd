@@ -238,27 +238,27 @@ parse_columns <- function(table, sample){
            rna = gsub("gene", "", rna),
            gene = gsub("gene-|name", "", gene),
            name = gsub("seq_id", "", name)) %>%
-    select(-target_id) %>%
-    select(seq_id, everything()) %>%
+    dplyr::select(-target_id) %>%
+    dplyr::select(seq_id, everything()) %>%
     mutate(Source = sample)
   
   # Make the chromosome column numeric
   parse.table$seq_id <- as.numeric(gsub("NC_0499.*?([0-9]+).*", "\\1", parse.table$seq_id))
-
+  
   # Add groups for later coloring
   final.table <- parse.table %>%
-  mutate(Dup_Group = case_when(
-    seq_id == 4 ~ "chr_4",
-    seq_id == 9 ~ "chr_9",
-    TRUE ~ "Other")) %>%
-  mutate(Hom_Group = case_when(
-    seq_id == 11 ~ "chr_11",
-    seq_id == 12 ~ "chr_12",
-    seq_id == 16 ~ "chr_16",
-    TRUE ~ "Other"))
+    mutate(Dup_Group = case_when(
+      seq_id == 4 ~ "chr_4",
+      seq_id == 9 ~ "chr_9",
+      TRUE ~ "Other")) %>%
+    mutate(Hom_Group = case_when(
+      seq_id == 11 ~ "chr_11",
+      seq_id == 12 ~ "chr_12",
+      seq_id == 16 ~ "chr_16",
+      TRUE ~ "Other"))
   return(final.table)
 }
-  
+
 
 read_gff <- function(file){
   
@@ -270,7 +270,7 @@ read_gff <- function(file){
   parse.table <- gff %>%
     mutate(gene = sub(".*gene-([^=]+).*", "\\1", ATTRIBUTE),
            POS = (STOP + START) / 2) %>%
-    select(-ATTRIBUTE) %>%
+    dplyr::select(-ATTRIBUTE) %>%
     filter(!grepl(";", gene))
   
   gff <- parse.table[grep("^NC_0499", parse.table$CHROM), ]
@@ -297,14 +297,14 @@ cr18a1 <- fread("./Data/Kallisto/18A1_abundance.tsv")
 ```
 
 new_labels = c(
-  "ref_chandler" = "Reference", "tree2" = "Tree",
-  "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
-  "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
-  "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
-  "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
-  "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
-  "cr85" = "S 1985", "cr10" = "S 2010",
-  "cr13" = "S 2013", "cr22" = "S 2022"
+"ref_chandler" = "Reference", "tree2" = "Tree",
+"cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+"cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
+"cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
+"cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
+"cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5",
+"cr85" = "S 1985", "cr10" = "S 2010",
+"cr13" = "S 2013", "cr22" = "S 2022"
 )
 
 ## Parse column information and create large data frame
@@ -537,7 +537,7 @@ all_counts %>%
         strip.background = element_blank(),
         strip.text = element_text(face = "bold"),
         plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
-        )
+  )
 ```
 
 ## Plot comapring expression in chromosomes with log
@@ -634,7 +634,7 @@ all_counts %>%
 gff <- read_gff("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
 
 gene_pos <- gff %>%
-  select(CHROM, POS, gene)
+  dplyr::select(CHROM, POS, gene)
 
 gene_pos <- gene_pos %>%
   mutate(gene = sub("_.*", "", gene))
@@ -674,10 +674,10 @@ med_tpm_windows <- trial[, .(med_tpm = median(tpm, na.rm = TRUE)), by = .(CHROM,
 
 # Add a group column
 med_tpm_windows <- med_tpm_windows %>%
-    mutate(Dup_Group = case_when(
-      CHROM == 4 ~ "chr_4",
-      CHROM == 9 ~ "chr_9",
-      TRUE ~ "Other"))
+  mutate(Dup_Group = case_when(
+    CHROM == 4 ~ "chr_4",
+    CHROM == 9 ~ "chr_9",
+    TRUE ~ "Other"))
 
 # Plotting
 med_tpm_windows %>%
@@ -725,7 +725,6 @@ counts.genes <- counts.genes %>%
 ## Plot Counts genes
 ```{r}
 counts.genes %>%
-  mutate(SOURCE = forcats::fct_rev(SOURCE)) %>% # reverse levels
   ggplot(aes(x = POS_WINDOW, y = SOURCE, fill = norm_tpm)) +
   geom_tile() +
   scale_fill_gradientn(colours = c("grey97", "grey95","grey95","grey93","orangered", "orangered2","orangered3","orangered4")) +
@@ -737,20 +736,23 @@ counts.genes %>%
         strip.text.y = element_blank(),  
         legend.position = "none",
         axis.title.y = element_blank(),
+        axis.line.y = element_blank(),
         axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
         axis.ticks.length.y = unit(0.5, "cm"),
         axis.text.y = element_blank(),
         axis.title.x = element_blank(),
-        #axis.line.x = element_blank(),
+        axis.line.x = element_blank(),
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         panel.border = element_rect(fill = NA),
         panel.spacing.y = unit(0.05, "cm"),
         panel.spacing.x = unit(0.05, "cm"),
+        panel.background = element_rect(fill = NA, color = NA),
+        plot.background = element_rect(fill = NA, color = NA),
         plot.margin = margin(t = 0, r = 0.1, b = 0, l = -0, unit = "cm")
-        )
-ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups.pdf", height = 1.5, width = 2.3)
-ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups.png", height = 1.5, width = 2.3)
+  )
+ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups.pdf", height = 1.45, width = 2.7)
+ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups.png", height = 1.45, width = 2.7)
 ```
 
 ## Try windows of gene numbers
@@ -801,7 +803,7 @@ counts.genes %>%
         panel.spacing.y = unit(0.05, "cm"),
         panel.spacing.x = unit(0.05, "cm"),
         plot.margin = margin(t = 0, r = 0.1, b = 0, l = -0, unit = "cm")
-        )
+  )
 ```
 
 ## Try even segments
@@ -845,9 +847,9 @@ counts.genes %>%
   ggplot(aes(x = SEGMENT, y = SOURCE, fill = log(segnorm_tpm))) +
   geom_tile() +
   viridis::scale_fill_viridis(option = "turbo") +
-   # scale_fill_gradientn(
-   # colours = c("royalblue1", "royalblue", "white","white","white", "white","white","white","white","white","white","white","orangered", "orangered","orangered","orangered","orangered"),
-   # values = scales::rescale(c(0.62, 0.65, 0.67, 0.68, 0.69, 0.7, 0.71, 0.72, 0.73, 0.74, .75, 1.2, 1.25,1.3, 1.5, 1.6, 1.7, 1.8)) # Specify explicit mapping
+  # scale_fill_gradientn(
+  # colours = c("royalblue1", "royalblue", "white","white","white", "white","white","white","white","white","white","white","orangered", "orangered","orangered","orangered","orangered"),
+  # values = scales::rescale(c(0.62, 0.65, 0.67, 0.68, 0.69, 0.7, 0.71, 0.72, 0.73, 0.74, .75, 1.2, 1.25,1.3, 1.5, 1.6, 1.7, 1.8)) # Specify explicit mapping
   #limits = c(0, 1.6), # Ensure your range covers all values
   #oob = scales::squish # Handle out-of-bounds values
   # #scale_fill_gradientn() 
@@ -856,8 +858,8 @@ counts.genes %>%
   #   mid = "white", 
   #   high = "brown", 
   #   midpoint = 1
-   #) +
-  facet_grid(SOURCE~CHROM, scales = "free", space = "free") +
+#) +
+facet_grid(SOURCE~CHROM, scales = "free", space = "free") +
   theme_classic(base_size = 6) +
   theme(strip.background = element_blank(),
         strip.text.x = element_text(margin = margin(t = 1, b = 1, unit = "pt")),
@@ -876,7 +878,7 @@ counts.genes %>%
         panel.spacing.y = unit(0.05, "cm"),
         panel.spacing.x = unit(0.05, "cm"),
         plot.margin = margin(t = 0, r = 0.1, b = 0, l = -0, unit = "cm")
-        )
+  )
 ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_5seg.pdf", height = 1.5, width = 2.3)
 ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_5seg.png", height = 1.5, width = 2.3)
 ```
@@ -916,7 +918,7 @@ test %>%
   #viridis::scale_fill_viridis(option = "turbo") +
   scale_fill_gradientn(colours = c("royalblue1", "royalblue2", "royalblue", "white","gray98", "gray96", "gray94", "gray92", "grey90","orangered", "orangered2", "orangered3"),
                        #values = scales::rescale(c(-0.86, -0.8, -.6, -.4, 0, .15, .25, .35, .45, .6))
-                       )+
+  )+
   facet_grid(SOURCE~CHROM, scales = "free", space = "free") +
   theme_classic(base_size = 6)
 ```

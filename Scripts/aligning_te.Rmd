@@ -1,0 +1,368 @@
+---
+title: "aligning_te"
+author: "Matthew Davis"
+date: "2025-02-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Library
+```{r}
+library(ggenomics)
+library(Biostrings)
+library(msa)
+library(phangorn)
+library(ggtree)
+```
+
+## Functions
+```{r}
+ss_rev_comp <- function(seq_table, seq_col = "INS_SEQ", names_col = "QSEQID"){ 
+  
+  # Extract by strand
+  rev_seqs <- seq_table[STRAND %in% "-"]
+  for_seqs <- seq_table[STRAND %in% "+"]
+  
+  # Convert to stringset
+  for_stringset <- DNAStringSet(for_seqs[[seq_col]])
+  names(for_stringset) <-  for_seqs[[names_col]]
+  
+  # Convert and reverese complement
+  rev_stringset <- reverseComplement(DNAStringSet(rev_seqs[[seq_col]]))
+  names(rev_stringset) <- rev_seqs[[names_col]]
+  
+  # Combine
+  full_ss <- c(for_stringset, rev_stringset)
+  
+  return(full_ss)
+}
+
+
+bs_plot <- function(phydata, bootstraps = 1e3){
+  
+  upgma_func <- function(x) upgma(dist.ml(x))
+  
+  upgma_tree <- upgma(dist.ml(phydata))
+  
+  bs_upgma <- bootstrap.phyDat(phydata, upgma_func , bs = bootstraps)
+  
+  plotBS(upgma_tree, bs_upgma, main="UPGMA")
+  
+  bs_upgma_tree <- plotBS(upgma_tree, bs_upgma, main="UPGMA")
+  
+  return(bs_upgma_tree)
+  
+}
+
+count_tips_per_node <- function(tree) {
+  if (!inherits(tree, "phylo")) {
+    stop("Input must be a phylo object.")
+  }
+  
+  internal_nodes <- (Ntip(tree) + 1):max(tree$edge)
+  node_tips <- sapply(internal_nodes, function(node) {
+    length(Descendants(tree, node, type = "tips")[[1]])
+  })
+  
+  return(setNames(node_tips, internal_nodes))
+}
+```
+
+## Read in data
+
+```{r}
+sv <- fread("./Data/VCFs/SV_VCF/Parsed/parsed_ins_dels_pbsv.vcf")
+blast_sv <- fread("./Data/Blast_Tables/Parsed/sv_table.tsv")
+```
+
+# Prepare data
+## Make sv have same QSEQID name as blast
+```{r}
+sv[, NUM := seq_len(.N), by = SVLEN]
+sv[, QSEQID := paste(SVLEN, CHROM, POS, HAP, NUM, sep = "_")]
+```
+
+## Order data by CHROM, HAP, SSTART
+```{r}
+setorder(sv, CHROM, HAP, POS)
+setorder(blast_sv, CHROM, HAP, SSTART)
+```
+
+## Select and rename columns for join
+```{r}
+setnames(sv, old = c("CHROM", "HAP", "POS", "ALT"), new = c("INS_CHROM", "INS_HAP", "INS_POS", "INS_SEQ"))
+select_sv <- sv[, .(QSEQID, INS_CHROM, INS_POS, INS_SEQ, REFAD, ALTAD, DEPTH, VAF, SOURCE)]
+
+setnames(blast_sv, old = c("CHROM", "HAP", "LENGTH", "SSTART", "SEND"), new = c("BLAST_CHROM", "BLAST_HAP", "BLAST_ALIGN_LENGTH", "BLAST_START", "BLAST_END"))
+select_blast <- blast_sv[, .(QSEQID, BLAST_CHROM, BLAST_HAP, BLAST_START, BLAST_END, STRAND)]
+```
+
+## Join the two files, filter for CR2 only, order
+```{r}
+sv_interest <- merge(select_blast, select_sv, by = "QSEQID", all.x = TRUE)
+
+cr2_sv <- sv_interest[SOURCE %in% "cr2"]
+
+setorder(cr2_sv, BLAST_CHROM, BLAST_HAP, BLAST_START)
+```
+
+## Create tables based on similar BLAST locations
+```{r}
+all_900 <- cr2_sv[(BLAST_CHROM %in% 11 & BLAST_START > 26000000 & BLAST_START < 27000000) | (BLAST_CHROM %in% 10)]
+large_900 <- all_900[BLAST_CHROM %in% 11]
+all_5000 <- cr2_sv[(BLAST_CHROM %in% 13 & BLAST_HAP %in% "B" & BLAST_START > 800000 & BLAST_START < 820000) | (BLAST_CHROM %in% 7 & BLAST_HAP %in% "B" & BLAST_START > 48800000 & BLAST_START < 48900000)]
+small_5000 <- all_5000[BLAST_CHROM %in% 7]
+large_5000 <- all_5000[BLAST_CHROM %in% 13]
+```
+
+## Create stringset and Reverse complement the - strand
+```{r}
+all_900_ss <- ss_rev_comp(all_900)
+large_900_ss <- ss_rev_comp(large_900)
+all_5000_ss <- ss_rev_comp(all_5000)
+large_5000_ss <- ss_rev_comp(large_5000)
+small_5000_ss <- ss_rev_comp(small_5000)
+```
+
+# Sequence alignment
+## Align the sequences with Muscle
+```{r}
+align_all_900 <- msa(all_900_ss, method = "Muscle")
+align_large_900 <- msa(large_900_ss, method = "Muscle")
+align_all_5000 <- msa(all_5000_ss, method = "Muscle")
+align_large_5000 <- msa(large_5000_ss, method = "Muscle")
+align_small_5000 <- msa(small_5000_ss, method = "Muscle")
+```
+
+## Write out fasta
+```{r}
+# 900 class
+msaPrettyPrint(align_all_900, alFile = "./Data/Alignments/all_900_muscle_align.fasta")
+msaPrettyPrint(align_large_900, alFile = "./Data/Alignments/large_900_muscle_align.fasta")
+
+# 5000 class. Error is fine, only for the pdf 
+msaPrettyPrint(align_all_5000, alFile = "./Data/Alignments/all_5000_muscle_align.fasta")
+msaPrettyPrint(align_large_5000, alFile = "./Data/Alignments/large_5000_muscle_align.fasta")
+msaPrettyPrint(align_small_5000, alFile = "./Data/Alignments/small_5000_muscle_align.fasta")
+```
+
+Further sequence investigation completed in Geneious
+
+# Archive
+## Functions
+```{r, eval=FALSE}
+rev_seqs <- function(seq_to_rev, for_seqs, full_seqs){
+  
+  seq_to_rev <- full_seqs[UNIQUE %in% seq_to_rev$tip.label]
+  for_seqs <- full_seqs[UNIQUE %in% for_seqs$tip.label]
+  
+  
+  seq_to_rev_stringset <- reverseComplement(DNAStringSet(seq_to_rev$ALT))
+  names(seq_to_rev_stringset) <- seq_to_rev$UNIQUE
+  for_seqs_stringset <- DNAStringSet(for_seqs$ALT)
+  names(for_seqs_stringset) <- for_seqs$UNIQUE
+  
+  full_ss <- c(for_seqs_stringset, seq_to_rev_stringset)
+  
+  return(full_ss)
+}
+
+convert_to_strings <- function(table, seq_col, names_col){
+  
+  stringset <- DNAStringSet(table[[seq_col]])
+  names(stringset) <- table[[names_col]]
+  
+  return(stringset)
+}
+```
+
+
+## Read in data
+```{r, eval=FALSE}
+sv <- fread("./Data/VCFs/SV_VCF/Parsed/parsed_ins_dels_pbsv.vcf")
+```
+
+# Prepare data
+## Create unique identifier
+```{r, eval=FALSE}
+sv[, NUM := seq_len(.N), by = SVLEN]
+sv[, UNIQUE := paste(SVLEN, NUM, sep = "_")]
+```
+
+## Assign TE ranges
+```{r, eval=FALSE}
+sv[, TE := fifelse(SVLEN %in% 5353:5553, "te_5453", "sv")]
+sv[, TE := fifelse(SVLEN %in% 799:999, "te_899", TE)]
+```
+
+## Filter for TE ranges
+```{r, eval=FALSE}
+te_899 <- sv[TE %in% "te_899"]
+te_5453 <- sv[TE %in% "te_5453"]
+```
+
+# Align data
+## Create a biostrings object for the SVs
+```{r, eval=FALSE}
+te_899_stringset <- DNAStringSet(te_899$ALT)
+names(te_899_stringset) <- te_899$UNIQUE
+
+te_5453_stringset <- DNAStringSet(te_5453$ALT)
+names(te_5453_stringset) <- te_5453$UNIQUE
+```
+
+## Align with muscle
+```{r, eval=FALSE}
+muscle_align_899 <- msa(te_899_stringset, method = "Muscle")
+muscle_align_5453 <- msa(te_5453_stringset, method = "Muscle")
+```
+
+# Prepare alignments for plotting
+## Generate matrices from alignments
+```{r, eval=FALSE}
+muscle_matrix_899 <- as.matrix(muscle_align_899)
+muscle_matrix_5453 <- as.matrix(muscle_align_5453)
+```
+
+## create phy data object
+```{r, eval=FALSE}
+muscle_899_phy_data <- phyDat(muscle_matrix_899, type = "DNA")
+muscle_5453_phy_data <- phyDat(muscle_matrix_5453, type = "DNA")
+```
+
+# Plot tree
+## Create bootstrap UPGMA
+```{r, eval=FALSE}
+set.seed(42)
+muscle_899_bs_upgma <- bs_plot(muscle_899_phy_data, bootstraps = 1e2)
+muscle_5453_bs_upgma <- bs_plot(muscle_5453_phy_data, bootstraps = 1e2)
+```
+
+## ggtree to see what sequences must be flipped
+```{r, eval=FALSE}
+ggtree(muscle_899_bs_upgma, branch.length = "edge.length", layout = "daylight") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = label),
+               geom = "shadowtext",
+               #vjust = 1,
+               size = 2,
+               align = FALSE)
+
+ggtree(muscle_5453_bs_upgma, branch.length = "edge.length", layout = "daylight") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = node),
+               geom = "shadowtext",
+               #vjust = 1,
+               size = 2,
+               align = FALSE)
+```
+
+# Reverse complement sequences
+## Count sequences at each node
+```{r, eval=FALSE}
+count_tips_per_node(muscle_5453_bs_upgma)
+count_tips_per_node(muscle_899_bs_upgma)
+```
+
+## Extract clades
+```{r, eval=FALSE}
+rev_5453 <- extract.clade(muscle_5453_bs_upgma, 128)
+for_5453 <- extract.clade(muscle_5453_bs_upgma, 127)
+rev_899 <- extract.clade(muscle_899_bs_upgma, 36)
+partial_for_899 <- extract.clade(muscle_899_bs_upgma, 37)
+```
+
+## Find the missing 899 and add it back
+```{r, eval=FALSE}
+# extract the missing 899
+seq_924 <- sv[SVLEN == 924]
+
+# Extract forward
+partial_for_899 <- sv[UNIQUE %in% partial_for_899$tip.label]
+
+# Recombine
+for_899 <- rbind(partial_for_899, seq_924)
+```
+
+
+## Reverse sequences and recombine
+```{r, eval=FALSE}
+full_5453_ss <- rev_seqs(rev_5453, for_5453, sv)
+
+rev_899 <- sv[UNIQUE %in% rev_899$tip.label]
+
+rev_899_stringset <- reverseComplement(DNAStringSet(rev_899$ALT))
+names(rev_899_stringset) <- rev_899$UNIQUE
+for_899_stringset <- DNAStringSet(for_899$ALT)
+names(for_899_stringset) <- for_899$UNIQUE
+
+full_899_ss <- c(for_899_stringset, rev_899_stringset)
+```
+
+# Re-align sequences after complementation
+## align with MSA
+```{r, eval=FALSE}
+muscle_align_5453_full <- msa(full_5453_ss, method = "Muscle")
+muscle_align_899_full <- msa(full_899_ss, method = "Muscle")
+
+#msaPrettyPrint(muscle_align_5453_full, alFile = "./Data/Alignments/muscle_aligned_5453_large.fasta")
+#msaPrettyPrint(muscle_align_899_full, alFile = "./Data/Alignments/muscle_aligned_899_large.fasta")
+```
+
+## Create matrix
+```{r, eval=FALSE}
+muscle_matrix_5453_full <- as.matrix(muscle_align_5453_full)
+muscle_matrix_899_full <- as.matrix(muscle_align_899_full)
+```
+
+## Create phy data object
+```{r, eval=FALSE}
+muscle_5453_full_phy_data <- phyDat(muscle_matrix_5453_full, type = "DNA")
+muscle_899_full_phy_data <- phyDat(muscle_matrix_899_full, type = "DNA")
+```
+
+# Plot the reversed sequences
+## Bootstrap
+```{r, eval=FALSE}
+muscle_5453_full_bs_upgma <- bs_plot(muscle_5453_full_phy_data, bootstraps = 1e2)
+muscle_899_full_bs_upgma <- bs_plot(muscle_899_full_phy_data, bootstraps = 1e2)
+```
+
+## plot ggtree to see reveresed realtionships
+```{r, eval=FALSE}
+ggtree(muscle_5453_full_bs_upgma, branch.length = "edge.length", layout = "equal_angle") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = label),
+               geom = "text",
+               #vjust = 1,
+               size = 2,
+               align = FALSE)
+
+ggtree(muscle_899_full_bs_upgma, branch.length = "edge.length", layout = "daylight") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = label),
+               geom = "text",
+               #vjust = 1,
+               size = 2,
+               align = FALSE)
+```

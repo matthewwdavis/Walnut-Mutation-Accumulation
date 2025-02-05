@@ -1,0 +1,577 @@
+---
+title: "circos_plots"
+author: "Matthew Davis"
+date: "2024-07-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Start from scratch
+## New Libraries
+```{r, message=FALSE}
+library(ggenomics)
+library(circlize)
+library(GenomicRanges)
+```
+
+## Functions
+```{r}
+chr_length_table <- function(fasta){
+  
+  data <- data.table(CHROM = names(fasta), END = width(fasta))
+  data <- data %>%
+    mutate(START = 1)
+  data <- data[grepl("NC_04", data$CHROM),]
+  
+  data$HAP <- gsub("NC_0499([0-9]+).1_RagTag_(hap[0-9]+)", "\\2", data$CHROM)
+  
+  data$CHROM <- as.numeric(gsub("NC_0499([0-9]+).1_RagTag_(hap[0-9]+)", "\\1", data$CHROM))
+  
+  data[, HAP := fifelse(HAP == "hap1", "A", "B")]
+  
+  data <- data %>%
+    dplyr::select(c("CHROM", "HAP", "START", "END"))
+  
+  data <- data[order(CHROM)]
+  
+  data[, Chr := paste(CHROM, HAP, sep = "")]
+  data[, Start := START]
+  data[, End := END]
+  
+  data <- data %>%
+    dplyr::select(Chr, Start, End)
+  
+  return(data)
+  
+}
+```
+
+## Read in data
+```{r}
+ref_combo <- ggread_fasta("./Data/Fastas/ref_chandler_combohap_default_scaffold.fasta")
+h1genes <- fread("./Data/GFFs/Parsed/hap1_genes_good.tsv")
+h2genes <- fread("./Data/GFFs/Parsed/hap2_genes_good.tsv")
+blast_5453 <- fread("./Data/Blast_Tables/Parsed/te_5453_table.tsv")
+blast_899 <- fread("./Data/Blast_Tables/Parsed/te_899_table.tsv")
+sv <- fread("./Data/VCFs/SV_VCF/Parsed/parsed_ins_dels_pbsv.vcf")
+```
+
+# Prepare chromosomes
+## Create chromosome lengths table
+```{r}
+ref_chr.table <- chr_length_table(ref_combo)
+```
+
+## Filter the biostrings object for later use
+```{r}
+ref_combo <- ref_combo[grepl("^NC_0499", names(ref_combo))]
+
+seq_names <- names(ref_combo)
+
+hap_values <- gsub("NC_0499([0-9]+).1_RagTag_(hap[0-9]+)", "\\2", seq_names)
+hap_values <- fifelse(hap_values == "hap1", "A", "B")
+
+chrom_values <- as.numeric(gsub("NC_0499([0-9]+).1_RagTag_(hap[0-9]+)", "\\1", seq_names))
+
+new_names <- paste(chrom_values, hap_values, sep = "")
+
+names(ref_combo) <- new_names
+```
+
+# Prepare TE links
+## Filter sv files
+```{r}
+# Create SV names to match with blast_tables
+sv[, NUM := seq_len(.N), by = SVLEN]
+sv[, QSEQID := paste(SVLEN, CHROM, POS, HAP, NUM, sep = "_")]
+sv[, EndChr := paste(CHROM, HAP, sep = "")]
+sv[, EndPos := POS]
+
+small_sv <- sv %>%
+  dplyr::select(QSEQID, EndChr, EndPos)
+```
+
+## Select necessary columns from te blast tables
+```{r}
+blast_899[, StartChr := paste(CHROM, HAP, sep = "")]
+blast_899[, StartPos := SSTART]
+blast_899[, QSEQID := gsub("_\\(reversed\\)", "", QSEQID)]
+blast_899 <- blast_899 %>%
+  dplyr::select(QSEQID, StartChr, StartPos)
+
+blast_5453[, StartChr := paste(CHROM, HAP, sep = "")]
+blast_5453[, StartPos := SSTART]
+blast_5453[, QSEQID := gsub("_\\(reversed\\)", "", QSEQID)]
+blast_5453 <- blast_5453 %>%
+  dplyr::select(QSEQID, StartChr, StartPos)
+```
+
+## Remove the tandem duplicate that was split
+```{r}
+blast_899[, QSEQID := sub("(*.)(-[0-9])", "\\1", QSEQID)]
+blast_899 <- blast_899[-.N]
+```
+
+## Create link tables
+```{r}
+## Join tables
+link_899 <- left_join(blast_899, small_sv, by = join_by(QSEQID))
+link_5453 <- left_join(blast_5453, small_sv, by = join_by(QSEQID))
+
+## Set as DT
+setDT(link_899)
+setDT(link_5453)
+
+## add color columns
+link_899[, color := fifelse(QSEQID %in% "1792_3_382285_A_1", "firebrick4", "#7287eb") ]
+link_899 <- link_899[order(link_899$color), ]
+link_5453[, color := fifelse(StartChr %in% "7B", "skyblue4", "#eb7287")]
+link_5453 <- link_5453[order(link_5453$color), ]
+```
+
+# Creating heatmap for gene density
+## Preparing gff
+```{r}
+# Create chromosome column
+h1genes[, Chr := paste(CHROM, HAP, sep = "")]
+h2genes[, Chr := paste(CHROM, HAP, sep = "")]
+
+# Combine
+genes <- rbind(h1genes, h2genes)
+
+# select only necessary columns
+genes <- genes %>%
+  dplyr::select(Chr, START, STOP)
+```
+
+## generate heatmap
+```{r}
+# Create a Seqinfo object
+seqinfo <- Seqinfo(names(ref_combo), seqlengths = width(ref_combo))
+
+# Step 2: Read the BED file
+bed_df <- genes
+colnames(bed_df) <- c("chr", "start", "end")
+
+# Step 3: Divide the genome into bins
+bin_size <- 1e6
+bins <- tileGenome(seqinfo, tilewidth = bin_size, cut.last.tile.in.chrom = TRUE)
+
+# Step 4: Count the number of genes in each bin
+genes2 <- GRanges(seqnames = bed_df$chr, ranges = IRanges(start = bed_df$start, end = bed_df$end))
+gene_counts <- countOverlaps(bins, genes2)
+bins$gene_density <- gene_counts
+
+# Step 5: Visualize gene density using circlize
+heatmap_data <- data.frame(
+  chr = as.character(seqnames(bins)),
+  start = start(bins),
+  end = end(bins),
+  value = bins$gene_density
+)
+
+# Step 6: rectangles for the heatmaps
+rect_data <- ref_chr.table[,-1]
+```
+
+
+# Plot
+## 899 TE circos
+```{r}
+par(mar = c(0, 0, 0, 0))
+pdf("./Figures/Transposable_Elements/circos_899.pdf", height = 2.6, width = 2.6)
+# Set smaller padding
+circos.par(track.margin = c(0.005, 0.005), start.degree = 90, circle.margin = .01)
+
+# Intialize plot
+circos.genomicInitialize(ref_chr.table, plotType = "axis", tickLabelsStartFromZero = FALSE, major.by = 60e6)
+
+# Adjust and rotate labels
+circos.track(track.index = 1, panel.fun = function(x, y) {
+    circos.text(CELL_META$xcenter,
+                CELL_META$ylim[2],
+                CELL_META$sector.index, 
+        facing = "clockwise",
+        niceFacing = FALSE,
+        cex = 0.5)
+}, bg.border = NA)
+
+# Add heatmap
+circos.genomicHeatmap(heatmap_data, col = colorRamp2(c(min(heatmap_data$value), max(heatmap_data$value)), c("white", "mediumseagreen")), heatmap_height = 0.15, connection_height = NULL, side = "inside")
+
+# Generate rectangles for heatmap
+for (chr in unique(ref_chr.table$Chr)) {
+  chr_data <- rect_data[ref_chr.table$Chr == chr, ]
+  circos.genomicRect(
+    chr_data,
+    ytop = 1.5, ybottom = 0.5,
+    border = "black",
+    sector.index = as.character(chr),
+    par(lwd = 0.75)
+  )
+}
+
+# Add TE links
+for (i in seq_len(nrow(link_899))) {
+  circos.link(link_899$StartChr[i],
+              link_899$StartPos[i],
+              link_899$EndChr[i],
+              link_899$EndPos[i],
+              col = adjustcolor(link_899$color[i], alpha.f = 0.5),
+              lwd = 2.5)
+}
+dev.off()
+circos.clear()
+```
+
+## 5453 TE circos
+```{r}
+par(mar = c(0, 0, 0, 0))
+pdf("./Figures/Transposable_Elements/circos_5453.pdf", height = 2.6, width = 2.6)
+# Set smaller padding
+circos.par(track.margin = c(0.005, 0.005), start.degree = 90, circle.margin = .01)
+
+# Intialize plot
+circos.genomicInitialize(ref_chr.table, plotType = "axis", tickLabelsStartFromZero = FALSE, major.by = 60e6)
+
+# Adjust and rotate labels
+circos.track(track.index = 1, panel.fun = function(x, y) {
+    circos.text(CELL_META$xcenter,
+                CELL_META$ylim[2],
+                CELL_META$sector.index, 
+        facing = "clockwise",
+        niceFacing = FALSE,
+        cex = 0.5)
+}, bg.border = NA)
+
+# Add heatmap
+circos.genomicHeatmap(heatmap_data, col = colorRamp2(c(min(heatmap_data$value), max(heatmap_data$value)), c("white", "mediumseagreen")), heatmap_height = 0.15, connection_height = NULL, side = "inside")
+
+# Generate rectangles for heatmap
+for (chr in unique(ref_chr.table$Chr)) {
+  chr_data <- rect_data[ref_chr.table$Chr == chr, ]
+  circos.genomicRect(
+    chr_data,
+    ytop = 1.5, ybottom = 0.5,
+    border = "black",
+    sector.index = as.character(chr),
+    par(lwd = 0.75)
+  )
+}
+
+# Create te links
+for (i in seq_len(nrow(link_5453))) {
+  circos.link(link_5453$StartChr[i],
+              link_5453$StartPos[i],
+              link_5453$EndChr[i],
+              link_5453$EndPos[i],
+              col = adjustcolor(link_5453$color[i], alpha.f = 0.5),
+              lwd = 2.5)
+}
+dev.off()
+circos.clear()
+```
+
+
+
+# Archive
+#Setup
+## Library
+```{r, message=FALSE}
+library(tidyverse)
+library(circlize)
+library(migest)
+library(Biostrings)
+library(data.table)
+library(seqinr)
+```
+
+## Functions
+```{r, eval = FALSE}
+# Extract chromosome lengths
+read_fasta <- function(file){
+  
+  genome_fasta <- readDNAStringSet(file)
+  
+  # Filter the DNAStringSet object to keep only chromosomes
+  chromosome_pattern <- "NC_04"  # Modify this pattern based on your data
+  chromosome_indices <- grepl(chromosome_pattern, names(genome_fasta))
+  genome_fasta <- genome_fasta[chromosome_indices]
+  
+  
+  # Original names in the genome FASTA file
+  original_names <- names(genome_fasta)
+  
+  # Create a function to map original names to the GFF naming convention
+  rename_function <- function(name) {
+    # Extract the necessary part and format it
+    # This example assumes a specific format - modify as needed for your data
+    chr_num <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", name))
+    return(chr_num)
+  }
+  
+  # Apply the renaming function to all sequence names
+  new_names <- sapply(original_names, rename_function)
+  
+  # Assign the new names to the genome FASTA object
+  names(genome_fasta) <- new_names
+  
+  return(genome_fasta)
+  
+}
+
+read_fasta2 <- function(file){
+  
+  genome_fasta <- read.fasta(file)
+  
+  # Filter the DNAStringSet object to keep only chromosomes
+  chromosome_pattern <- "NC_04"  # Modify this pattern based on your data
+  chromosome_indices <- grepl(chromosome_pattern, names(genome_fasta))
+  genome_fasta <- genome_fasta[chromosome_indices]
+  
+  
+  # Original names in the genome FASTA file
+  original_names <- names(genome_fasta)
+  
+  # Create a function to map original names to the GFF naming convention
+  rename_function <- function(name) {
+    # Extract the necessary part and format it
+    # This example assumes a specific format - modify as needed for your data
+    chr_num <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", name))
+    return(chr_num)
+  }
+  
+  # Apply the renaming function to all sequence names
+  new_names <- sapply(original_names, rename_function)
+  
+  # Assign the new names to the genome FASTA object
+  names(genome_fasta) <- new_names
+  
+  return(genome_fasta)
+  
+}
+
+chr_lengths <- function(fasta){
+  
+  data <- data.table(Chr = names(fasta), End = width(fasta))
+  data <- data %>%
+    mutate(Start = 1)
+  data <- data[grepl("NC_04", data$Chr),] # select chromosomes
+  
+  # Extract the chromosome number 
+  data$Chr <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", data$Chr))
+  
+  data <- data %>%
+    select(c("Chr", "Start", "End"))
+  
+  return(data)
+}
+
+read_gff <- function(gff_file) {
+  # Read in data
+  gff <- fread(gff_file, sep = "\t", header = FALSE, stringsAsFactors = FALSE)
+  
+  # Extract chromosomes
+  gff <- gff[grepl("NC_04", gff$V1),]
+  
+  # Extract the chromosome number
+  gff$Chr <- as.numeric(gsub("NC_0499(..).1_RagTag", "\\1.", gff$V1))
+  
+  # Select and rename columns
+  gff <- gff %>%
+    select(Chr, V3, V4, V5)
+  
+  colnames(gff) <- c("Chr", "Feature", "Start", "End")
+  
+  return(gff)
+}
+
+```
+
+## Read in data
+```{r, eval = FALSE}
+# Fasta assembly
+ref_pri.fasta <- readDNAStringSet("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+test <- read_fasta("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+test2 <- read_fasta2("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+gff <- read_gff("./Data/GFFs/Chromosome_Only_Liftoff/ref_chandler_primary_default_scaffold_chr_only_liftoff_a99s99.gff")
+```
+
+## Filtering data frames 
+```{r, eval = FALSE}
+ref_pri.lengths <- chr_lengths(ref_pri.fasta)
+
+genes <- gff %>%
+  filter(Feature == "gene") %>%
+  select(-Feature)
+
+genes.mat <- as.matrix(genes)
+```
+
+# Plotting
+## Trying genomic ranges
+```{r, eval = FALSE}
+library(GenomicRanges)
+# Create a Seqinfo object
+seqinfo <- Seqinfo(names(test), seqlengths = width(test))
+
+# Step 2: Read the BED file
+bed_df <- genes
+colnames(bed_df) <- c("chr", "start", "end")
+
+# Step 3: Divide the genome into bins
+bin_size <- 1e6
+bins <- tileGenome(seqinfo, tilewidth = bin_size, cut.last.tile.in.chrom = TRUE)
+
+# Step 4: Count the number of genes in each bin
+genes2 <- GRanges(seqnames = bed_df$chr, ranges = IRanges(start = bed_df$start, end = bed_df$end))
+gene_counts <- countOverlaps(bins, genes2)
+bins$gene_density <- gene_counts
+
+# Step 5: Visualize gene density using circlize
+heatmap_data <- data.frame(
+  chr = as.character(seqnames(bins)),
+  start = start(bins),
+  end = end(bins),
+  value = bins$gene_density
+)
+
+# Step 6: rectangles for the heatmaps
+rect_data <- ref_pri.lengths[,-1]
+```
+
+## GC content windows
+```{r, eval = FALSE}
+gc_content <- function(sequence) {
+  gc_count <- sum(sequence == "g" | sequence == "c" | sequence == "G" | sequence == "C")
+  total_count <- length(sequence)
+  return(gc_count / total_count)
+}
+
+gc_count <- function(sequence){
+  gc_count <- sum(sequence == "g" | sequence == "c" | sequence == "G" | sequence == "C")
+  return(gc_count)
+}
+
+# Define window size (1 mb)
+window_size <- 1e6
+
+# Initialize a data frame to store the output
+output_df <- data.frame(chr = character(), start = numeric(), stop = numeric(), value = numeric(), stringsAsFactors = FALSE)
+
+# Iterate over each sequence
+for (seq_name in names(test2)) {
+  sequence <- test2[[seq_name]]
+  sequence_length <- length(sequence)
+  
+  # Calculate GC counts for each window
+  for (start_pos in seq(1, sequence_length, by = window_size)) {
+    end_pos <- min(start_pos + window_size - 1, sequence_length)
+    window_seq <- sequence[start_pos:end_pos]
+    gc_content_value <- gc_content(window_seq)
+    
+    # Append the results to the data frame
+    output_df <- rbind(output_df, data.frame(chr = seq_name, start = start_pos, stop = end_pos, value = gc_content_value, stringsAsFactors = FALSE))
+  }
+}
+
+output_df
+```
+
+
+## Try to plot
+```{r, eval = FALSE}
+value_range <- range(output_df$value)
+
+circos.genomicInitialize(ref_pri.lengths)
+circos.genomicHeatmap(heatmap_data, col = colorRamp2(c(min(heatmap_data$value), max(heatmap_data$value)), c("white", "red")), heatmap_height = 0.075, connection_height = NULL, side = "inside")
+for (chr in 1:16) {
+  chr_data <- rect_data[ref_pri.lengths$Chr == chr, ]
+  circos.genomicRect(
+    chr_data,
+    ytop = 1.5, ybottom = 0.5,
+    border = "black",
+    sector.index = as.character(chr)
+  )
+}
+for (i in 1:16) {
+  chr_data <- output_df %>%
+    filter(chr == i) %>%
+    select(-chr)
+  
+  value_data <- output_df %>%
+    filter(chr == i) %>%
+    select(value)
+  
+  circos.genomicLines(
+    region = chr_data,
+    value = value_data,
+    ytop.field = "value", ybottom = 0, 
+    sector.index = as.character(i),
+    ylim()
+  )
+  
+  # Length data
+  length_data <- rect_data[ref_pri.lengths$Chr == i, ]
+  circos.genomicRect(
+    length_data,
+    border = "black",
+    ytop = .5, ybottom = - 0.5,
+    sector.index = as.character(i),
+  )
+}
+```
+
+
+## Plot 2
+```{r, eval = FALSE}
+#pdf("~/Desktop/initial_circos.pdf") 
+
+# Set smaller padding
+circos.par(track.margin = c(0.0075, 0.0075))
+
+# Intialize plot
+circos.genomicInitialize(ref_pri.lengths)
+
+# Make heatmap
+circos.genomicHeatmap(heatmap_data, col = colorRamp2(c(min(heatmap_data$value), max(heatmap_data$value)), c("white", "coral")), heatmap_height = 0.075, connection_height = NULL, side = "inside")
+
+# Generate rectangles for heatmap
+for (chr in 1:16) {
+  chr_data <- rect_data[ref_pri.lengths$Chr == chr, ]
+  circos.genomicRect(
+    chr_data,
+    ytop = 1.5, ybottom = 0.5,
+    border = "black",
+    sector.index = as.character(chr)
+  )
+}
+
+# Add a track for gc content as a line
+circos.track(ylim = c(-2.1,5.3), panel.fun = function(x, y) {
+  i <- get.cell.meta.data("sector.index")
+  
+  chr_data <- output_df %>%
+    filter(chr == i) %>%
+    select(-chr)
+  
+  value_data <- output_df %>%
+    filter(chr == i) %>%
+    mutate(zscore=scale(value)) %>%
+    select(zscore)
+  
+  circos.genomicLines(
+    region = chr_data,
+    value = value_data,
+    ytop.field = "value", ybottom = 0,
+    sector.index = as.character(i),
+    col = "skyblue3"
+  )
+}, track.height = 0.075, )
+
+#dev.off()
+```
