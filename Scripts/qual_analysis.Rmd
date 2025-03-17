@@ -1,5 +1,5 @@
 ---
-title: "snp_qual_analysis"
+title: "qual_analysis"
 author: "Matthew Davis"
 date: "2024-11-02"
 output: html_document

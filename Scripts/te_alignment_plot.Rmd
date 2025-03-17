@@ -9,60 +9,198 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Setup
+# Set up
 ## Libraries
 ```{r}
 library(ggenomics)
-```
-
-## Function
-```{r}
-
+library(msa)
 ```
 
 ## Read in data
 ```{r}
-align_5500 <- ggread_fasta("./Data/Alignments/all_5500_trimmed_mafft_alignment.fasta")
-align_900 <- ggread_fasta("./Data/Alignments/all_900_trimmed_mafft_alignment.fasta")
+class900 <- ggread_fasta("./Data/Fastas/TEs/class_900_with_ref_trimmed.fasta")
+class5500 <- ggread_fasta("./Data/Fastas/TEs/class_5500_with_ref_trimmed.fasta")
+names(class5500)
+names(class900)
 ```
+
+# Align data
+## Muscle
+```{r}
+align900 <- msa(class900, method = "Muscle")
+align5500 <- msa(class5500, method = "Muscle")
+```
+
+## Convert alignment to DNAStringSet
+```{r}
+ssalign900 <- DNAStringSet(align900)
+ssalign5500 <- DNAStringSet(align5500)
+```
+
 
 # Prepare data
 ## Create data table
 ```{r}
-table_5000 <- data.table(NAME = names(align_5500), SEQUENCE = as.character(align_5500))
+table5500 <- data.table(NAME = names(ssalign5500), SEQUENCE = as.character(ssalign5500))
 
-long_5000 <- table_5000[, .(NUCLEOTIDE = unlist(strsplit(SEQUENCE, "")),
-                                POSITION = rep(1:nchar(SEQUENCE), .N)),
-                           by = NAME]
+long5500 <- table5500[, .(NUCLEOTIDE = unlist(strsplit(SEQUENCE, "")),
+                          POSITION = rep(1:nchar(SEQUENCE), .N)),
+                      by = NAME]
 
-table_900 <- data.table(NAME = names(align_900), SEQUENCE = as.character(align_900))
+consensus <- long5500[, .(CON_NUCLEOTIDE = names(which.max(table(NUCLEOTIDE)))), by = POSITION]
 
-long_900 <- table_900[, .(NUCLEOTIDE = unlist(strsplit(SEQUENCE, "")),
-                                POSITION = rep(1:nchar(SEQUENCE), .N)),
-                           by = NAME]
-```
+con5500 <- merge(long5500, consensus, by = "POSITION", all.x = TRUE)
 
-## Set colors
-```{r}
-color_map <- c("A" = "red", "C" = "blue", "G" = "yellow", "T" = "green", "-" = "grey")
-long_5000$COLOR <- color_map[long_5000$NUCLEOTIDE]
-long_900$COLOR <- color_map[long_900$NUCLEOTIDE]
+con5500[, COLOR := fifelse(
+  NUCLEOTIDE == CON_NUCLEOTIDE, "grey90",  # Match with consensus
+  fifelse(NUCLEOTIDE == "A", "red",
+          fifelse(NUCLEOTIDE == "C", "green",
+                  fifelse(NUCLEOTIDE == "G", "yellow",
+                          fifelse(NUCLEOTIDE == "T", "blue",
+                                  fifelse(NUCLEOTIDE == "-", "black", NA_character_))))))]
 ```
 
 # Plot
+## Set levels
 ```{r}
-ggplot(long_5000, aes(x = POSITION, y = NAME, fill = COLOR)) +
-  geom_tile(aes(width = 1, height = 1), show.legend = FALSE) +
-  scale_fill_identity() +
-  theme_classic() +
-  theme(axis.text.y = element_text(size = 5)) +  # Adjust size of y-axis text if needed
-  labs(x = "Position in Sequence", y = "NAME")
+# Define the priority names
+priority_names <- c(
+  "NC_049907.1_RagTag_hap2_(reversed)",  
+  "5467_1_2982485_A_1_(reversed)",     
+  "5467_16_28255308_A_2_(reversed)",    
+  "5467_13_2475288_B_3_(reversed)", 
+  
+  "5454_7_42221860_A_3",
+  "5454_11_4069930_B_8"
+)
 
-ggplot(long_900, aes(x = POSITION, y = NAME, fill = COLOR)) +
+# Get the remaining names in any order
+other_names <- setdiff(unique(con5500$NAME), priority_names)
+
+# Set levels so that priority names appear first
+con5500[, NAME := factor(NAME, levels = rev(c(priority_names, other_names)))]
+
+# Check the levels
+#levels(con5500$NAME)
+
+```
+
+
+## Plot 5500 class MSA
+```{r}
+ggplot(con5500, aes(x = POSITION, y = NAME, fill = COLOR)) +
   geom_tile(aes(width = 1, height = 1), show.legend = FALSE) +
   scale_fill_identity() +
   theme_classic() +
   theme(axis.text.y = element_text(size = 5)) +  # Adjust size of y-axis text if needed
   labs(x = "Position in Sequence", y = "NAME")
 ```
+
+# Plot a specific example of tracking snps
+## Filter data for example
+```{r}
+te_labels <- c("NC_049913.1_RagTag_hap2" = "Original TE", "5453_6_31088870_A_16" = "1", "5454_16_25742773_A_6" = "3", "5453_13_32806166_A_41" = "2")
+
+te_levels <- c("Original TE", "1", "2", "3")
+
+nuc_levels <- c("grey90", "blue", "red", "green", "yellow", "black")
+
+ex_te <- con5500 %>% 
+  filter(NAME %in% c("NC_049913.1_RagTag_hap2", "5453_6_31088870_A_16", "5454_16_25742773_A_6", "5453_13_32806166_A_41")) %>%
+  mutate(NAME = recode(NAME, !!!te_labels))
+
+ex_te$NAME <- factor(ex_te$NAME, levels = te_levels)
+
+ex_te$COLOR <- factor(ex_te$COLOR, levels = nuc_levels)
+```
+
+## Observe SBS sites
+```{r}
+ex_te[!COLOR == "grey90"]
+```
+
+
+## Plot the specific example
+```{r}
+ggplot(ex_te, aes(x = POSITION, y = 1, fill = COLOR)) +
+  geom_tile(aes(width = ifelse(COLOR == "grey90", 1, 50)), show.legend = FALSE) +
+  facet_grid(NAME~., scales = "free", switch = "y") +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_discrete(
+    labels = te_labels,
+    expand = c(0,0)
+  ) +
+  scale_fill_manual(
+    values = c(
+      "grey90" = "grey90",
+      "red" = "indianred2",
+      "blue" = "steelblue2"),
+    labels = c(
+      "grey90" = "Match Origin",
+      "red" = "A", 
+      "blue" = "T")
+  ) +
+  labs(x = "Sequence position", y = "NAME") +
+  theme_classic(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text.y = element_blank(),
+    axis.line.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_blank(),
+    panel.spacing.y = unit(0.1, "cm"),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    panel.border = element_rect(fill = NA),
+    plot.margin = margin(t = 0, r = 0.0, b = 0, l = 0, unit = "cm")
+  )
+ggsave("./Figures/Transposable_Elements/track_transposon_5500_msa.pdf", height = 1.75, width = 2.25)
+ggsave("./Figures/Transposable_Elements/track_transposon_5500_msa.png", height = 1.75, width = 2.25)
+
+ggplot(ex_te, aes(x = POSITION, y = 1, fill = COLOR)) +
+  geom_tile(aes(width = ifelse(COLOR == "grey90", 1, 50))) +
+  facet_grid(NAME~., scales = "free", switch = "y") +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_discrete(
+    labels = te_labels,
+    expand = c(0,0)
+  ) +
+  scale_fill_manual(
+    values = c(
+      "grey90" = "grey90",
+      "red" = "indianred2",
+      "blue" = "steelblue2"),
+    labels = c(
+      "grey90" = "Match origin",
+      "red" = "A", 
+      "blue" = "T"),
+    guide = 
+      guide_legend(override.aes = list(colour = "black"), 
+      )
+  ) +
+  labs(x = "Sequence position", y = "NAME", fill = "Nucleotide") +
+  theme_classic(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text.y = element_blank(),
+    legend.position = "left",
+    legend.title = element_text(hjust = 0.5),
+    legend.key.size = unit(0.15, "cm"),
+    legend.margin = margin(t = -5, r = 0, b = 0, l = 0),
+    legend.background = element_rect(fill = "transparent", color = NA),
+    axis.line.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_blank(),
+    panel.spacing.y = unit(0.1, "cm"),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    panel.border = element_rect(fill = NA)
+  )
+ggsave("./Figures/Transposable_Elements/track_transposon_5500_msa_legend.pdf", height = 1.75, width = 2.25)
+ggsave("./Figures/Transposable_Elements/track_transposon_5500_msa_legend.png", height = 1.75, width = 2.25)
+```
+
+
 

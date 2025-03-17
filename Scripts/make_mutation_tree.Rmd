@@ -179,6 +179,7 @@ indel_node_data <- indel_tree.table$node_data
 
 ## Make snp+indel tree table
 ```{r}
+set.seed(25)
 both_filt <- mutations[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T]
 
 both_tree.table <- make_tree_table(both_filt)
@@ -420,14 +421,16 @@ both_max_x <- max(both_plot$data$x)
 both_plot <- both_plot + expand_limits(x = both_max_x * 1.2)
 
 both_plot_obj <- both_plot +
-  scale_x_continuous(expand = c(0.1,1100)) +
-  theme(legend.position = c(.25,.9),
-        plot.margin = margin(t = 0, r = 0, b = -.1, l = 0, unit = "cm"),
+  scale_x_continuous(expand = c(0.1,1)) + # This line is adjusted for different labeling needs
+  theme(legend.position = "none",
+        plot.margin = margin(t = 0, r = 0, b = -.1, l = -.5, unit = "cm"),
         axis.line.x = element_blank(),
         axis.ticks.x = element_blank(),
-        axis.text.x = element_blank())
+        axis.text.x = element_blank(),
+        panel.background = element_rect(fill = NA, color = NA),
+        plot.background = element_rect(fill = NA, color = NA))
 both_plot_obj
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_both.pdf", height = 2.85, width = 1)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_both.pdf", height = 3.78, width = 2.2)
 ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_presentation_lables_both.pdf", height = 4.97, width = 2)
 
 saveRDS(both_plot_obj, file = "./Data/Plot_Objects/all_sample_branch_is_mut_for_lables_both.rds")
@@ -442,10 +445,16 @@ both_plot <- both_plot + geom_text(
 )
 both_plot +
   scale_x_continuous(expand = c(.2, 0)) +
-  theme(legend.position = c(.175,.9),
-        plot.margin = margin(t = 0, r = -1.9, b = 0, l = -0.85, unit = "cm"))
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both.pdf", height = 2.75, width = 3.06)
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both.png", height = 2.75, width = 3.06)
+  labs(x = "Number of mutations") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.position = c(.175,.9),
+    legend.key.size = unit(0.2, "cm"),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0, r = -1.9, b = 0, l = -0.85, unit = "cm"))
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both.pdf", height = 2.8, width = 3.06)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both.png", height = 2.8, width = 3.06)
 ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both_presentation.pdf", height = 3.33, width = 6.6)
 ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both_presentation.png", height = 3.33, width = 6.6)
 ```

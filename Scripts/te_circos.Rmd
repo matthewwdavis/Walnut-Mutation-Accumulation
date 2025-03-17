@@ -127,10 +127,11 @@ setDT(link_899)
 setDT(link_5453)
 
 ## add color columns
-link_899[, color := fifelse(QSEQID %in% "1792_3_382285_A_1", "firebrick4", "#7287eb") ]
-link_899 <- link_899[order(link_899$color), ]
-link_5453[, color := fifelse(StartChr %in% "7B", "skyblue4", "#eb7287")]
-link_5453 <- link_5453[order(link_5453$color), ]
+#link_899[, color := fifelse(QSEQID %in% "1792_3_382285_A_1", "#202541", "#7287eb") ]
+#link_899 <- link_899[order(link_899$color, decreasing = TRUE), ]
+link_899[, color :=  "#7287eb"]
+link_5453[, color := fifelse(StartChr %in% "7B", "#753641", "#eb7287")]
+link_5453 <- link_5453[order(link_5453$color, decreasing = TRUE), ]
 ```
 
 # Creating heatmap for gene density
@@ -180,10 +181,18 @@ rect_data <- ref_chr.table[,-1]
 
 
 # Plot
+
+## Set levels for plotting
+```{r}
+ordered_levels <- c("1A", "2A", "3A", "4A", "5A", "6A", "7A", "8A", "9A", "10A", "11A", "12A", "13A", "14A", "15A", "16A",
+                    "1B", "2B", "3B", "4B", "5B", "6B", "7B", "8B", "9B", "10B", "11B", "12B", "13B", "14B", "15B", "16B")
+ref_chr.table$Chr <- factor(ref_chr.table$Chr, levels = ordered_levels)
+```
+
 ## 899 TE circos
 ```{r}
 par(mar = c(0, 0, 0, 0))
-pdf("./Figures/Transposable_Elements/circos_899.pdf", height = 2.6, width = 2.6)
+pdf("./Figures/Transposable_Elements/circos_899.pdf", height = 2.49, width = 2.49)
 # Set smaller padding
 circos.par(track.margin = c(0.005, 0.005), start.degree = 90, circle.margin = .01)
 
@@ -196,7 +205,7 @@ circos.track(track.index = 1, panel.fun = function(x, y) {
                 CELL_META$ylim[2],
                 CELL_META$sector.index, 
         facing = "clockwise",
-        niceFacing = FALSE,
+        niceFacing = TRUE,
         cex = 0.5)
 }, bg.border = NA)
 
@@ -222,8 +231,14 @@ for (i in seq_len(nrow(link_899))) {
               link_899$EndChr[i],
               link_899$EndPos[i],
               col = adjustcolor(link_899$color[i], alpha.f = 0.5),
-              lwd = 2.5)
+              lwd = 1.5)
 }
+
+circos.points(x = 26031674, y = 0.5, sector.index = "11B", col = "black", pch = 16, cex = 1.2)
+
+circos.points(x = 382285, y = 0.5, sector.index = "3A", bg = "#505fa5", col = "black",  pch = 25, cex = 1)
+
+
 dev.off()
 circos.clear()
 ```
@@ -231,7 +246,7 @@ circos.clear()
 ## 5453 TE circos
 ```{r}
 par(mar = c(0, 0, 0, 0))
-pdf("./Figures/Transposable_Elements/circos_5453.pdf", height = 2.6, width = 2.6)
+pdf("./Figures/Transposable_Elements/circos_5453.pdf", height = 2.49, width = 2.49)
 # Set smaller padding
 circos.par(track.margin = c(0.005, 0.005), start.degree = 90, circle.margin = .01)
 
@@ -244,7 +259,7 @@ circos.track(track.index = 1, panel.fun = function(x, y) {
                 CELL_META$ylim[2],
                 CELL_META$sector.index, 
         facing = "clockwise",
-        niceFacing = FALSE,
+        niceFacing = TRUE,
         cex = 0.5)
 }, bg.border = NA)
 
@@ -270,8 +285,12 @@ for (i in seq_len(nrow(link_5453))) {
               link_5453$EndChr[i],
               link_5453$EndPos[i],
               col = adjustcolor(link_5453$color[i], alpha.f = 0.5),
-              lwd = 2.5)
+              lwd = 1.5)
 }
+
+circos.points(x = 812245, y = 0.5, sector.index = "13B", col = "black", pch = 16, cex = 1.2)
+circos.points(x = 48806661, y = 0.5, sector.index = "7B", col = "black", pch = 16, cex = 1.2)
+
 dev.off()
 circos.clear()
 ```
@@ -281,7 +300,7 @@ circos.clear()
 # Archive
 #Setup
 ## Library
-```{r, message=FALSE}
+```{r, message=FALSE, eval=FALSE}
 library(tidyverse)
 library(circlize)
 library(migest)

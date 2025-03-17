@@ -92,7 +92,7 @@ full_phased_snps[, AD_SCALE := ALTDP/mean(ALTDP), by = c("SOURCE")]
 #full_phased_snps[, MEAN_AD_SCALE := mean(AD_SCALE), by = c("SOURCE", "Interaction_Column")]
 ```
 
-## Create 7 windows per chromosome
+## Create 5 windows per chromosome
 ```{r}
 full_phased_snps[, SEGMENT := cut(1:.N, breaks = 5, labels = FALSE), by = c("SOURCE", "CHROM", "Haplotype")]
 full_phased_snps[, MEAN_AD_Scale := mean(AD_SCALE), by = c("SOURCE", "CHROM", "Haplotype", "SEGMENT")]
@@ -122,7 +122,7 @@ aneu_dp_equal <- small_table %>%
   geom_tile(color = NA) +
   scale_fill_gradientn(colors = c("royalblue1", "royalblue", "grey95", "grey94", "orangered", "orangered2")) + 
   scale_y_discrete(labels = new_labels) +
-  labs(fill = "Scaled\nDepth") +
+  labs(fill = "Scaled\ndepth") +
   theme_classic(base_size = 6) +
   theme(strip.background = element_blank(),
         strip.text.y = element_blank(),
@@ -133,21 +133,33 @@ aneu_dp_equal <- small_table %>%
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.line.x = element_blank(),
-        axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
-        axis.ticks.length.y = unit(0.5, "cm"),
+        axis.ticks.y = element_blank(),
+        #axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
+        #axis.ticks.length.y = unit(0.5, "cm"),
         axis.text.y = element_blank(),
         axis.line.y = element_blank(),
         panel.border = element_rect(fill = NA),
         panel.spacing.y = unit(0.05, "cm"),
         panel.spacing.x = unit(0.05, "cm"),
-        plot.margin = margin(t = 0, r = 0.01, b = 0, l = 0, unit = "cm")
+        panel.background = element_rect(fill = NA, color = NA),
+        plot.background = element_rect(fill = NA, color = NA),
+        plot.margin = margin(t = 0, r = 0.05, b = 0, l = 0, unit = "cm")
   )
 
 aneu_dp_equal
 
-ggsave("./Figures/Aneuploidy_Depth/depth_in_5_windows_per_chr.pdf", height = 3, width = 6.35)
-ggsave("./Figures/Aneuploidy_Depth/depth_in_5_windows_per_chr.png", height = 3, width = 6.35)
+ggsave("./Figures/Aneuploidy_Depth/depth_in_5_windows_per_chr.pdf", height = 3, width = 6.18)
+ggsave("./Figures/Aneuploidy_Depth/depth_in_5_windows_per_chr.png", height = 3, width = 6.18)
 saveRDS(aneu_dp_equal, file = "./Data/Plot_Objects/depth_in_5_windows_per_chr.rds")
+
+aneu_dp_equal +
+  theme(
+    legend.position = "left",
+    legend.title = element_text(hjust = 0.5),
+    legend.background = element_rect(fill = "transparent", color = NA)
+  )
+ggsave("./Figures/Aneuploidy_Depth/depth_in_5_windows_per_chr_legend.pdf", height = 3, width = 6.24)
+ggsave("./Figures/Aneuploidy_Depth/depth_in_5_windows_per_chr_legend.png", height = 3, width = 6.24)
 ```
 
 ## AD in CHR 9 sample cr16A1

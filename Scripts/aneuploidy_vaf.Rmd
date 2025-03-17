@@ -279,7 +279,7 @@ sum_vaf %>%
   facet_grid(SOURCE~CHROM + Haplotype, space = "free", switch = "y") +
   scale_color_manual(values = c("TRUE" = "orangered2", "FALSE" = "dodgerblue1")) +
   scale_y_continuous(breaks = c(0.5), position = "right") +
-  labs(x = "Position", y = "Allele Frequency") +
+  labs(x = "Position", y = "Allele frequency") +
   theme_linedraw(base_size = 6) +
   theme(
     strip.background = element_blank(),
@@ -309,7 +309,7 @@ sum_vaf %>%
   facet_grid(SOURCE~CHROM + Haplotype, space = "free", switch = "y") +
   scale_color_manual(values = c("TRUE" = "orangered2", "FALSE" = "dodgerblue1")) +
   scale_y_continuous( breaks = (c(0, 0.5, 1)), position = "right") +
-  labs(x = "Position", y = "Allele Frequency") +
+  labs(x = "Position", y = "Allele frequency") +
   theme_linedraw(base_size = 6) +
   theme(
     strip.background = element_blank(),
@@ -340,7 +340,7 @@ sum_vaf %>%
   facet_grid(SOURCE~CHROM + Haplotype, space = "free", switch = "y") +
   scale_color_manual(values = c("TRUE" = "orangered2", "FALSE" = "dodgerblue1")) +
   scale_y_continuous( breaks = (c(0, 0.5, 1)), position = "right") +
-  labs(x = "Position", y = "Allele Frequency") +
+  labs(x = "Position", y = "Allele frequency") +
   theme_linedraw(base_size = 6) +
   theme(
     strip.background = element_blank(),
@@ -371,7 +371,7 @@ sum_vaf %>%
   facet_grid(SOURCE~CHROM + Haplotype, space = "free", switch = "y") +
   scale_color_manual(values = c("TRUE" = "orangered2", "FALSE" = "dodgerblue1")) +
   scale_y_continuous( breaks = (c(0, 0.5, 1)), position = "right") +
-  labs(x = "Position", y = "Allele Frequency") +
+  labs(x = "Position", y = "Allele frequency") +
   theme_linedraw(base_size = 6) +
   theme(
     strip.background = element_blank(),
@@ -417,7 +417,7 @@ sum_vaf %>%
   facet_grid(SOURCE~CHROM + Haplotype, space = "free", switch = "y") +
   scale_color_manual(values = c("TRUE" = "orangered2", "FALSE" = "dodgerblue1")) +
   scale_y_continuous( breaks = (c(0, 0.5, 1)), position = "right") +
-  labs(x = "Position", y = "Allele Frequency") +
+  labs(x = "Position", y = "Allele frequency") +
   theme_linedraw(base_size = 6) +
   theme(
     strip.background = element_blank(),
@@ -472,15 +472,21 @@ test[, CLASSIFY :=  fifelse(MEANVAFSEG < 0.5 & CHIFDR_PVALUE < 0.01, "del", CLAS
 
 ## Plot
 ```{r}
-test %>%
+test$CLASSIFY <- factor(test$CLASSIFY, levels = c("dup", "none", "del"))
+
+
+vaf_plot <- test %>%
   filter(CHROM %in% c(4,9,11,12,16)) %>%
   ggplot(aes(x = SEGMENT, y = MEANVAFSEG, color = CLASSIFY)) +
   geom_point(size = 0.001) +
   #geom_hline(yintercept = 0.5, linetype = 3) +
   facet_grid(SOURCE~CHROM + Haplotype, space = "free", switch = "y") +
-  scale_color_manual(values = c(dup = "orangered3", del = "royalblue1", "none"  = "grey75")) +
-  scale_y_continuous(limits = c(0,1), breaks = c(0.5), position = "left") +
-  labs(x = "Position", y = "Allele Frequency") +
+  scale_color_manual(
+    values = c(dup = "orangered3", del = "royalblue1", "none"  = "grey75"),
+    labels = c(dup = " > 0.5", del = "< 0.5", "none"  = "~ 0.5")                 
+    ) +
+  #scale_y_continuous(limits = c(0,1), breaks = , position = "left") +
+  labs(x = "Position", y = "Allele frequency", color = "Allele\nfrequency") +
   theme_classic(base_size = 6) +
   theme(
     strip.background = element_blank(),
@@ -496,15 +502,33 @@ test %>%
     axis.title.x = element_blank(),
     axis.text.y = element_blank(),
     axis.line.y = element_blank(),
-    axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
-    axis.ticks.length.y = unit(0.51, "cm"),
+    axis.ticks.y = element_blank(),
+    #axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
+    #axis.ticks.length.y = unit(0.51, "cm"),
     axis.title.y = element_blank(),
     panel.background = element_rect(fill = NA, color = NA),
     plot.background = element_rect(fill = NA, color = NA),
-    plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+    plot.margin = margin(t = 0, r = 0.01, b = 0, l = 0, unit = "cm")
   )
-ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216.pdf", height = 2.5, width = 3.5)
-ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216.png", height = 3, width = 3.5)
+
+vaf_plot
+
+ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216.pdf", height = 2.6, width = 3.45)
+ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216.png", height = 2.6, width = 3.45)
+
+vaf_plot +
+  guides(
+    color = guide_legend(override.aes = list(size = 1))
+  ) +
+  theme(
+    legend.position = "left",
+    legend.key.size = unit(0.2, "cm"),
+    legend.title = element_text(hjust = 0.5),
+    legend.text = element_text(margin = margin(t = 0, r = 0, b = 0, l = -0.01, unit = "cm")),
+    legend.background = element_rect(fill = "transparent", color = NA)
+  )
+ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216_legend.pdf", height = 2.6, width = 3.45)
+ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216_legend.png", height = 2.6, width = 3.45)
 ```
 
 ## Try chi-sq with each SNP

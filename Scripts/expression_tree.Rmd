@@ -212,7 +212,7 @@ all_counts <- rbind(cr11a, cr12a, cr13a, cr15a, cr15a1, cr16a, cr16a1, cr16a2, c
 ```
 
 # Prepare data
-## Renam some columns
+## Rename some columns
 ```{r}
 names(all_counts)[names(all_counts) == "gene"] <- "Gene"
 names(all_counts)[names(all_counts) == "rna"] <- "RNA"
@@ -289,11 +289,9 @@ ggsave("./Figures/RNA_Sequencing/clade_gene_diff_expression.png", height = 2, wi
 
 ## Plotting only chromosome 12 deletions
 ```{r}
-ggplot(real_tests[padjust<0.05 & CHROM %in% 12 & branch %in% 22], aes(x = START, col = stat > 0, y = sig)) +
-  geom_point(size = 0.5) +
-  geom_hline(yintercept = 0.5, size = 0.25, color = "grey50", linetype = 2) +
-  #geom_segment(aes(x = START, xend = START, y = sig, yend = 0), size = 0.2) +
-  #facet_grid(branch~CHROM, space = "free_x", scales = "free_x", switch = "y") +
+chr12 <- ggplot(real_tests[padjust<0.05 & CHROM %in% 12 & branch %in% 22], aes(x = START, col = stat > 0, y = sig)) +
+  geom_point(size = 0.75) +
+  geom_hline(yintercept = 0, size = 0.25, color = "grey50", linetype = 2) +
   scale_color_manual(values = c("orangered3", "royalblue1")) +
   scale_y_continuous(limits = c(-8.5,8.5), position = "right") +
   scale_x_continuous(labels = label_number(scale = 1e-7, suffix = "")) +
@@ -308,22 +306,30 @@ ggplot(real_tests[padjust<0.05 & CHROM %in% 12 & branch %in% 22], aes(x = START,
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         #axis.title.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.line.y = element_blank(),
         plot.title = element_blank(),
-        #panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5), 
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5), 
+        panel.background = element_rect(fill = NA, color = NA),
+        plot.background = element_rect(fill = NA, color = NA),
         plot.margin = ggplot2::margin(t = 0.015,r = 0.05,b = 0.0,l = 0.05, unit = "cm")
   )
-ggsave("./Figures/RNA_Sequencing/clade_gene_diff_expression_chr12_del.pdf", height = 1, width = 1.6)
-ggsave("./Figures/RNA_Sequencing/clade_gene_diff_expression_chr12_del.png", height = 1, width = 1.6)
+
+chr12
+
+ggsave("./Figures/RNA_Sequencing/clade_gene_diff_expression_chr12_del.pdf", height = 1, width = 1.7)
+ggsave("./Figures/RNA_Sequencing/clade_gene_diff_expression_chr12_del.png", height = 1, width = 1.7)
 ```
 
 ## Plotting only chromosome 4 deletions
 ```{r}
-ggplot(real_tests[padjust<0.05 & CHROM %in% 4 & branch %in% 18], aes(x = START, col = stat > 0, y = sig)) +
-  geom_point(size = 0.5) +
-  geom_hline(yintercept = 0.5, size = 0.25, color = "grey50", linetype = 2) +
-  #geom_segment(aes(x = START, xend = START, y = sig, yend = 0), size = 0.2) +
-  #facet_grid(branch~CHROM, space = "free_x", scales = "free_x", switch = "y") +
-  scale_color_manual(values = c("orangered3", "royalblue1")) +
+chr4 <- ggplot(real_tests[padjust<0.05 & CHROM %in% 4 & branch %in% 18], aes(x = START, col = stat > 0, y = sig)) +
+  geom_point(size = 0.75) +
+  geom_hline(yintercept = 0, size = 0.25, color = "grey50", linetype = 2) +
+  scale_color_manual(
+    values = c("orangered3", "royalblue1"),
+    labels = c("FALSE" = "Overexpressed", "TRUE" = "Underexpressed")
+  ) +
   scale_y_continuous(limits = c(-8.5,8.5), position = "right") +
   scale_x_continuous(labels = label_number(scale = 1e-7, suffix = "")) +
   labs(title = "Chromosome 4", x = "Chromosome 4", y = "-log10(p-value)") +
@@ -337,14 +343,35 @@ ggplot(real_tests[padjust<0.05 & CHROM %in% 4 & branch %in% 18], aes(x = START, 
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         #axis.title.x = element_blank(),
+        axis.line.x = element_blank(),
         axis.title.y = element_text(color = "white"),
         axis.ticks.y = element_line(color = "white"),
         axis.text.y = element_text(color = "white"),
-        axis.line.y = element_line(color = "white"),
+        axis.line.y = element_blank(),
         plot.title = element_blank(),
-        #panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+        panel.background = element_rect(fill = NA, color = NA),
+        plot.background = element_rect(fill = NA, color = NA),
         plot.margin = ggplot2::margin(t = 0.015,r = 0.05,b = 0.0,l = 0.05, unit = "cm")
   )
-ggsave("./Figures/RNA_Sequencing/clade_gene_diff_expression_chr4_del.pdf", height = 1, width = 1.6)
-ggsave("./Figures/RNA_Sequencing/clade_gene_diff_expression_chr4_del.png", height = 1, width = 1.6)
+
+chr4 
+
+ggsave("./Figures/RNA_Sequencing/clade_gene_diff_expression_chr4_del.pdf", height = 1, width = 1.7)
+ggsave("./Figures/RNA_Sequencing/clade_gene_diff_expression_chr4_del.png", height = 1, width = 1.7)
+
+chr4 +
+  guides(
+    color = guide_legend(override.aes = list(size = 1))
+  ) +
+  theme(
+    legend.position = "left",
+    legend.key.size = unit(0.2, "cm"),
+    legend.title = element_blank(),
+    legend.text = element_text(margin = margin(t = 0, r = 0, b = 0, l = -0.0, unit = "cm")),
+    legend.background = element_rect(fill = "transparent", color = NA)
+  )
+
+ggsave("./Figures/RNA_Sequencing/clade_gene_diff_expression_chr4_del_legend.pdf", height = 1, width = 1.85)
+ggsave("./Figures/RNA_Sequencing/clade_gene_diff_expression_chr4_del_legend.png", height = 1, width = 1.85)
 ```

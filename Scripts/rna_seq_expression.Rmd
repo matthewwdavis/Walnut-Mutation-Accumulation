@@ -540,7 +540,7 @@ all_counts %>%
   )
 ```
 
-## Plot comapring expression in chromosomes with log
+## Plot comparing expression in chromosomes with log
 ```{r}
 all_counts %>%
   filter(tpm > 1.0) %>%
@@ -724,12 +724,14 @@ counts.genes <- counts.genes %>%
 
 ## Plot Counts genes
 ```{r}
-counts.genes %>%
+rna_heat <- counts.genes %>%
   ggplot(aes(x = POS_WINDOW, y = SOURCE, fill = norm_tpm)) +
   geom_tile() +
-  scale_fill_gradientn(colours = c("grey97", "grey95","grey95","grey93","orangered", "orangered2","orangered3","orangered4")) +
-  #  viridis::scale_fill_viridis(option = "turbo") + 
+  scale_fill_gradientn(
+    colours = c("grey97", "grey95","grey94","grey93","orangered", "orangered2","orangered3","orangered4")
+  ) +
   facet_grid(SOURCE~CHROM, scales = "free", space = "free") +
+  labs(fill = "Normalized\nTPM") +
   theme_classic(base_size = 6) +
   theme(strip.background = element_blank(),
         strip.text.x = element_text(margin = margin(t = 1, b = 1, unit = "pt")),
@@ -737,8 +739,9 @@ counts.genes %>%
         legend.position = "none",
         axis.title.y = element_blank(),
         axis.line.y = element_blank(),
-        axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
-        axis.ticks.length.y = unit(0.5, "cm"),
+        axis.ticks.y = element_blank(),
+        #axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
+        #axis.ticks.length.y = unit(0.5, "cm"),
         axis.text.y = element_blank(),
         axis.title.x = element_blank(),
         axis.line.x = element_blank(),
@@ -751,8 +754,22 @@ counts.genes %>%
         plot.background = element_rect(fill = NA, color = NA),
         plot.margin = margin(t = 0, r = 0.1, b = 0, l = -0, unit = "cm")
   )
-ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups.pdf", height = 1.45, width = 2.7)
-ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups.png", height = 1.45, width = 2.7)
+
+rna_heat
+
+ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups.pdf", height = 1.44, width = 2.7)
+ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups.png", height = 1.44, width = 2.7)
+
+rna_heat +
+  theme(
+    legend.position = "left",
+    legend.title = element_text(hjust = 0.5, margin = margin(t = 0, r = 0, b = 0.05, l = 0, unit = "cm")),
+    legend.text = element_text( margin = margin(t = 0, r = 0, b = 0, l = 0.03, unit = "cm")),
+    legend.key.size = unit(0.2, "cm"),
+    legend.background = element_rect(fill = "transparent", color = NA)
+  ) 
+ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups_legend.pdf", height = 1.44, width = 2.7)
+ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups_legend.png", height = 1.44, width = 2.7)
 ```
 
 ## Try windows of gene numbers

@@ -16,6 +16,7 @@ library(polymorphology2)
 library(parallel)
 library(ggenomics)
 library(ggtext)
+library(ggh4x)
 ```
 
 ## Functions
@@ -118,7 +119,13 @@ ggsave("./Figures/Tricontext/embryo_tricontext_simple.pdf", height = 1.75, width
 # Plotting all individuals in tricontext
 ## Colors, levels, labels
 ```{r}
-mut_colors<-c(`C>A`="cyan3",`C>G`="black",`C>T`="red4",`T>A`="gray",`T>C`="green3",`T>G`="pink3")
+mut_colors<-c(`C>A`="#03bdee",`C>G`="#000000",`C>T`="#e52a25",`T>A`="#cdc9ca",`T>C`="#a3ce62",`T>G`="#ecc6c5")
+
+mut_colors2 <- c(`C>A`= "white",`C>G`="white",`C>T`="white",`T>A`="white",`T>C`="white",`T>G`="white",`C>A`="#03bdee",`C>G`="#000000",`C>T`="#e52a25",`T>A`="#cdc9ca",`T>C`="#a3ce62",`T>G`="#ecc6c5")
+
+mut_fills_list <- as.list(mut_colors2)
+mut_colors_list <- list(element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"),
+                         element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"))
 
 plot_levels <- c("ref_chandler", "tree2", "cr22", "cr13", "cr10", "cr85",
                  "cr2_11A", "cr2_13A", "cr2_12A", "cr21_1", "cr21_2",
@@ -157,45 +164,75 @@ embryo_monomers[,Nprop := N/sum(N), by = SOURCE]
 embryo_monomers$SOURCE<-factor(embryo_monomers$SOURCE, levels = plot_levels)
 ```
 
+## Create colored x axis
+```{r}
+embryo_trimers[, COLOR := fifelse(MUT %in% "C>A", "#03bdee", NA)]
+embryo_trimers[, COLOR := fifelse(MUT %in% "C>G", "#000000", COLOR)]
+embryo_trimers[, COLOR := fifelse(MUT %in% "C>T", "#e52a25", COLOR)]
+embryo_trimers[, COLOR := fifelse(MUT %in% "T>A", "#cdc9ca", COLOR)]
+embryo_trimers[, COLOR := fifelse(MUT %in% "T>C", "#a3ce62", COLOR)]
+embryo_trimers[, COLOR := fifelse(MUT %in% "T>G", "#ecc6c5", COLOR)]
+
+embryo_trimers[,TRI_COLOR := paste(substr(TRI, 1, 1), "<span style='color: ", COLOR, ";'>", substr(TRI, 2, 2), "</span>", substr(TRI, 3, 3), sep = "")]
+```
+
+## Create new column for plotting
+This is a work around for labeling that is only for plotting
+```{r}
+embryo_trimers$MUT2 <- embryo_trimers$MUT
+```
+
+
 ## Plot
 ```{r}
 # Tricontext
-ggplot(embryo_trimers, aes(x = TRI, y = SOURCE, fill = MUT, size = genomeprop, alpha = genomeprop)) +
+ggplot(embryo_trimers, aes(x = TRI_COLOR, y = SOURCE, fill = MUT, size = genomeprop, alpha = genomeprop)) +
   geom_point(shape = 22) +
-  facet_grid(~MUT, scales = "free_x", labeller = labeller(MUT = c(
-    `C>A` = "<span style = 'color: cyan3;'>C>A</span>",
-    `C>G` = "<span style = 'color: black;'>C>G</span>",
-    `C>T` = "<span style = 'color: red4;'>C>T</span>",
-    `T>A` = "<span style = 'color: grey;'>T>A</span>",
-    `T>C` = "<span style = 'color: green3;'>T>C</span>",
-    `T>G` = "<span style = 'color: pink3;'>T>G</span>"
-  ))) +
-  scale_size_continuous(range = c(0.25,3)) +
+  facet_grid2(~MUT + MUT2, scales = "free_x",
+              strip = strip_themed(
+                background_x = elem_list_rect(fill = mut_fills_list, color = mut_colors_list),
+                text_x = element_markdown(face = "bold")
+              ),
+              labeller = labeller(
+                MUT = c(
+                  `C>A` = "<span style = 'color: #03bdee;'>C>A</span>",
+                  `C>G` = "<span style = 'color: #000000;'>C>G</span>",
+                  `C>T` = "<span style = 'color: #e52a25;'>C>T</span>",
+                  `T>A` = "<span style = 'color: #cdc9ca;'>T>A</span>",
+                  `T>C` = "<span style = 'color: #a3ce62;'>T>C</span>",
+                  `T>G` = "<span style = 'color: #ecc6c5;'>T>G</span>"
+                ),
+                MUT2 = c(
+                  `C>A` = "<span style = 'color: #03bdee;'>C>A</span>",
+                  `C>G` = "<span style = 'color: #000000;'>C>G</span>",
+                  `C>T` = "<span style = 'color: #e52a25;'>C>T</span>",
+                  `T>A` = "<span style = 'color: #cdc9ca;'>T>A</span>",
+                  `T>C` = "<span style = 'color: #a3ce62;'>T>C</span>",
+                  `T>G` = "<span style = 'color: #ecc6c5;'>T>G</span>"
+                )
+              )
+  ) +
+  scale_size_continuous(range = c(0.25, 3)) +
   scale_fill_manual(values = mut_colors) +
   scale_y_discrete(labels = new_labels) +
-  
   theme_classic(base_size = 6) +
   theme(
     legend.position = "none",
-    strip.text = element_markdown(face = "bold"),
-    strip.background = element_blank(),
     axis.title.x = element_blank(),
-    axis.text.x = element_text(angle = 90,hjust = 1),
+    axis.text.x = element_markdown(angle = 90, hjust = 1),
     axis.line.x = element_blank(),
     axis.ticks.x = element_blank(),
     axis.title.y = element_blank(),
     axis.text.y = element_blank(),
     axis.line.y = element_blank(),
-    axis.ticks.y = element_line(linewidth = 0.5, linetype = "13"),
-    axis.ticks.length.y = unit(0.5, "cm"),
+    axis.ticks.y = element_blank(),
     panel.spacing.y = unit(0.05, "cm"),
     panel.spacing.x = unit(0.05, "cm"),
     panel.background = element_rect(fill = NA, color = NA),
     plot.background = element_rect(fill = NA, color = NA),
-    plot.margin = margin(t = 0, r = 0.05, b = 0, l = 0, unit = "cm")
-  )
-ggsave("./Figures/Tricontext/sample_individual_tricontext.pdf", height = 3.2, width = 6.5)
-
+    plot.margin = ggplot2::margin(t = 0, r = 0.05, b = 0, l = 0, unit = "cm")
+  ) 
+ggsave("./Figures/Tricontext/sample_individual_tricontext.pdf", height = 3.3, width = 6.9)
 
 # Simple no context
 ggplot(embryo_monomers, aes(x = MUT, y = SOURCE, fill = MUT, size = N)) +
@@ -206,3 +243,4 @@ ggplot(embryo_monomers, aes(x = MUT, y = SOURCE, fill = MUT, size = N)) +
   facet_grid(~MUT, scales = "free_x")+
   scale_fill_manual(values = mut_colors, guide = "none")
 ```
+

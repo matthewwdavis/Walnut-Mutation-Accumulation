@@ -1,0 +1,144 @@
+---
+title: "vaf_combohaps"
+author: "Matthew Davis"
+date: "2025-02-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggenomics)
+```
+
+## Functions
+```{r}
+
+```
+
+## Read in data
+```{r}
+muts <- fread("./Data/VCFs/Filtered/dn_snps_combohaps.vcf")
+```
+
+# Prepare data
+## Add  columns
+```{r}
+# Number of times SNPs occur
+muts[, UNIQUEN := .N, by = UNIQUE]
+```
+
+## Create a list of tables with quality scores increasing by 5
+```{r}
+thresholds <- seq(5, 40, by = 1)
+
+mut_qual.list <- lapply(thresholds, function(x) {
+  dt_filtered <- muts[QUAL >= x & DPREAL >= 10 & UNIQUEN == 1]
+  dt_filtered[, threshold := paste0("QUAL>=", x)]
+  return(dt_filtered)
+})
+
+mut_qual <- rbindlist(mut_qual.list)
+```
+
+## Filter data
+```{r}
+filtmut <- muts[SNP == TRUE & UNIQUEN == 1 & QUAL >= 5 & DP >= 10]
+```
+
+# Plot
+## Set plotting levels and new names
+```{r}
+plot_levels <- c("cr16a2", "cr16a1", "cr17a2", "cr17a1", "cr18a1","cr16a", "cr2_hifi",
+                 "cr15a1", "cr15a", "cr18a", "cr21_2", "cr21_1", "cr12a", "cr13a",
+                 "cr11a", "cr85", "cr10", "cr13", "cr22", "tree2", "ref_chandler")
+
+threshold_levels <- c(rev(unique(mut_qual$threshold)))
+
+filtmut$SOURCE <- factor(filtmut$SOURCE, levels = plot_levels)
+
+mut_qual$SOURCE <- factor(mut_qual$SOURCE, levels = plot_levels)
+
+mut_qual$threshold <- factor(mut_qual$threshold, levels = threshold_levels)
+
+new_labels = c(
+  "ref_chandler" = "Reference", "tree2" = "Tree",
+  "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+  "cr11a" = "E 14", "cr12a" = "E 12", "cr13a" = "E 13",
+  "cr15a" = "E 8", "cr15a1" = "E 7", "cr16a" = "E 6",
+  "cr16a1" = "E 2", "cr16a2" = "E 1", "cr17a1" = "E 4",
+  "cr17a2" = "E 3", "cr18a" = "E 9", "cr18a1" = "E 5",
+  "cr85" = "S 1985", "cr10" = "S 2010",
+  "cr13" = "S 2013", "cr22" = "S 2022"
+)
+```
+
+## VAF
+```{r}
+filtmut %>%
+  ggplot(aes(x = VAFREAL, fill = CULTURETYPE)) + 
+  geom_histogram(bins = 40, color = "black", linewidth = 0.1) +
+  facet_grid(
+    SOURCE~.,
+    scale="free_y",
+    labeller = as_labeller(new_labels)
+  ) +
+  scale_fill_manual(
+    values = c("embryo" = "goldenrod1",
+               "shoot" = "darkseagreen2",
+               "tree" = "darkseagreen4")
+  ) +
+  scale_y_continuous(
+    position = "right"
+  ) +
+  labs(x = "Proportion of cells", y = "Number of mutations") +
+  theme_classic(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_blank(),
+    legend.position = "none"
+  )
+
+mut_qual %>%
+  ggplot(aes(x = VAFREAL, fill = CULTURETYPE)) + 
+  geom_histogram(
+    binwidth = 0.025,
+    alpha = 0.1,
+    position = "identity",
+    aes(
+      group = threshold,
+      color = ifelse(threshold == "QUAL>=5", "trace", NA)),
+    linewidth = 0.1
+    ) +
+  facet_grid(SOURCE~., scale="free_y") +
+  scale_fill_manual(
+    values = c("embryo" = "goldenrod1",
+               "shoot" = "darkseagreen2",
+               "tree" = "darkseagreen4")
+  ) +
+  scale_color_manual(
+    values = c("trace" = "black"),
+    na.value = NA) +
+  scale_y_continuous(
+    breaks = function(limits) c(0, floor(limits[2] / 5) * 5),
+    position = "right"
+  ) +
+  labs(x = "Proportion of cells", y = "Number of unique mutations") +
+  theme_classic(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_blank(),
+    legend.position = "none",
+    panel.spacing.y = unit(0.15, "cm"),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0.1, r = 0.05, b = 0, l = 0, unit = "cm")
+  )
+ggsave("./Figures/VAF_Analysis/all_samples_vaf_combohap.pdf", height = 3.925, width = 1.65)
+ggsave("./Figures/VAF_Analysis/all_samples_vaf_combohap.png", height = 3.925, width = 1.65)
+```
+

@@ -89,10 +89,10 @@ sv %>%
 # Look at SV >= 500. 5453 is still by far the most common
 sv %>%
   filter(SOURCE == "cr2") %>%
-  group_by(SVLEN_abs = abs(SVLEN)) %>%  # Rename the grouping column
-  summarise(Count = n()) %>%            # Count occurrences
-  arrange(desc(Count)) %>%               # Arrange by count
-  filter(SVLEN_abs >= 500)               # Filter based on the new column name
+  group_by(SVLEN_abs = abs(SVLEN)) %>% 
+  summarise(Count = n()) %>%           
+  arrange(desc(Count)) %>%            
+  filter(SVLEN_abs >= 500)              
 
 
 # Look at separation of DEL and INS
@@ -186,7 +186,7 @@ sv %>%
   labs(x = "Variant Allele Frequency", y = "Number of Variants") + 
   coord_cartesian(xlim = c(0.0, 1.0)) +
   theme_classic(base_size = 6) +
-   theme(
+  theme(
     legend.key.size = unit(0.2, "cm"),
     legend.title = element_blank(),
     legend.position = c(.15, .87),
@@ -194,7 +194,7 @@ sv %>%
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
     plot.title = element_text(hjust = 0.5),
     plot.background = element_rect(fill = "transparent", color = NA),
-    plot.margin = margin(t = 0.02, r = 0.0, b = 0.0, l = 0.02, unit = "cm")
+    plot.margin = ggplot2::margin(t = 0.02, r = 0.0, b = 0.0, l = 0.02, unit = "cm")
   )
 ggsave("./Figures/Transposable_Elements/te_5453_899_vaf.pdf", height = 1, width = 2)
 ggsave("./Figures/Transposable_Elements/te_5453_899_vaf.png", height = 1, width = 2)
@@ -204,11 +204,11 @@ ggsave("./Figures/Transposable_Elements/te_5453_899_vaf.png", height = 1, width 
 ```{r}
 sv %>%
   filter(SOURCE == "cr2") %>%
-  filter(SVLEN == 5453 & VAF == 1.0 & DP >= 10) 
+  filter(SVLEN == 5453 & VAF == 1.0 & DEPTH >= 10) 
 
 sv %>%
   filter(SOURCE == "cr2") %>%
-  filter(SVLEN == 5453 & VAF >=0.2 & VAF <= 0.3 & DP >= 10)
+  filter(SVLEN == 5453 & VAF >=0.2 & VAF <= 0.3 & DEPTH >= 10)
 ```
 
 # Histograms comparing INS and DEL in samples
@@ -234,73 +234,42 @@ sv[, TE := fifelse(SVLEN %in% 799:999, "te_899", TE)]
 ```{r}
 sv %>%
   filter(SOURCE %in% "cr2") %>%
+  mutate(TE = factor(TE, levels = c("te_899", "te_5453", "sv"))) %>%
   ggplot(aes(x = SVLEN, fill = TE)) +
-  geom_histogram(binwidth = 110) +
+  geom_histogram(bins = 32, color = "black", linewidth = 0.2) +
   scale_x_continuous(
     limits = c(0,6500),
-    breaks = c(0, 899, 5453, 6500)
+    breaks = c(0, 900, 5500, 6500)
   ) +
   scale_y_continuous(
     limits = c(0,150)
   ) +
   scale_fill_manual(
-    values = c("sv" = "grey75",
-               "te_5453" = "#eb7287",
-               "te_899" = "#7287eb"),
-    labels = c("sv" = "Other SV",
-               "te_5453" = "5453 bp TE",
-               "te_899" = "899 bp TE")
+    values = c(
+      "te_899" = "#7287eb",
+      "te_5453" = "#eb7287",
+      "sv" = "grey90"),
+    labels = c(
+      "te_899" = "900 class",
+      "te_5453" = "5500 class",
+      "sv" = "Other SV")
   ) +
-  labs(x = "Length of Variant", y = "Number of Variants", title = "E HiFi") +
+  labs(x = "Length of variant (bp)", y = "Number of variants", title = "Embryo HiFi") +
   theme_classic(base_size = 6) +
   theme(
     legend.key.size = unit(0.2, "cm"),
     legend.title = element_blank(),
-    legend.position = c(.15, .8),
+    legend.position = c(.15, .83),
     legend.background = element_rect(fill = "transparent"),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
     plot.title = element_text(hjust = 0.5),
     plot.background = element_rect(fill = "transparent", color = NA),
-    plot.margin = margin(t = 0.01, r = 0.05, b = 0.01, l = 0.01, unit = "cm")
+    plot.margin = ggplot2::margin(t = 0.05, r = 0.05, b = 0.01, l = 0.01, unit = "cm")
   )
 
-ggsave("./Figures/SV_Calling/cr2_dn_sv_histogram.pdf", height = 1, width = 2)
-ggsave("./Figures/SV_Calling/cr2_dn_sv_histogram.png", height = 1, width = 2)
+ggsave("./Figures/SV_Calling/cr2_dn_sv_histogram.pdf", height = 1.375, width = 2.16)
+ggsave("./Figures/SV_Calling/cr2_dn_sv_histogram.png", height = 1.375, width = 2.16)
 ```
-
-## Try geom_bar for cleaner results
-```{r}
-sv %>%
-  filter(SOURCE %in% "cr2") %>%
-  mutate(SVLEN_bin = cut(SVLEN, breaks = seq(0, max(SVLEN, na.rm = TRUE), by = 1000), right = FALSE)) %>%
-  count(SVLEN_bin, TE) %>%  # Count occurrences per bin
-  ggplot(aes(x = SVLEN_bin, y = n, fill = TE)) +
-  geom_bar(stat = "identity") +  # Bar plot with bin counts
-  scale_x_discrete(guide = guide_axis(angle = 90)) +  # Rotate x labels for better readability
-  scale_y_continuous(limits = c(0, 150)) +
-  scale_fill_manual(
-    values = c("sv" = "grey75",
-               "te_5453" = "#eb7287",
-               "te_899" = "#7287eb"),
-    labels = c("sv" = "Other SV",
-               "te_5453" = "5453 bp TE",
-               "te_899" = "899 bp TE")
-  ) +
-  labs(x = "Length of Variant (binned)", y = "Number of Variants", title = "E HiFi") +
-  theme_classic(base_size = 6) +
-  theme(
-    legend.key.size = unit(0.2, "cm"),
-    legend.title = element_blank(),
-    legend.position = c(.15, .8),
-    legend.background = element_rect(fill = "transparent"),
-    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
-    plot.title = element_text(hjust = 0.5),
-    plot.background = element_rect(fill = "transparent", color = NA),
-    plot.margin = margin(t = 0.01, r = 0.05, b = 0.01, l = 0.01, unit = "cm")
-  )
-
-```
-
 
 ## Ref
 ```{r}
@@ -312,14 +281,14 @@ sv %>%
     limits = c(0,7500),
     breaks = c(0, 899, 5453, 7500)
   ) +
-    scale_y_continuous(
+  scale_y_continuous(
     limits = c(0, 150)
   ) +
   scale_fill_manual(
     values = c("sv" = "grey75"),
     labels = c("sv" = "Other SV")
   )+
-  labs(x = "Length of Variant", y = "Number of Variants", title = "Reference") +
+  labs(x = "Length of variant (bp)", y = "Number of variants", title = "Reference") +
   theme_classic(base_size = 6) +
   theme(
     legend.key.size = unit(0.2, "cm"),
@@ -345,14 +314,14 @@ sv %>%
     limits = c(0,7500),
     breaks = c(0, 899, 5453, 7500)
   ) +
-    scale_y_continuous(
+  scale_y_continuous(
     limits = c(0,150)
   ) +
   scale_fill_manual(
     values = c("sv" = "grey75"),
     labels = c("sv" = "Other SV")
   )+
-  labs(x = "Length of Variant", y = "Number of Variants", title = "Tree") +
+  labs(x = "Length of variant (bp)", y = "Number of variants", title = "Tree") +
   theme_classic(base_size = 6) +
   theme(
     legend.key.size = unit(0.2, "cm"),
@@ -373,37 +342,37 @@ ggsave("./Figures/SV_Calling/term_chandler_dn_sv_histogram.png", height = 1, wid
 sv %>%
   filter(SOURCE %in% c("ref_chandler", "term_chandler")) %>%
   ggplot(aes(x = SVLEN, fill = SOURCE)) +
-  geom_histogram(bins = 35) +
+  geom_histogram(bins = 32, color = "black", linewidth = 0.2) +
   scale_x_continuous(
     limits = c(0,6500),
-    breaks = c(0, 899, 5453, 6500)
+    breaks = c(0, 900, 5500, 6500)
   ) +
   scale_y_continuous(
     limits = c(0,150)
   ) +
   scale_fill_manual(
     values = c("ref_chandler" = "darkolivegreen4",
-              "term_chandler"  = "darkolivegreen3"
-              ),
+               "term_chandler"  = "darkolivegreen3"
+    ),
     labels = c("ref_chandler" = "Reference",
                "term_chandler" = "Tree"
-               )
+    )
   ) +
-  labs(x = "Length of Variant", y = "Number of Variants", title = "Reference and Tree") +
+  labs(x = "Length of variant (bp)", y = "Number of variants (bp)", title = "Reference and Tree") +
   theme_classic(base_size = 6) +
   theme(
     legend.key.size = unit(0.2, "cm"),
     legend.title = element_blank(),
-    legend.position = c(.15, .8),
+    legend.position = c(.15, .88),
     legend.background = element_rect(fill = "transparent"),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
     plot.title = element_text(hjust = 0.5),
     plot.background = element_rect(fill = "transparent", color = NA),
-    plot.margin = margin(t = 0.01, r = 0.05, b = 0.01, l = 0.01, unit = "cm")
+    plot.margin = ggplot2::margin(t = 0.05, r = 0.05, b = 0.01, l = 0.01, unit = "cm")
   )
 
-ggsave("./Figures/SV_Calling/ref_term_chandler_dn_sv_histogram.pdf", height = 1, width = 2)
-ggsave("./Figures/SV_Calling/ref_term_chandler_dn_sv_histogram.png", height = 1, width = 2)
+ggsave("./Figures/SV_Calling/ref_term_chandler_dn_sv_histogram.pdf", height = 1.375, width = 2.16)
+ggsave("./Figures/SV_Calling/ref_term_chandler_dn_sv_histogram.png", height = 1.375, width = 2.16)
 ```
 
 

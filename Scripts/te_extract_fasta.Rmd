@@ -1,0 +1,55 @@
+---
+title: "te_extract_fasta_align"
+author: "Matthew Davis"
+date: "2025-02-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r, message=FALSE}
+library(ggenomics)
+library(msa)
+```
+
+## Functions
+```{r}
+
+```
+
+## Read in data
+```{r}
+blast_5500 <- fread("./Data/Blast_Tables/Parsed/te_5453_table.tsv")
+blast_900 <- fread("./Data/Blast_Tables/Parsed/te_899_table.tsv")
+ref_fasta <- ggread_fasta("./Data/Fastas/ref_chandler_combohap_default_scaffold.fasta")
+te_5500 <- ggread_fasta("./Data/Alignments/all_5500_trimmed_mafft_alignment.fasta")
+te_900 <- ggread_fasta("./Data/Alignments/all_900_trimmed_mafft_alignment.fasta")
+```
+
+# Prepare data
+## Extract original TE locations
+```{r}
+chr13_5500.fasta <- subseq(ref_fasta["NC_049913.1_RagTag_hap2"], start = 812194, end = 817741)
+chr7_5500.fasta <- subseq(ref_fasta["NC_049907.1_RagTag_hap2"], start = 48806611, end = 48812172)
+chr13.2_5500.fasta <- subseq(ref_fasta["NC_049913.1_RagTag_hap2"], start = 36932818, end = 36938263)
+names(chr13.2_5500.fasta) <- "NC_049913.1_RagTag_hap2_2"
+chr10_5500.fasta <- subseq(ref_fasta["NC_049910.1_RagTag_hap2"], start = 32246388, end = 32251833)
+chr9_5500.fasta <- subseq(ref_fasta["NC_049909.1_RagTag_hap1"], start = 20983226, end = 20988666)
+chr11_900.fasta <- subseq(ref_fasta["NC_049911.1_RagTag_hap2"], start = 26031624, end = 26032614)
+```
+
+## Combine reference sequence with insertions
+```{r}
+class_5500 <- c(te_5500, chr7_5500.fasta, chr13_5500.fasta)
+class_900 <- c(te_900, chr11_900.fasta)
+
+large_class_5500 <- c(te_5500, chr7_5500.fasta, chr13_5500.fasta, chr13.2_5500.fasta, chr10_5500.fasta, chr9_5500.fasta)
+
+writeXStringSet(class_5500, filepath = "./Data/Fastas/TEs/class_5500_with_original_tes.fasta")
+writeXStringSet(class_900, filepath = "./Data/Fastas/TEs/class_900_with_original_te.fasta")
+writeXStringSet(large_class_5500, filepath = "./Data/Fastas/TEs/large_class_5500_with_original_tes.fasta")
+```

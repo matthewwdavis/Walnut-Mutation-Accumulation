@@ -1,0 +1,130 @@
+---
+title: "te_tree_with_origin"
+author: "Matthew Davis"
+date: "2025-02-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Library
+```{r}
+library(ggenomics)
+library(msa)
+library(phangorn)
+```
+
+## Functions
+```{r}
+bs_plot <- function(bindata, bootstraps = 1e4, method = "indelblock"){
+  
+  upgma_tree <- upgma(dist.dna(bindata, model = method))
+  
+  bs_trees <- function(x) {
+    boot_sample <- bindata[, sample(ncol(bindata), replace = TRUE)]  # Resample sites
+    boot_dist <- dist.dna(boot_sample, model = method)  # Compute distance matrix
+    upgma(boot_dist)  # Return UPGMA tree
+  }
+  
+  boot_trees <- boot.phylo(upgma_tree, bindata, bs_trees, B = bootstraps)
+  
+  upgma_tree$node.label <- boot_trees
+
+  return(upgma_tree)
+}
+```
+
+## Read in data
+```{r}
+class900 <- ggread_fasta("./Data/Fastas/TEs/class_900_with_ref_trimmed.fasta")
+class5500 <- ggread_fasta("./Data/Fastas/TEs/class_5500_with_ref_trimmed.fasta")
+```
+
+# Align data
+## Muscle
+```{r}
+align900 <- msa(class900, method = "Muscle")
+align5500 <- msa(class5500, method = "Muscle")
+```
+
+## Convert alignment to bin
+```{r}
+bin900 <- as.DNAbin(align900)
+bin5500 <- as.DNAbin(align5500)
+```
+
+# Bootstrap tree
+## Run bootstrap
+```{r}
+bs900 <- bs_plot(bin900, bootstraps = 1e3)
+bs5500 <- bs_plot(bin5500, bootstraps = 1e3)
+```
+
+# Plot with ggtree
+## 900 class TE
+```{r}
+ggtree(bs900, branch.length = "branch.length", layout = "unrooted") +
+  geom_tippoint(aes(color = case_when(
+    grepl("^NC", label) ~ "green",
+    grepl("^17", label) ~ "red",
+    TRUE ~ "blue"
+  )), size = 2) +
+  scale_color_manual(
+    values = c("blue" = "blue", "red" = "red", "green" = "green"),
+    labels = c("blue" = "900 class", "red" = "Tandem duplicate", "green" = "Original")
+  ) +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.title = element_blank(),
+    legend.spacing.y = unit(-0.4, "cm"),
+    legend.key.size = unit(0.3, "cm"),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_blank(),
+    legend.background = element_rect(fill = NA, color = NA),
+    legend.key = element_rect(fill = NA, color = NA),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA)
+  )
+
+```
+
+## Look at 5500
+```{r}
+ggtree(bs5500, branch.length = "branch.length", layout = "unrooted") +
+  geom_nodelab(aes(label = label)) +
+  geom_tippoint(aes(color = case_when(
+    grepl("^NC", label) ~ "green",
+    grepl("^5467", label) ~ "blue",
+    grepl("5454_7_42221860_A_3", label) ~ "purple",
+    grepl("5454_11_4069930_B_8", label) ~ "purple",
+    TRUE ~ "red"
+  )), size = 2) +
+  scale_color_manual(
+    values = c("blue" = "blue", "red" = "red", "green" = "green", "purple" = "purple"),
+    labels = c("blue" = "Chr 7", "red" = "Chr 13", "green" = "Original", purple = "odd ones")
+  ) +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.title = element_blank(),
+    legend.spacing.y = unit(-0.4, "cm"),
+    legend.key.size = unit(0.3, "cm"),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_blank(),
+    legend.background = element_rect(fill = NA, color = NA),
+    legend.key = element_rect(fill = NA, color = NA),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA)
+  )
+```
+

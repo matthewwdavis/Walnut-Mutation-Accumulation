@@ -1,0 +1,397 @@
+---
+title: "te_vaf"
+author: "Matthew Davis"
+date: "2025-02-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Library
+```{r, message=FALSE}
+library(ggenomics)
+```
+
+## Functions
+```{r}
+
+```
+
+## Read in data
+```{r}
+blast5500 <- fread("./Data/Blast_Tables/Parsed/te_5453_table.tsv")
+blast900 <- fread("./Data/Blast_Tables/Parsed/te_899_table.tsv")
+sv <- fread("./Data/VCFs/SV_VCF/Parsed/parsed_ins_dels_pbsv.vcf")
+```
+
+# Prepare data
+## Rename the sv and prep data
+```{r}
+sv[, NUM := seq_len(.N), by = SVLEN]
+sv[, QSEQID := paste(SVLEN, CHROM, POS, HAP, NUM, sep = "_")]
+small_sv <- sv[, .(QSEQID, VAF, CHROM, HAP)]
+```
+
+## Rename TE and prep data
+```{r}
+# Add class
+blast5500[, CLASS := "5500"]
+blast900[, CLASS := "900"]
+# Combine classes
+te <- rbind(blast5500, blast900)
+# Fix naming conventions
+te[, QSEQID := gsub("_\\(reversed\\)", "", QSEQID)]
+te[, QSEQID := gsub("-1", "", QSEQID)]
+# Select
+tes <- te[,.(QSEQID, CLASS)]
+```
+
+## Extract TE VAF
+```{r}
+te_vaf <- merge(tes, small_sv)
+```
+
+## Caluclate proportions
+```{r}
+te_vaf[, TOTAL := .N, by = CLASS]
+te_vaf[, OCCUR_VAF := .N, by = c("CLASS", "VAF")]
+te_vaf[, PROP := OCCUR_VAF/TOTAL]
+```
+
+## Create fixed, non-fixed column
+```{r}
+te_vaf[, FIXED := fifelse(VAF == 1, "fixed", "nonfixed")]
+te_vaf[, FIXED := factor(FIXED, levels = c("fixed", "nonfixed"))]
+```
+
+## How many fixed and non-fixed are in each chrom?
+```{r}
+te_vaf %>%
+  group_by(CHROM, HAP) %>%
+  summarise(
+    total = n(),
+    num_fix = sum(FIXED == "fixed"),
+    num_nonfixed = sum(FIXED == "nonfixed"),
+    prop_nonfix = num_nonfixed/total
+  )
+```
+
+
+## Create windows of VAF
+```{r}
+setorder(te_vaf, CLASS, VAF) 
+
+bins <- seq(0, 1, by = 0.05)  # 20 equal bins from 0 to 1
+
+te_vaf[, WINDOW := cut(VAF, breaks = bins, labels = FALSE), by = CLASS]
+te_vaf[, OCCUR_WIN := .N, by = .(CLASS, WINDOW)]
+te_vaf[, PROP_WIN := OCCUR_WIN/TOTAL]
+
+```
+
+
+# Plot
+## VAF histogram
+```{r}
+te_vaf %>%
+  filter(!CHROM %in% c(4,9)) %>%
+  ggplot(aes(x = VAF, fill = CLASS)) +
+  geom_histogram(position = "dodge", bins = 32, color = "black", linewidth = .2) + 
+  scale_x_continuous(
+    breaks = c(0, 0.25, 0.5, 0.75, 1.0)
+  ) +
+  labs(x = "Variant Allele Frequency", y = "Number of TEs") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.key.size = unit(.2, "cm"),
+    legend.position = c(.2, .8),
+    legend.title = element_blank()
+  )
+
+te_vaf %>%
+  filter(CLASS %in% "900") %>%
+  ggplot(aes(x = VAF)) +
+  geom_histogram(
+    aes(y = after_stat(count)/sum(after_stat(count))),
+    position = "dodge", bins = 32, fill = "#7287eb", color = "black", linewidth = .2) + 
+  scale_x_continuous(
+    limits = c(0,1.02),
+    breaks = c(0, 0.25, 0.5, 0.75, 1.0),
+    labels = c("0" = "0",
+               0.25,
+               0.5,
+               0.75,
+               1.0)
+  ) +
+  scale_y_continuous(
+    limits = c(0,1),
+    breaks = c(0, 0.25, 0.5, 0.75, 1.0),
+    labels = c("0" = "0",
+               0.25,
+               0.5,
+               0.75,
+               1.0)
+  ) +
+  labs(x = "Variant Allele Frequency",
+       y = "Proportion of TEs",
+       title = "900 Class") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.key.size = unit(.2, "cm"),
+    legend.position = c(.2, .8),
+    legend.title = element_blank(),
+    plot.title = element_text(hjust = 0.5)
+  )
+ggsave("./Figures/Transposable_Elements/vaf_class900.pdf", height = 1.2, width = 2)
+
+te_vaf %>%
+  filter(CLASS %in% "5500") %>%
+  ggplot(aes(x = VAF)) +
+  geom_histogram(
+    aes(y = after_stat(count)/sum(after_stat(count))),
+    position = "dodge", bins = 32, fill = "#eb7287", color = "black", linewidth = .2) + 
+  scale_x_continuous(
+    limits = c(0,1.02),
+    breaks = c(0, 0.25, 0.5, 0.75, 1.0),
+    labels = c("0" = "0",
+               0.25,
+               0.5,
+               0.75,
+               1.0)
+  ) +
+  scale_y_continuous(
+    limits = c(0,1),
+    breaks = c(0, 0.25, 0.5, 0.75, 1.0),
+    labels = c("0" = "0",
+               0.25,
+               0.5,
+               0.75,
+               1.0)
+  ) +
+  labs(x = "Variant Allele Frequency",
+       y = "Proportion of TEs",
+       title = "5500 Class") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.key.size = unit(.2, "cm"),
+    legend.position = c(.2, .8),
+    legend.title = element_blank(),
+    plot.title = element_text(hjust = 0.5)
+  )
+ggsave("./Figures/Transposable_Elements/vaf_class5500.pdf", height = 1.2, width = 2)
+```
+
+## VAF bar plot
+```{r}
+# All TEs
+te_vaf %>%
+  ggplot(aes(x = WINDOW, y = PROP_WIN, fill = CLASS)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", linewidth = 0.2) +
+  geom_segment(aes(x = 19.25, xend = 20.75,  y = 0.95, yend = 0.95),
+               linewidth = 0.175, color = "black") +
+  geom_segment(aes(x = 19.25, xend = 19.25, y = 0.925, yend = 0.95),
+               linewidth = 0.175, color = "black") +
+  geom_segment(aes(x = 20.75, xend = 20.75, y = 0.925, yend = 0.95),
+               linewidth = 0.175, color = "black") +
+  annotate(
+    "text", x = 20, y = 1,
+    label = "Fixed", size = 2, color = "black"
+  ) +
+  geom_segment(aes(x = 4.25, xend = 13.75,  y = 0.1, yend = 0.1),
+               linewidth = 0.175, color = "black") +
+  geom_segment(aes(x = 4.25, xend = 4.25, y = 0.075, yend = 0.1),
+               linewidth = 0.175, color = "black") +
+  geom_segment(aes(x = 13.75, xend = 13.75, y = 0.075, yend = 0.1),
+               linewidth = 0.175, color = "black") +
+  annotate(
+    "text", x = 9, y = 0.15,
+    label = "Recent", size = 2, color = "black"
+  ) +
+  scale_y_continuous(
+    limits = c(0,1)
+  ) +
+  scale_x_continuous(
+    limits = c(0, 21),
+    breaks = c(0, 5, 10, 15, 20, 21),
+    labels = c(
+      "0" = "0",
+      "5" = "0.25",
+      "10" = "0.5",
+      "15" = "0.75",
+      "20" = "1",
+      "21" = ""
+    )
+  ) +
+  scale_fill_manual(
+    values = c(
+      "900" = "#7287eb",
+      "5500" = "#eb7287"
+    ),
+    labels = c(
+      "900" = "900 class",
+      "5500" = "5500 class")
+  ) +
+  labs(x = "Proportion of cells", y = "Proportion of TEs") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.background = element_rect(fill = "transparent", color = NA),
+    legend.key.size = unit(.2, "cm"),
+    legend.position = c(.13, .9),
+    legend.title = element_blank(),
+    axis.ticks.x = element_line(), 
+    axis.ticks.length = unit(c(rep(0.8, 5), 0), "mm"),
+    axis.title.x = element_text(vjust = -.75),
+    plot.title = element_text(hjust = 0.5),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    plot.margin = ggplot2::margin(t = 0.01, r = 0.05, b = 0.1, l = 0.01, unit = "cm")
+  )
+ggsave("./Figures/Transposable_Elements/vaf_prop_both_class.pdf", height = 1.81, width = 2.75)
+ggsave("./Figures/Transposable_Elements/vaf_prop_both_class.png", height = 1.81, width = 2.75)
+
+# Removing chromosomes 4 and 9
+te_vaf %>%
+  filter(!CHROM %in% c(4,9)) %>%
+  ggplot(aes(x = WINDOW, y = PROP_WIN, fill = CLASS)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", linewidth = 0.2) +
+  scale_y_continuous(
+    limits = c(0,1)
+  ) +
+  scale_x_continuous(
+    limits = c(0, 21),
+    breaks = c(0, 5, 10, 15, 20, 21),
+    labels = c(
+      "0" = "0",
+      "5" = "0.25",
+      "10" = "0.5",
+      "15" = "0.75",
+      "20" = "1",
+      "21" = ""
+    )
+  ) +
+  scale_fill_manual(
+    values = c(
+      "900" = "#7287eb",
+      "5500" = "#eb7287"
+    ),
+    labels = c(
+      "900" = "900 class",
+      "5500" = "5500 class")
+  ) +
+  labs(x = "Proportion of cells", y = "Proportion of TEs") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.background = element_rect(fill = "transparent", color = NA),
+    legend.key.size = unit(.2, "cm"),
+    legend.position = c(.13, .9),
+    legend.title = element_blank(),
+    axis.ticks.x = element_line(), 
+    axis.ticks.length = unit(c(rep(0.8, 5), 0), "mm"),
+    axis.title.x = element_text(vjust = -.75),
+    plot.title = element_text(hjust = 0.5),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    plot.margin = ggplot2::margin(t = 0.05, r = 0.05, b = 0.075, l = 0.01, unit = "cm")
+  )
+ggsave("./Figures/Transposable_Elements/vaf_prop_both_class_nochr49.pdf",  height = 1.81, width = 2.75)
+ggsave("./Figures/Transposable_Elements/vaf_prop_both_class_nochr49.png",  height = 1.81, width = 2.75)
+```
+
+## Highlighting VAFs
+```{r}
+te_vaf %>%
+  filter(CLASS %in% "900") %>%
+  ggplot(aes(x = VAF, fill = FIXED)) +
+  geom_histogram(
+    aes(y = after_stat(count) / sum(after_stat(count))),
+    position = "dodge", bins = 32, color = "black", linewidth = .1
+  ) + 
+  scale_x_continuous(
+    limits = c(0, 1.02),
+    breaks = c(0, 0.25, 0.5, 0.75, 1.0),
+    labels = c("0" = "0", 0.25, 0.5, 0.75, 1.0)
+  ) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    breaks = c(0, 0.25, 0.5, 0.75, 1.0),
+    labels = c("0" = "0", 0.25, 0.5, 0.75, 1.0)
+  ) +
+  scale_fill_manual(
+    values = c(
+      "fixed" = "firebrick1",
+      "nonfixed" = "dodgerblue"),
+    labels = c(
+      "fixed" = "Fixed TEs",
+      "nonfixed" = "Non-fixed TEs")
+  ) +
+  labs(
+    x = "Variant Allele Frequency",
+    y = "Proportion of TEs",
+    title = "900 Class",
+    fill = "VAF"
+  ) +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.background = element_rect(fill = "transparent", color = NA),
+    legend.key.size = unit(.2, "cm"),
+    legend.position = c(.21, .85),
+    legend.title = element_blank(),
+    plot.title = element_text(hjust = 0.5),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    plot.margin = ggplot2::margin(t = 0.05, r = 0.05, b = 0.01, l = 0.01, unit = "cm")
+  )
+ggsave("./Figures/Transposable_Elements/vaf_1highlight_class900.pdf", height = 1.1, width = 1.875)
+ggsave("./Figures/Transposable_Elements/vaf_1highlight_class900.png", height = 1.1, width = 1.875)
+
+
+te_vaf %>%
+  filter(CLASS %in% "5500") %>%
+  ggplot(aes(x = VAF, fill = FIXED)) +
+  geom_histogram(
+    aes(y = after_stat(count) / sum(after_stat(count))),
+    position = "dodge", bins = 32, color = "black", linewidth = .1
+  ) + 
+  scale_x_continuous(
+    limits = c(0, 1.02),
+    breaks = c(0, 0.25, 0.5, 0.75, 1.0),
+    labels = c("0" = "0", 0.25, 0.5, 0.75, 1.0)
+  ) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    breaks = c(0, 0.25, 0.5, 0.75, 1.0),
+    labels = c("0" = "0", 0.25, 0.5, 0.75, 1.0)
+  ) +
+  scale_fill_manual(
+    values = c(
+      "fixed" = "firebrick1",
+      "nonfixed" = "dodgerblue"),
+    labels = c(
+      "fixed" = "Fixed TEs",
+      "nonfixed" = "Non-fixed TEs")
+  ) +
+  labs(
+    x = "Variant Allele Frequency",
+    y = "Proportion of TEs",
+    title = "5500 Class",
+    fill = "VAF"
+  ) +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.background = element_rect(fill = "transparent", color = NA),
+    legend.key.size = unit(.2, "cm"),
+    legend.position = c(.21, .85),
+    legend.title = element_blank(),
+    plot.title = element_text(hjust = 0.5),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    plot.margin = ggplot2::margin(t = 0.05, r = 0.05, b = 0.01, l = 0.01, unit = "cm")
+  )
+ggsave("./Figures/Transposable_Elements/vaf_1highlight_class5500.pdf", height = 1.1, width = 1.875)
+ggsave("./Figures/Transposable_Elements/vaf_1highlight_class5500.png", height = 1.1, width = 1.875)
+
+```
+

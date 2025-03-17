@@ -1,0 +1,163 @@
+---
+title: "telomere_sizes"
+author: "Matthew Davis"
+date: "2025-02-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggenomics)
+```
+
+## Functions
+```{r}
+read_tel <- function(file, id, culture){
+  
+  data <- fread(file)
+  
+  setnames(data, c("V1", "V2"), c("REPEAT", "COUNT"))
+  
+  data[, SOURCE := id]
+  data[, TYPE := culture]
+  
+  return(data)
+  
+}
+
+parse_stats <- function(table, sources) {
+  
+  table[, SOURCE := c(sources)]
+  
+  table[, sum_len := as.numeric(gsub(",", "", sum_len))]
+  
+  small.stats <- table[, .(SOURCE, sum_len)]
+  
+  return(small.stats)
+  
+}
+```
+
+## Read in telomere counts
+```{r}
+tel_ref <- read_tel("./Data/Telomeres/Jellyfish_Count/ref_chandler_hifi_reads_chr_only_telomere_AAACCCT.txt", "reference", "tree")
+tel_term <- read_tel("./Data/Telomeres/Jellyfish_Count/term_chandler_hifi_reads_chr_only_telomere_AAACCCT.txt", "term", "tree")
+tel_ehifi <- read_tel("./Data/Telomeres/Jellyfish_Count/cr2_hifi_reads_chr_only_telomere_AAACCCT.txt", "cr2_hifi", "embryo")
+
+tel_11a <- read_tel("./Data/Telomeres/Jellyfish_Count/11A_I2_S157_chr_only_telomere_AAACCCT.txt", "11A", "embryo")
+tel_12a <- read_tel("./Data/Telomeres/Jellyfish_Count/12A_I2_S158_chr_only_telomere_AAACCCT.txt", "12A", "embryo")
+tel_13a <- read_tel("./Data/Telomeres/Jellyfish_Count/13A_I1_S159_chr_only_telomere_AAACCCT.txt", "13A", "embryo")
+tel_15a <- read_tel("./Data/Telomeres/Jellyfish_Count/15A_I1_S160_chr_only_telomere_AAACCCT.txt", "15A", "embryo")
+tel_15a1 <- read_tel("./Data/Telomeres/Jellyfish_Count/15A1_I1_S161_chr_only_telomere_AAACCCT.txt", "15A1", "embryo")
+tel_16a <- read_tel("./Data/Telomeres/Jellyfish_Count/16A_I2_S162_chr_only_telomere_AAACCCT.txt", "16A", "embryo")
+tel_16a1 <- read_tel("./Data/Telomeres/Jellyfish_Count/16A1_I1_S151_chr_only_telomere_AAACCCT.txt", "16A1", "embryo")
+tel_16a2 <- read_tel("./Data/Telomeres/Jellyfish_Count/16A2_I2_S152_chr_only_telomere_AAACCCT.txt", "16A2", "embryo")
+tel_17a1 <- read_tel("./Data/Telomeres/Jellyfish_Count/17A1_I2_S153_chr_only_telomere_AAACCCT.txt", "17A1", "embryo")
+tel_17a2 <- read_tel("./Data/Telomeres/Jellyfish_Count/17A2_I2_S154_chr_only_telomere_AAACCCT.txt", "17A2", "embryo")
+tel_18a <- read_tel("./Data/Telomeres/Jellyfish_Count/18A_I2_S155_chr_only_telomere_AAACCCT.txt", "18A", "embryo")
+tel_18a1 <- read_tel("./Data/Telomeres/Jellyfish_Count/18A1_I1_S156_chr_only_telomere_AAACCCT.txt", "18A1", "embryo")
+tel_211 <- read_tel("./Data/Telomeres/Jellyfish_Count/CR21-1_S7_chr_only_telomere_AAACCCT.txt", "cr21_1", "embryo")
+tel_212 <- read_tel("./Data/Telomeres/Jellyfish_Count/CR21-2_S8_chr_only_telomere_AAACCCT.txt", "cr21_2", "embryo")
+
+tel_cr85 <- read_tel("./Data/Telomeres/Jellyfish_Count/CR85_S28_chr_only_telomere_AAACCCT.txt", "85", "shoot")
+tel_cr10 <- read_tel("./Data/Telomeres/Jellyfish_Count/CR10_S29_chr_only_telomere_AAACCCT.txt", "10", "shoot")
+tel_cr13 <- read_tel("./Data/Telomeres/Jellyfish_Count/CR13_S30_chr_only_telomere_AAACCCT.txt", "13", "shoot")
+tel_cr22 <- read_tel("./Data/Telomeres/Jellyfish_Count/CR22_S31_chr_only_telomere_AAACCCT.txt", "22", "shoot")
+```
+
+## Read in sequencing stats
+```{r}
+hifi.stats <- fread("./Data/Telomeres/Jellyfish_Count/hifi_fastq_chr_only.stats")
+short.stats <- fread("./Data/Telomeres/Jellyfish_Count/short_read_fastq_chr_only.stats")
+```
+
+
+# Prepare data
+## Parse stats
+```{r}
+hifi_small <- parse_stats(hifi.stats, c("cr2_hifi", "reference", "term"))
+short_small <- parse_stats(short.stats, c("11A", "12A", "13A", "15A1", "15A", "16A1", "16A2", "16A", "17A1", "17A2", "18A1", "18A", "10", "cr11-1", "cr11-2", "13", "cr21_1", "cr21_2", "22", "85"))
+```
+
+
+## Combine data 
+```{r}
+tel_counts <- rbind(tel_ref, tel_term, tel_ehifi, tel_11a, tel_12a, tel_13a, tel_15a, tel_15a1, tel_16a, tel_16a1, tel_16a2, tel_17a1, tel_17a2, tel_18a, tel_18a1, tel_211, tel_212, tel_cr85, tel_cr10, tel_cr13, tel_cr22)
+
+stats <- rbind(hifi_small, short_small)
+```
+
+## Merge data and normalize
+```{r}
+# Merge data
+tel.data <- merge(tel_counts, stats, by = "SOURCE", all.x = TRUE)
+
+# Normalize by number of basepairs
+tel.data[, NORM_TEL_SEQ := COUNT / as.numeric(sum_len)]
+
+# Normalize by number of basepairs and repeat_length. I don't think this is needed.
+#tel.data[, REP_LEN := nchar(REPEAT)]
+```
+
+
+
+## Set levels and new names
+```{r}
+tel.data$SOURCE <- factor(tel.data$SOURCE, levels = rev(c("16A2","16A1","17A2","17A1",
+                                                          "18A1","16A","cr2_hifi","15A1",
+                                                          "15A","18A", "cr21_2","cr21_1",
+                                                          "12A","13A","11A", "85", "10",
+                                                          "13", "22", "term", "reference")))
+
+new_labels = c("reference" = "Reference", "term" = "Tree",
+               "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+               "11A" = "E 14", "12A" = "E 12", "13A" = "E 13",
+               "15A" = "E 8", "15A1" = "E 7", "16A" = "E 6",
+               "16A1" = "E 2", "16A2" = "E 1", "17A1" = "E 4",
+               "17A2" = "E 3", "18A" = "E 9", "18A1" = "E 5",
+               "cr85" = "S 1985", "cr10" = "S 2010",
+               "cr13" = "S 2013", "cr22" = "S 2022")
+```
+
+# Plot
+## Quick barplot, no corrections
+```{r}
+tel.data %>%
+  ggplot(aes(x = NORM_TEL_SEQ, y = SOURCE, fill = TYPE)) +
+  geom_bar(stat = "identity", width = 0.75, color = "black", linewidth = 0.2) +
+  scale_y_discrete(
+    labels = new_labels
+  ) +
+  scale_x_continuous(
+    breaks = c(0, 0.0001),
+    labels = function(x) ifelse(x == 0, "0", scales::label_number(scale = 1e5, suffix = "e-5")(x))
+  ) +
+  scale_fill_manual(
+    values = c(
+      "embryo"="goldenrod1",
+      "shoot"="darkseagreen2",
+      "tree"="darkseagreen4"
+    )
+  ) +
+  labs(title = "Telomeres", x = "Normalized count") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.position = "none",
+    axis.title.y = element_blank(),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_blank(),
+    #axis.title.x = element_blank(),
+    plot.title = element_text(size = 6, hjust = 0.5, margin = margin(t = 0.0, r = 0, b = 0., l = 0, unit = "cm")),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = margin(t = 0.02, r = 0, b = 0, l = 0.075, unit = "cm")
+  )
+ggsave("./Figures/Telomeres/telomere_repeats_from_reads.pdf", height = 3.185, width = 0.725)
+```
+

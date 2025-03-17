@@ -21,6 +21,24 @@ library(ggtree)
 
 ## Functions
 ```{r}
+## try dist.dna method indelblock instead
+
+bs_plot <- function(phydata, bootstraps = 1e2){
+  
+  upgma_func <- function(x) upgma(dist.dna(x, method = "indelblock"))
+  
+  upgma_tree <- upgma(dist.dna(phydata))
+  
+  bs_upgma <- bootstrap.phyDat(phydata, upgma_func , bs = bootstraps)
+  
+  plotBS(upgma_tree, bs_upgma, main="UPGMA")
+  
+  bs_upgma_tree <- plotBS(upgma_tree, bs_upgma, main="UPGMA")
+  
+  return(bs_upgma_tree)
+}
+
+
 bs_plot <- function(phydata, bootstraps = 1e2){
   
   upgma_func <- function(x) upgma(dist.ml(x))
@@ -35,6 +53,19 @@ bs_plot <- function(phydata, bootstraps = 1e2){
   
   return(bs_upgma_tree)
 }
+
+count_tips_per_node <- function(tree) {
+  if (!inherits(tree, "phylo")) {
+    stop("Input must be a phylo object.")
+  }
+  
+  internal_nodes <- (Ntip(tree) + 1):max(tree$edge)
+  node_tips <- sapply(internal_nodes, function(node) {
+    length(Descendants(tree, node, type = "tips")[[1]])
+  })
+  
+  return(setNames(node_tips, internal_nodes))
+}
 ```
 
 ## Read in data
@@ -48,6 +79,71 @@ align_900 <- ggread_fasta("./Data/Alignments/all_900_trimmed_mafft_alignment.fas
 ```{r}
 matrix_5500 <- as.matrix(align_5500)
 matrix_900 <- as.matrix(align_900)
+
+bin_5500 <- as.DNAbin(align_5500)
+bin_900 <- as.DNAbin(align_900)
+
+plot(upgma(dist.dna(bin_900, model = "indelblock")))
+
+ggtree(upgma(dist.dna(bin_5500, model = "indelblock")), branch.length = "branch.length", layout = "unrooted") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25)
+
+# Example tree
+tree <- upgma(dist.dna(bin_5500, model = "indelblock"))
+tree2 <- upgma(dist.dna(bin_900, model = "indelblock"))
+
+
+# Create ggtree plot with colored circles
+ggtree(tree, branch.length = "branch.length", layout = "unrooted") +
+  geom_tippoint(aes(color = ifelse(grepl("^5467", label), "blue", "red")), size = 2) +
+  scale_color_manual(
+    values = c("blue" = "blue", "red" = "red"),
+    labels = c("blue" = "Chr 7B origin", "red" = "Chr 13B origin")
+  ) +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.title = element_blank(),
+    legend.spacing.y = unit(-0.4, "cm"),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_blank(),
+    legend.background = element_rect(fill = NA, color = NA),
+    legend.key = element_rect(fill = NA, color = NA),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA)
+  )
+ggsave("~/Desktop/test_te5500_tree.pdf", height = 2.5, width = 3.7)
+
+ggtree(tree2, branch.length = "branch.length", layout = "unrooted") +
+  geom_tippoint(aes(color = ifelse(grepl("^17", label), "red", "blue")), size = 2) +
+  scale_color_manual(
+    values = c("blue" = "blue", "red" = "red"),
+    labels = c("blue" = "900 class", "red" = "Tandem duplicate")
+  ) +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.title = element_blank(),
+    legend.spacing.y = unit(-0.4, "cm"),
+    theme(legend.key.size = unit(0.3, "cm")),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_blank(),
+    legend.background = element_rect(fill = NA, color = NA),
+    legend.key = element_rect(fill = NA, color = NA),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA)
+  )
+ggsave("~/Desktop/test_te900_tree.pdf", height = 2.5, width = 3.7)
 ```
 
 ## Create phy data objects
@@ -62,25 +158,19 @@ bs_5500 <- bs_plot(phy_5500, bootstraps = 1e2)
 bs_900 <- bs_plot(phy_900, bootstraps = 1e2)
 ```
 
+## Identifying large clades
+```{r}
+count_tips_per_node(bs_5500)
+```
+
 # Plotting trees
 ## 5500 class tree
 ```{r}
-ggtree(bs_5500, branch.length = "edge.length", layout = "unrooted") #+
-  # geom_tiplab(aes(label = label),
-  #             geom = "label",
-  #             size = 2,
-  #             align = FALSE,
-  #             linesize = 0.25) +
-  # geom_nodelab(aes(label = node),
-  #              geom = "text",
-  #              #vjust = 1,
-  #              size = 2,
-  #              align = FALSE)
-
-ggtree(bs_900, branch.length = "edge.length", layout = "unrooted") +
+p <- ggtree(bs_5500, branch.length = "branch.length", layout = "unrooted") +
   geom_tiplab(aes(label = label),
               geom = "label",
               size = 2,
+              hjust = 2,
               align = FALSE,
               linesize = 0.25) +
   geom_nodelab(aes(label = node),
@@ -89,5 +179,18 @@ ggtree(bs_900, branch.length = "edge.length", layout = "unrooted") +
                size = 2,
                align = FALSE)
 
+scaleClade(p, 159, 50)
+
+ggtree(bs_900, branch.length = "branch.length", layout = "unrooted") +
+  geom_tiplab(aes(label = label),
+              geom = "label",
+              size = 2,
+              align = FALSE,
+              linesize = 0.25) +
+  geom_nodelab(aes(label = label),
+               geom = "text",
+               hjust = 3,
+               size = 2,
+               align = FALSE)
 ```
 

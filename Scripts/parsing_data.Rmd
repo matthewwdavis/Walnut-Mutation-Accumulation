@@ -551,7 +551,11 @@ intergenic <- intergenic[!is.na(STOP)]
 
 intergenic <- intergenic[START <= STOP]
 
-intergenic$ID<-1:nrow(intergenic)
+intergenic$INFO <- paste("intergenic", 1:nrow(intergenic), sep ="_" )
+intergenic$SOURCE <- paste("Manual")
+intergenic$SCORE <- paste(".")
+intergenic$DIRECTION <- paste(".")
+intergenic$PHASE <- paste(".")
 
 # Hap 1
 h1intergenic <- h1genes_good[, .(
@@ -564,7 +568,13 @@ h1intergenic <- h1intergenic[!is.na(STOP)]
 
 h1intergenic <- h1intergenic[START <= STOP]
 
-h1intergenic$ID<-1:nrow(h1intergenic)
+h1intergenic$INFO <- paste("intergenic", 1:nrow(h1intergenic), sep ="_" )
+h1intergenic[, UNIQUE := paste("intergenic", START, STOP, sep ="_" )]
+h1intergenic$SOURCE <- paste("Manual")
+h1intergenic$SCORE <- paste(".")
+h1intergenic$DIRECTION <- paste(".")
+h1intergenic$PHASE <- paste(".")
+h1intergenic$GENE <- paste("none")
 
 # Hap 2
 h2intergenic <- h2genes_good[, .(
@@ -577,7 +587,13 @@ h2intergenic <- h2intergenic[!is.na(STOP)]
 
 h2intergenic <- h2intergenic[START <= STOP]
 
-h2intergenic$ID<-1:nrow(h2intergenic)
+h2intergenic$INFO <- paste("intergenic", 1:nrow(h2intergenic), sep ="_" )
+h2intergenic[, UNIQUE := paste("intergenic", START, STOP, sep ="_" )]
+h2intergenic$SOURCE <- paste("Manual")
+h2intergenic$SCORE <- paste(".")
+h2intergenic$DIRECTION <- paste(".")
+h2intergenic$PHASE <- paste(".")
+h2intergenic$GENE <- paste("none")
 ```
 
 ### Add hap column to haplotype gffs
@@ -587,6 +603,9 @@ h1genes_good[, HAP := "A"]
 
 h2cds_good[, HAP := "B"]
 h2genes_good[, HAP := "B"]
+
+h1intergenic[, HAP := "A"]
+h2intergenic[,HAP := "B"]
 ```
 
 
@@ -610,6 +629,250 @@ mapp_genic <- features_in_features(intergenic, mapp[DEPTH==1], mode = "length")
 ### Ratio of gene to intergenic
 ```{r}
 sum(genes_good$LENGTH)/sum(intergenic$LENGTH)
+```
+
+### Add in genic features and intergenic regions into 1 gff
+```{r}
+# h1gff_good <- h1gff[h1genes_good, on = .(CHROM, START >= START, START <= STOP)]
+# nrow(unique(h1gff_good, by = c("TYPE", "CHROM", "START")) %>%
+#   filter(TYPE %in% "gene"))
+# nrow(unique(h1genes_good, by = c("TYPE", "CHROM", "START")) %>%
+#   filter(TYPE %in% "gene"))
+# 
+# h2gff_good <- h2gff[h2genes_good, on = .(CHROM, START >= START, START <= STOP)]
+# nrow(unique(h2gff_good, by = c("i.TYPE", "CHROM", "i.START", "i.STOP")) %>%
+#   filter(i.TYPE %in% "gene"))
+# nrow(unique(h2genes_good, by = c("TYPE", "CHROM", "START", "STOP")) %>%
+#   filter(TYPE %in% "gene"))
+# 
+# h1gff_good[, HAP := "A"]
+# h2gff_good[, HAP := "B"]
+# 
+# h1gff_good <- rbind(h1gff_good, h1intergenic)
+# h2gff_good <- rbind(h2gff_good, h2intergenic)
+# 
+# h1gff_good[, gene_priority := (TYPE == "gene")]
+# setorder(h1gff_good, CHROM, START, -gene_priority)
+# h1gff_good[, gene_priority := NULL]
+# 
+# h1gff_good <- unique(h1gff_good)
+# 
+# # Ensure both tables are keyed properly for foverlaps
+# setorder(h2gff, CHROM, START)
+# setorder(h2genes_good, CHROM, START)
+# 
+# setkey(h2gff, CHROM, START, STOP)
+# setkey(h2genes_good, CHROM, START, STOP)
+# 
+# result <- foverlaps(h2gff, h2genes_good, by.x = c("CHROM", "START", "STOP"), by.y = c("CHROM", "START", "STOP"))
+# #h2gff_good <- h2gff_good[, grep("^i\\.", names(h2gff_good)), with = FALSE]
+# 
+# result[, UNIQUE := paste(CHROM, i.TYPE, i.START, i.STOP, sep = "_")]
+# 
+# unique(result, by = "UNIQUE")%>%
+#   filter(i.TYPE == "gene")
+# 
+# 
+# #######################
+# pos <- h1genes_good %>%
+#   select(CHROM, START, STOP)
+# pos[h1gff, on = .(CHROM, START <= START, STOP >= START)]
+# 
+# 
+# h1gff[, .(CHROM = pos$CHROM, START >= pos$START, START <= pos$STOP)]
+# 
+# setkey(h1gff, CHROM, START, STOP)
+# setkey(pos, CHROM, START, STOP)
+# 
+# filtered_h1gff <- foverlaps(h1gff, pos, nomatch = 0)
+# filtered_h1gff[, UNIQUE := paste(CHROM, TYPE, i.START, i.STOP, sep = "_")]
+# 
+# uniq_filt_h1gff <- unique(filtered_h1gff, by = "UNIQUE")
+# 
+# uniq_filt_h1gff %>%
+#   filter(TYPE %in% "gene")
+# h1genes_good %>%
+#   filter(TYPE %in% "gene")
+# 
+# ################### This one seems to work
+h1gff$GENE <- gsub(".+;gene=(LOC[^;]+).*", "\\1", h1gff$INFO)
+h1gff_good <- h1gff[h1gff$GENE %in% h1genes_good$GENE, ]
+
+h1gff_good[, UNIQUE := paste(TYPE, CHROM, START, STOP, sep = "_")]
+
+unique(h1gff_good, by = "UNIQUE") %>%
+  filter(TYPE == "gene")
+
+h1gff_good[, gene_priority := (TYPE == "gene")]
+setorder(h1gff_good, CHROM, START, -gene_priority)
+h1gff_good[, gene_priority := NULL]
+h1gff_good[, HAP := "A"]
+
+h1gff_good_uniq <- unique(h1gff_good, by = "UNIQUE")
+
+h2gff$GENE <- gsub(".+;gene=(LOC[^;]+).*", "\\1", h2gff$INFO)
+h2gff_good <- h2gff[h2gff$GENE %in% h2genes_good$GENE, ]
+
+h2gff_good[, UNIQUE := paste(TYPE, CHROM, START, STOP, sep = "_")]
+
+unique(h2gff_good, by = "UNIQUE") %>%
+  filter(TYPE == "gene")
+
+h2gff_good[, gene_priority := (TYPE == "gene")]
+setorder(h2gff_good, CHROM, START, -gene_priority)
+h2gff_good[, gene_priority := NULL]
+h2gff_good[, HAP := "B"]
+
+h2gff_good_uniq <- unique(h2gff_good, by = "UNIQUE")
+```
+
+### Calculate UTRs
+```{r}
+# Hap 1
+h1utr_rows <- h1gff_good_uniq[, {
+  gene_start <- START[TYPE == "gene"][1]   # Get start of gene
+  cds_start <- START[TYPE == "CDS"][1]     # Get first CDS start
+  
+  if (!is.na(gene_start) & !is.na(cds_start)) {
+    utr_start <- gene_start
+    utr_stop <- cds_start - 1
+    
+    # Only add the row if STOP - START > 1
+    if (utr_stop - utr_start > 1) {
+      list(
+        CHROM = CHROM[1],
+        SOURCE = SOURCE[1],
+        TYPE = "UTR",
+        START = utr_start,
+        STOP = utr_stop,
+        SCORE = ".",
+        DIRECTION = DIRECTION[1],
+        PHASE = ".",
+        INFO = paste0("ID=utr-", GENE[1], ";Parent=gene-", GENE[1]),
+        UNIQUE = paste0("UTR_", CHROM[1], "_", utr_start, "_", utr_stop),
+        HAP = HAP[1]
+      )
+    } else {
+      NULL
+    }
+  } else {
+    NULL
+  }
+}, by = GENE]
+
+h1utr_rows[, TYPE := fifelse(DIRECTION == "+", "5UTR", "3UTR")]
+
+h1gff_good_utr <- rbind(h1gff_good_uniq, h1utr_rows)
+
+setorder(h1gff_good_utr, CHROM, START)
+
+# Hap 2
+h2utr_rows <- h2gff_good_uniq[, {
+  gene_start <- START[TYPE == "gene"][1]   # Get start of gene
+  cds_start <- START[TYPE == "CDS"][1]     # Get first CDS start
+  
+  if (!is.na(gene_start) & !is.na(cds_start)) {
+    utr_start <- gene_start
+    utr_stop <- cds_start - 1
+    
+    # Only add the row if STOP - START > 1
+    if (utr_stop - utr_start > 1) {
+      list(
+        CHROM = CHROM[1],
+        SOURCE = SOURCE[1],
+        TYPE = "UTR",
+        START = utr_start,
+        STOP = utr_stop,
+        SCORE = ".",
+        DIRECTION = DIRECTION[1],
+        PHASE = ".",
+        INFO = paste0("ID=utr-", GENE[1], ";Parent=gene-", GENE[1]),
+        UNIQUE = paste0("UTR_", CHROM[1], "_", utr_start, "_", utr_stop),
+        HAP = HAP[1]
+      )
+    } else {
+      NULL
+    }
+  } else {
+    NULL
+  }
+}, by = GENE]
+
+h2utr_rows[, TYPE := fifelse(DIRECTION == "+", "5UTR", "3UTR")]
+
+h2gff_good_utr <- rbind(h2gff_good_uniq, h2utr_rows)
+
+setorder(h2gff_good_utr, CHROM, START)
+```
+
+### Calculate introns
+```{r}
+# Hap 1
+h1intron_rows <- h1gff_good_utr[TYPE == "exon", .SD[order(START)], by = GENE][, {
+  if (.N > 1) {  # Only process if there are at least two exons
+    intron_start <- STOP[-.N] + 1  # Intron starts after previous exon STOP
+    intron_stop <- START[-1] - 1   # Intron stops before next exon START
+    
+    .(CHROM = CHROM[1],
+      SOURCE = SOURCE[1],
+      TYPE = "intron",
+      START = intron_start,
+      STOP = intron_stop,
+      SCORE = ".",
+      DIRECTION = DIRECTION[1],
+      PHASE = ".",
+      INFO = paste0("ID=intron-", GENE[1], ";Parent=gene-", GENE[1]),
+      UNIQUE = paste0("intron_", CHROM[1], "_", intron_start, "_", intron_stop),
+      HAP = HAP[1])
+  } else {
+    NULL  # Skip genes with only one exon
+  }
+}, by = GENE]
+
+h1gff_good_intron <- rbind(h1gff_good_utr, h1intron_rows)
+
+setorder(h1gff_good_intron, CHROM, START)
+
+# Hap 2
+h2intron_rows <- h2gff_good_utr[TYPE == "exon", .SD[order(START)], by = GENE][, {
+  if (.N > 1) {  # Only process if there are at least two exons
+    intron_start <- STOP[-.N] + 1  # Intron starts after previous exon STOP
+    intron_stop <- START[-1] - 1   # Intron stops before next exon START
+    
+    .(CHROM = CHROM[1],
+      SOURCE = SOURCE[1],
+      TYPE = "intron",
+      START = intron_start,
+      STOP = intron_stop,
+      SCORE = ".",
+      DIRECTION = DIRECTION[1],
+      PHASE = ".",
+      INFO = paste0("ID=intron-", GENE[1], ";Parent=gene-", GENE[1]),
+      UNIQUE = paste0("intron_", CHROM[1], "_", intron_start, "_", intron_stop),
+      HAP = HAP[1])
+  } else {
+    NULL  # Skip genes with only one exon
+  }
+}, by = GENE]
+
+h2gff_good_intron <- rbind(h2gff_good_utr, h2intron_rows)
+
+setorder(h2gff_good_intron, CHROM, START)
+```
+
+### Add in intergenic regions
+```{r}
+h1gff_good_int <- rbind(h1gff_good_intron, h1intergenic)
+setorder(h1gff_good_int, CHROM, START)
+
+h2gff_good_int <- rbind(h2gff_good_intron, h2intergenic)
+setorder(h2gff_good_int, CHROM, START)
+```
+
+### Write out the gffs of verified genes, UTR, intron, intergenic space 
+```{r}
+fwrite(h1gff_good_int, "./Data/GFFs/Parsed/hap1_gff_good.tsv", sep = "\t")
+fwrite(h2gff_good_int, "./Data/GFFs/Parsed/hap2_gff_good.tsv", sep = "\t")
 ```
 
 ## Identify Homopolymers
@@ -1258,10 +1521,21 @@ te_5453[SSTART > SEND, c("SSTART", "SEND") := .(SEND, SSTART)]
 ## Create SVLEN column
 ```{r}
 all_sv[, SVLEN := as.numeric(sub("([0-9]+)_.*", "\\1", QSEQID))]
+te_5453[, SVLEN := as.numeric(sub("([0-9]+)_.*", "\\1", QSEQID))]
+te_899[, SVLEN := as.numeric(sub("([0-9]+)_.*", "\\1", QSEQID))]
+```
+
+## Look at two odd TEs
+```{r}
+te_5453 %>%
+  group_by(QSEQID) %>%
+  filter(QSEQID %in% c("5454_7_42221860_A_3", "5454_11_4069930_B_8") ) %>%
+  mutate(MATCH = QEND - QSTART) %>%
+  slice_max(order_by = BITSCORE, n = 15)
 ```
 
 
-## Select sequencest with highest bitscore
+## Select sequences with highest bitscore
 ```{r}
 top_te_5453 <- te_5453[ , .SD[which.max(BITSCORE)], by = QSEQID]
 

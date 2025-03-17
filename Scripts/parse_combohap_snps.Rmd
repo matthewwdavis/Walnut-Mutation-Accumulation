@@ -1,0 +1,296 @@
+---
+title: "parse_combohap_snps"
+author: "Matthew Davis"
+date: "2025-02-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r, message=FALSE}
+library(ggenomics)
+library(vcfR)
+library(ggVennDiagram)
+```
+
+## Functions
+```{r}
+import_vcf <- function(file, col_to_separate = "UnnamedSample", name, culture, seq){
+  # Read the VCF file using vcfR with minimal data
+  vcf <- read.vcfR(file, verbose = FALSE)
+  
+  # Convert @fix and @gt slots to data.tables
+  fix <- as.data.table(vcf@fix)
+  gt <- as.data.table(vcf@gt)
+  all <- cbind(fix, gt)
+  
+  # Apply filters as early as possible
+  vcf.table <- all[grepl("^NC_0499", CHROM), ]
+  
+  # Extract Hap if present
+  vcf.table[, HAP := ifelse(grepl("_hap\\d+", CHROM), as.numeric(gsub(".*_hap(\\d+).*", "\\1", CHROM)), NA)]
+  vcf.table[, HAP:= fifelse(HAP == 1, "A", "B")]
+  
+  # Extract CHROM number after extracting Hap
+  vcf.table[, CHROM := as.numeric(gsub("NC_0499(..).1_RagTag(_hap\\d+)?", "\\1", CHROM))]
+  
+  # Separate genotype information into distinct columns
+  vcf.table <- vcf.table[, c("GT", "GQ", "DP", "AD", "VAF", "PL") := tstrsplit(get(col_to_separate), ":", type.convert=TRUE)]
+  
+  # Create unique identifier
+  vcf.table[, UNIQUE := ifelse(is.na(HAP), paste(CHROM, POS, sep = "_"), paste(CHROM, HAP, POS, sep = "_"))]
+  
+  # Convert to numeric
+  vcf.table[, QUAL := as.numeric(QUAL)]
+  vcf.table[, DP := as.numeric(DP)]
+  vcf.table[, VAF := as.numeric(VAF)]
+  vcf.table[, GQ := as.numeric(GQ)]
+  
+  # Add source culture seq column
+  vcf.table[, SOURCE := name]
+  vcf.table[, CULTURETYPE := culture]
+  vcf.table[, SEQUENCE := seq]
+  
+  # Remove INFO and ID because it has no info
+  vcf.table[, c("ID", "INFO") := NULL]
+  
+  return(vcf.table)
+}
+
+vstrsplit<-function(x,...){
+  unlist(strsplit(x,...))
+}
+```
+
+## Read in data
+```{r}
+ref <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/ref_chandler_combohap_deepvariant.vcf.gz", name = "ref_chandler", culture = "tree", seq = "hifi")
+tree <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/term_chandler_combohap_bamdeepvariant.vcf.gz", name = "tree2", culture = "tree", seq = "hifi")
+cr2_hifi <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/cr2_hifi_combohap_deepvariant.vcf.gz", name = "cr2_hifi", culture = "embryo", seq = "hifi")
+
+cr11a <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/11A_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr11a", culture = "embryo", seq = "short")
+cr12a <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/12A_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr12a", culture = "embryo", seq = "short")
+cr13a <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/13A_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr13a", culture = "embryo", seq = "short")
+cr15a <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/15A_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr15a", culture = "embryo", seq = "short")
+cr15a1 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/15A1_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr15a1", culture = "embryo", seq = "short")
+cr16a <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/16A_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr16a", culture = "embryo", seq = "short")
+cr16a1 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/16A1_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr16a1", culture = "embryo", seq = "short")
+cr16a2 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/16A2_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr16a2", culture = "embryo", seq = "short")
+cr17a1 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/17A1_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr17a1", culture = "embryo", seq = "short")
+cr17a2 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/17A2_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr17a2", culture = "embryo", seq = "short")
+cr18a <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/18A_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr18a", culture = "embryo", seq = "short")
+cr18a1 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/18A1_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr18a1", culture = "embryo", seq = "short")
+cr21_1 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/CR21-1_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr21_1", culture = "embryo", seq = "short")
+cr21_2 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/CR21-2_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr21_2", culture = "embryo", seq = "short")
+
+cr85 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/CR85_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr85", culture = "shoot", seq = "short")
+cr10 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/CR10_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr10", culture = "shoot", seq = "short")
+cr13 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/CR13_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr13", culture = "shoot", seq = "short")
+cr22 <- import_vcf("./Data/VCFs/Deepvariantv1.6.1/Combined_Haplotype/CR22_combohap_deepvariant.vcf.gz", col_to_separate = "default", name = "cr22", culture = "shoot", seq = "short")
+
+# Change UnnamedSample column name for combining data later
+setnames(ref, "UnnamedSample", "default")
+setnames(tree, "UnnamedSample", "default")
+setnames(cr2_hifi, "UnnamedSample", "default")
+
+all_snps <- rbind(ref, tree, cr2_hifi, cr11a, cr12a, cr13a, cr15a, cr15a1, cr16a, cr16a1, cr16a2, cr17a1, cr17a2, cr18a, cr18a1, cr21_1, cr21_2, cr85, cr10, cr13, cr22)
+```
+
+# Find overlaping SNPs
+## Create vectors based on type, combine into list
+```{r}
+embryo_all <- all_snps$UNIQUE[all_snps$CULTURETYPE == "embryo"]
+embryo_hifi <- all_snps$UNIQUE[all_snps$CULTURETYPE == "embryo" & all_snps$SEQUENCE == "hifi"]
+embryo_short <- all_snps$UNIQUE[all_snps$CULTURETYPE == "embryo" & all_snps$SEQUENCE == "short"]
+tree_all <- all_snps$UNIQUE[all_snps$CULTURETYPE == "tree"]
+shoot_all <- all_snps$UNIQUE[all_snps$CULTURETYPE == "shoot"]
+
+snps.list <- list("embryo" = embryo_all,
+                  "shoot" = shoot_all,
+                  "tree" = tree_all)
+
+snps_seq.list <- list("embryo_hifi" = embryo_hifi,
+                      "embryo_short" = embryo_short,
+                      "shoot" = shoot_all,
+                      "tree" = tree_all)
+
+snps_hifi.list <- list("embryo_hifi" = embryo_hifi,
+                      "tree" = tree_all)
+
+snps_short.list <- list("embryo_short" = embryo_short,
+                      "shoots" = shoot_all)
+```
+
+## Plot venndiagram
+```{r}
+ggVennDiagram(x = snps.list,
+              category.names = c("Embryos","Shoots","Trees"),
+              set_color = c("goldenrod1","darkseagreen2","darkseagreen4"),
+              set_size = 2,
+              label_size = 2,
+              edge_size = 1,
+              label = "percent",
+              label_percent_digit = 1,
+              label_alpha = 0,
+              label_color = "black") +
+  scale_fill_distiller(palette = "Reds", direction = 1) +
+  theme(legend.position = "none")
+
+ggVennDiagram(x = snps_seq.list,
+              category.names = c("Embryo HiFi", "Embryo Short", "Shoots","Trees"),
+              set_color = c("goldenrod1","goldenrod3","darkseagreen2","darkseagreen4"),
+              set_size = 2,
+              label_size = 2,
+              edge_size = 1,
+              label = "percent",
+              label_percent_digit = 1,
+              label_alpha = 0,
+              label_color = "black") +
+  scale_fill_distiller(palette = "Reds", direction = 1) +
+  theme(legend.position = "none")
+
+ggVennDiagram(x = snps_hifi.list,
+              category.names = c("Embryo HiFi","Trees"),
+              set_color = c("goldenrod1","darkseagreen4"),
+              set_size = 2,
+              label_size = 2,
+              edge_size = 1,
+              label = "percent",
+              label_percent_digit = 1,
+              label_alpha = 0,
+              label_color = "black") +
+  scale_fill_distiller(palette = "Reds", direction = 1) +
+  theme(legend.position = "none")
+
+ggVennDiagram(x = snps_short.list,
+              category.names = c("Embryo Short","Shoots"),
+              set_color = c("goldenrod3","darkseagreen2"),
+              set_size = 2,
+              label_size = 2,
+              edge_size = 1,
+              label = "percent",
+              label_percent_digit = 1,
+              label_alpha = 0,
+              label_color = "black") +
+  scale_fill_distiller(palette = "Reds", direction = 1) +
+  theme(legend.position = "none")
+```
+
+# Removing SNPs that are shared by large groups
+## Identify SNPs that are shared across cultures
+```{r}
+embryo_shoot <- intersect(embryo_all, shoot_all)
+embryo_tree <- intersect(embryo_all, tree_all)
+shoot_tree <- intersect(shoot_all, tree_all)
+embryo_shoot_tree <- intersect(embryo_shoot, tree_all)
+
+all_share <- c(embryo_shoot, embryo_tree, shoot_tree, embryo_shoot_tree)
+```
+
+## Filter data for shared snps across groups
+```{r}
+shared_snps <- all_snps[UNIQUE %in% all_share]
+```
+
+## Filter data for snps that only exist within the large groups
+```{r}
+denovo_snps <- all_snps[!(UNIQUE %in% all_share)]
+```
+
+# Verify filtering
+## Prepare data for a venndiagram
+```{r}
+embryo_all_dn <- denovo_snps$UNIQUE[denovo_snps$CULTURETYPE == "embryo"]
+embryo_hifi_dn <- denovo_snps$UNIQUE[denovo_snps$CULTURETYPE == "embryo" & denovo_snps$SEQUENCE == "hifi"]
+embryo_short_dn <- denovo_snps$UNIQUE[denovo_snps$CULTURETYPE == "embryo" & denovo_snps$SEQUENCE == "short"]
+tree_all_dn <- denovo_snps$UNIQUE[denovo_snps$CULTURETYPE == "tree"]
+shoot_all_dn <- denovo_snps$UNIQUE[denovo_snps$CULTURETYPE == "shoot"]
+
+dn_snps.list <- list("embryo" = embryo_all_dn,
+                  "shoot" = shoot_all_dn,
+                  "tree" = tree_all_dn)
+
+dn_snps_seq.list <- list("embryo_hifi" = embryo_hifi_dn,
+                      "embryo_short" = embryo_short_dn,
+                      "shoot" = shoot_all_dn,
+                      "tree" = tree_all_dn)
+```
+
+## Plot Venndiagram
+```{r}
+ggVennDiagram(x = dn_snps.list,
+              category.names = c("Embryos","Shoots","Trees"),
+              set_color = c("goldenrod1","darkseagreen2","darkseagreen4"),
+              set_size = 2,
+              label_size = 2,
+              edge_size = 1,
+              label = "percent",
+              label_percent_digit = 1,
+              label_alpha = 0,
+              label_color = "black") +
+  scale_fill_distiller(palette = "Reds", direction = 1) +
+  theme(legend.position = "none")
+
+ggVennDiagram(x = dn_snps_seq.list,
+              category.names = c("Embryo HiFi", "Embryo Short", "Shoots","Trees"),
+              set_color = c("goldenrod1","goldenrod3","darkseagreen2","darkseagreen4"),
+              set_size = 2,
+              label_size = 2,
+              edge_size = 1,
+              label = "percent",
+              label_percent_digit = 1,
+              label_alpha = 0,
+              label_color = "black") +
+  scale_fill_distiller(palette = "Reds", direction = 1) +
+  theme(legend.position = "none")
+```
+
+# Add columns to data
+## Split Allele Depth
+```{r}
+denovo_snps$REFDP <- sapply(denovo_snps$AD, function(x) as.numeric(vstrsplit(x, split=",")[1]))
+denovo_snps$ALTDP <- sapply(denovo_snps$AD, function(x) as.numeric(vstrsplit(x, split=",")[2]))
+```
+
+## Add real VAF and DP
+```{r}
+denovo_snps$DPREAL <- denovo_snps$ALTDP + denovo_snps$REFDP
+
+denovo_snps$VAFREAL <- denovo_snps$ALTDP/denovo_snps$DPREAL
+```
+
+
+## Add median by SNP columns
+```{r}
+# Mean VAF
+denovo_snps[, meanVAF:=mean(VAF), by = UNIQUE]
+denovo_snps[, meanVAFREAL:=mean(VAFREAL), by = UNIQUE]
+
+# Median depth
+denovo_snps[, medDP:=median(DP), by = UNIQUE]
+denovo_snps[, medDPREAL:=median(DPREAL), by = UNIQUE]
+
+# Median Quality
+denovo_snps[, medQUAL:=median(QUAL), by = UNIQUE]
+```
+
+## Add SNP and INDEL identifier
+```{r}
+denovo_snps[, SNP := nchar(REF) == 1 & nchar(ALT) == 1]
+```
+
+## Remove biallelic and triallelic snps
+```{r}
+denovo_snps[!(GT %in% c("0/2", "1/2", "2/2", "0/3", "1/3", "2/3", "3/3"))]
+```
+
+# Save data
+## Write out vcfs
+```{r}
+fwrite(denovo_snps, "./Data/VCFs/Filtered/dn_snps_combohaps.vcf", sep = "\t")
+```
+
