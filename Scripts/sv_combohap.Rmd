@@ -259,16 +259,17 @@ sv %>%
   theme(
     legend.key.size = unit(0.2, "cm"),
     legend.title = element_blank(),
-    legend.position = c(.15, .83),
-    legend.background = element_rect(fill = "transparent"),
+    legend.position = c(.17, .83),
+    legend.background  = element_rect(fill = "transparent"),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
     plot.title = element_text(hjust = 0.5),
     plot.background = element_rect(fill = "transparent", color = NA),
-    plot.margin = ggplot2::margin(t = 0.05, r = 0.05, b = 0.01, l = 0.01, unit = "cm")
+    plot.margin = ggplot2::margin(t = 0.05, r = 0.05, b = 0.01, l = 0.01, unit = "cm"),
+    panel.background = element_rect(fill = NA, color = NA)
   )
 
-ggsave("./Figures/SV_Calling/cr2_dn_sv_histogram.pdf", height = 1.375, width = 2.16)
-ggsave("./Figures/SV_Calling/cr2_dn_sv_histogram.png", height = 1.375, width = 2.16)
+ggsave("./Figures/SV_Calling/cr2_dn_sv_histogram.pdf", height = 1.25, width = 1.85)
+ggsave("./Figures/SV_Calling/cr2_dn_sv_histogram.png", height = 1.25, width = 1.85)
 ```
 
 ## Ref
@@ -300,8 +301,8 @@ sv %>%
     plot.background = element_rect(fill = "transparent", color = NA),
     plot.margin = margin(t = 0.01, r = 0.05, b = 0.01, l = 0.01, unit = "cm")
   )
-ggsave("./Figures/SV_Calling/ref_chandler_dn_sv_histogram.pdf", height = 1, width = 2.2)
-ggsave("./Figures/SV_Calling/ref_chandler_dn_sv_histogram.png", height = 1, width = 2.2)
+ggsave("./Figures/SV_Calling/ref_chandler_dn_sv_histogram.pdf", height = 0.7, width = 1.33)
+ggsave("./Figures/SV_Calling/ref_chandler_dn_sv_histogram.png", height = 0.7, width = 1.33)
 ```
 
 # Tree
@@ -358,21 +359,22 @@ sv %>%
                "term_chandler" = "Tree"
     )
   ) +
-  labs(x = "Length of variant (bp)", y = "Number of variants (bp)", title = "Reference and Tree") +
+  labs(x = "Length of variant (bp)", y = "Number of variants", title = "Reference and Tree") +
   theme_classic(base_size = 6) +
   theme(
     legend.key.size = unit(0.2, "cm"),
     legend.title = element_blank(),
-    legend.position = c(.15, .88),
+    legend.position = c(.166, .875),
     legend.background = element_rect(fill = "transparent"),
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
     plot.title = element_text(hjust = 0.5),
     plot.background = element_rect(fill = "transparent", color = NA),
-    plot.margin = ggplot2::margin(t = 0.05, r = 0.05, b = 0.01, l = 0.01, unit = "cm")
-  )
+    plot.margin = ggplot2::margin(t = 0.05, r = 0.05, b = 0.01, l = 0.01, unit = "cm"),
+    panel.background = element_rect(fill = NA, color = NA)
+)
 
-ggsave("./Figures/SV_Calling/ref_term_chandler_dn_sv_histogram.pdf", height = 1.375, width = 2.16)
-ggsave("./Figures/SV_Calling/ref_term_chandler_dn_sv_histogram.png", height = 1.375, width = 2.16)
+ggsave("./Figures/SV_Calling/ref_term_chandler_dn_sv_histogram.pdf", height = 1.25, width = 1.85)
+ggsave("./Figures/SV_Calling/ref_term_chandler_dn_sv_histogram.png", height = 1.25, width = 1.85)
 ```
 
 

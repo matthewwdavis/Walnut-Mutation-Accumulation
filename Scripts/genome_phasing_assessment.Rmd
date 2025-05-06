@@ -1,0 +1,237 @@
+---
+title: "genome_phasing_assessment"
+author: "Matthew Davis"
+date: "2025-04-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggenomics)
+```
+
+## Functions
+```{r}
+read_syri <- function(path) {
+  data <- fread(path)
+  
+  data <- data %>%
+    filter(V11 == "SNP") %>%
+    filter(V11 != "NOTAL")
+  
+  data$V1 <- gsub("NC_0499.*?([0-9]+).*", "\\1", data$V1) # Rename CHROMs to just number
+  data$V1 <- str_remove(data$V1, "^0+") # Remove leading zeros
+  data$V1 <- as.numeric(data$V1) # Make CHROM numeric. This should allow for proper order plotting
+  
+  data$V6 <- gsub("NC_0499.*?([0-9]+).*", "\\1", data$V6)
+  data$V6 <- str_remove(data$V6, "^0+")
+  data$V6 <- as.numeric(data$V6)
+  
+  data$V2 <- as.numeric(data$V2)
+  
+  
+  return(data)
+}
+
+breakpoints <- function(path_to_data){
+  
+  # Read in data
+  data <- fread(path_to_data, skip = 2, fill = TRUE)
+  
+  # Remove extraneous contigs/scaffolds
+  data <- data[grepl("NC_04", data$V1),] # Select for chromosomes
+  
+  
+  # Filter for columns by chromosome breaks and select columns
+  data <- data %>% 
+    filter(V5=="W") %>%
+    select(V1,V3)
+  
+  # Rename columns
+  colnames(data) <- c("CHROM_Pri", "end")
+  
+  # Renaming chromosomes
+  data$CHROM_Pri <- gsub("NC_0499.*?([0-9]+).*", "\\1", data$CHROM_Pri) # Rename chromosomes to just number
+  data$CHROM_Pri <- str_remove(data$CHROM_Pri, "^0+") # Remove leading zeros
+  data$CHROM_Pri <- as.numeric(data$CHROM_Pri) # Make CHROM numeric. This should allow for proper order plotting
+  
+  return(data)
+}
+```
+
+## Read in data
+```{r}
+# Omni-C assembly syri out files
+hap1_omnic.syri <- read_syri("./Data/Syri_Out/ref_chandler_hap1_to_primary_syri.out") # NAs are not in relevant sites
+colnames(hap1_omnic.syri) <- c("CHROM_Pri", "POS_Pri", "POS_End", "Pri_Call", "Hap1_Call", "CHROM_Hap1", "Hap1_Start", "Hap1_End", "UniqueID", "ParentID", "Anno_Type", "Copy_Status") 
+hap2_omnic.syri <- read_syri("./Data/Syri_Out/ref_chandler_hap2_to_primary_syri.out")
+colnames(hap2_omnic.syri) <- c("CHROM_Pri", "POS_Pri", "POS_End", "Pri_Call", "Hap2_Call", "CHROM_Hap2", "Hap2_Start", "Hap2_End", "UniqueID", "ParentID", "Anno_Type", "Copy_Status") 
+
+# Genetic map
+linkage_omnic.map <- fread("./Data/Linkage_Maps/map_LBF2411_RefChandlerPrimaryYesOmniC_no_genos.csv")
+setnames(linkage_omnic.map, old = c("chr", "bp", "hap1", "hap2"), new = c("CHROM_Pri", "POS_Pri", "Hap1_Map", "Hap2_Map"))
+linkage_omnic.map <- linkage_omnic.map %>%
+  select(c(CHROM_Pri, POS_Pri, Hap1_Map, Hap2_Map, dist, markers))
+
+# Omni-C contig Breakpoints
+ref_h1_omnic.break <- breakpoints(path_to_data = "./Data/AGPs/ref_chandler_hap1_default_scaffold.agp")
+ref_h2_omnic.break <- breakpoints(path_to_data = "./Data/AGPs/ref_chandler_hap2_default_scaffold.agp")
+```
+
+# Preparing data for plotting
+## Combining linkage map with SYRI calls
+```{r}
+# Haplotype 1
+combined_data_hap1 <- left_join(hap1_omnic.syri, linkage_omnic.map, by = c("CHROM_Pri", "POS_Pri"))
+combined_data_hap1 <- combined_data_hap1 %>%
+  select(c("CHROM_Pri", "Pri_Call", "POS_Pri", "Hap1_Call", "Hap1_Map", "Hap2_Map", "dist", "markers"))
+
+combined_data_hap1 <- combined_data_hap1 %>% 
+  mutate(Identity = case_when(
+    Hap1_Call == Hap1_Map ~ "hap1",
+    Hap1_Call == Hap2_Map ~ "hap2",
+    TRUE ~ "NA"))  %>%
+  mutate(Assembly = "A")
+
+# Haplotype 2
+combined_data_hap2 <- left_join(hap2_omnic.syri, linkage_omnic.map, by = c("CHROM_Pri", "POS_Pri"))
+combined_data_hap2 <- combined_data_hap2 %>%
+  select(c("CHROM_Pri", "Pri_Call", "POS_Pri", "Hap2_Call", "Hap1_Map", "Hap2_Map", "dist", "markers"))
+
+combined_data_hap2 <- combined_data_hap2 %>% 
+  mutate(Identity = case_when(
+    Hap2_Call == Hap2_Map ~ "hap2",
+    Hap2_Call == Hap1_Map ~ "hap1",
+    TRUE ~ "NA"))  %>%
+  mutate(Assembly = "B")
+
+# Combine haplotypes
+combined_hap <- full_join(combined_data_hap1, combined_data_hap2)
+
+#combined_hap$CHROM_Pri <- factor(paste("Chr", combined_hap$CHROM_Pri, sep = " "), levels = paste("Chr", 1:16, sep = " "))
+```
+
+## Remove NAs and assess phasing
+```{r}
+combo_hap <- combined_hap[Identity != "NA"]
+
+# Assess hap 1
+combo_hap$Hap1_Call <- if_else(
+  is.na(combo_hap$Hap1_Call),
+  ifelse(combo_hap$Identity == "hap1", combo_hap$Hap2_Map, combo_hap$Hap1_Map),
+  combo_hap$Hap1_Call
+)
+
+# Assess hap 2
+combo_hap$Hap2_Call <- if_else(
+  is.na(combo_hap$Hap2_Call),
+  ifelse(combo_hap$Identity == "hap2", combo_hap$Hap1_Map, combo_hap$Hap2_Map),
+  combo_hap$Hap2_Call
+)
+```
+
+## Simplify table and pivot
+```{r}
+small_combo <- combo_hap %>%
+  select(CHROM_Pri, POS_Pri, Pri_Call, Hap1_Map, Hap2_Map, Hap1_Call, Hap2_Call)
+
+colnames(small_combo) <- c("Chr", "Pos", "Pri", "Hap1_LM", "Hap2_LM", "Hap1_Hifi", "Hap2_Hifi")
+
+small_combo[, c("Hap1_HiFi_LM", "Hap2_HiFi_LM") := {
+  Hap1_HiFi_LM <- ifelse(Hap1_LM == Hap1_Hifi, "Hap1_LM", 
+                         ifelse(Hap1_LM == Hap2_Hifi, "Hap2_LM", NA))
+  Hap2_HiFi_LM <- ifelse(Hap2_LM == Hap2_Hifi, "Hap2_LM", 
+                         ifelse(Hap2_LM == Hap1_Hifi, "Hap1_LM", NA))
+  list(Hap1_HiFi_LM, Hap2_HiFi_LM)
+}]
+
+long_combo <- small_combo %>%
+  gather(key = "Hap", value = "Hap_LM", Hap1_HiFi_LM, Hap2_HiFi_LM) %>%
+  filter(Hap %in% c("Hap1_HiFi_LM", "Hap2_HiFi_LM")) %>%
+  mutate(Hap = str_extract(Hap, "\\d+")) %>%
+  select(Chr, Pos, Pri, Hap1_LM, Hap2_LM, Hap1_Hifi, Hap2_Hifi, Hap, Hap_LM)
+
+setDT(long_combo)
+
+long_combo[, Hap := fifelse(Hap == "1", "A", "B")]
+```
+
+# Plot
+## Omni-C genome phasing assessment
+```{r}
+long_combo %>%
+  ggplot(aes(x = Hap, y = Pos, color = Hap_LM)) +
+  geom_point(size = 0.75, alpha = 0.25) +
+  facet_grid(~Chr) +
+ scale_color_manual(values = c("Hap1_LM" = "#009e73", "Hap2_LM" = "#C29A6A"),
+                     labels = c("Haplotype A", "Haplotype B")) + 
+  scale_y_continuous(labels = function(x) sprintf("%.1f", x / 1e6)) + 
+  labs(color = "Genetic Map\nHaplotype", x = "Assembly Haplotype", y = " Position (Mb)") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.position = "none",
+    strip.background = element_blank(),
+    #strip.text = element_text(face = "bold"),
+    #axis.title = element_text(face = "bold")
+    )
+ggsave("./Figures/Phasing/side_by_side_phasing_full_chr_no_legend.pdf", height = 2, width = 2.75)
+ggsave("./Figures/Phasing/side_by_side_phasing_full_chr_no_legend.png", height = 2, width = 2.75)
+
+long_combo %>%
+  ggplot(aes(x = Hap, y = Pos, color = Hap_LM)) +
+  geom_point(size = 0.75, alpha = 0.25) +
+  facet_grid(~Chr) +
+ scale_color_manual(values = c("Hap1_LM" = "#009e73", "Hap2_LM" = "#C29A6A"),
+                     labels = c("Haplotype A", "Haplotype B")) + 
+  scale_y_continuous(labels = function(x) sprintf("%.1f", x / 1e6)) + 
+  labs(color = "Genetic Map\nHaplotype", x = "Assembly Haplotype", y = " Position (Mb)") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.position = "right",
+    legend.title.align = 0.5,
+    legend.key.size = unit(0.2, "cm"),
+    strip.background = element_blank(),
+    #strip.text = element_text(face = "bold"),
+    #axis.title = element_text(face = "bold")
+    )
+ggsave("./Figures/Phasing/side_by_side_phasing_full_chr.pdf", height = 2, width = 2.75)
+ggsave("./Figures/Phasing/side_by_side_phasing_full_chr.png", height = 2, width = 2.75)
+```
+
+# Assessing proper phasing
+## Per chromsome phasing
+```{r}
+pct_phase <- long_combo %>%
+  group_by(Chr, Hap) %>%
+  summarise(
+    Hap1_LM_count = sum(Hap_LM == "Hap1_LM", na.rm = TRUE),
+    Hap2_LM_count = sum(Hap_LM == "Hap2_LM", na.rm = TRUE),
+    Total_count = n(),
+    Hap1_LM_percentage = (Hap1_LM_count / Total_count) * 100,
+    Hap2_LM_percentage = (Hap2_LM_count / Total_count) * 100
+  ) %>%
+  ungroup()
+
+pct_phase <- pct_phase %>%
+  group_by(Chr) %>%
+  mutate(Max_Percentage = max(Hap1_LM_percentage, Hap2_LM_percentage, na.rm = TRUE)) %>%
+   mutate(Max_Count = max(Hap1_LM_count, Hap2_LM_count, na.rm = TRUE)) %>%
+  filter(Hap == "A") %>%
+  ungroup()
+
+pct_phase
+```
+
+## Genome wide phasing
+```{r}
+genome_pct_phase <- 
+  sum(pct_phase$Max_Count) / sum(pct_phase$Total_count) * 100
+
+genome_pct_phase
+```
+

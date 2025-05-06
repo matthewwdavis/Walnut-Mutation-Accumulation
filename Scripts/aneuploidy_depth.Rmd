@@ -92,9 +92,9 @@ full_phased_snps[, AD_SCALE := ALTDP/mean(ALTDP), by = c("SOURCE")]
 #full_phased_snps[, MEAN_AD_SCALE := mean(AD_SCALE), by = c("SOURCE", "Interaction_Column")]
 ```
 
-## Create 5 windows per chromosome
+## Create 7 windows per chromosome
 ```{r}
-full_phased_snps[, SEGMENT := cut(1:.N, breaks = 5, labels = FALSE), by = c("SOURCE", "CHROM", "Haplotype")]
+full_phased_snps[, SEGMENT := cut(1:.N, breaks = 7, labels = FALSE), by = c("SOURCE", "CHROM", "Haplotype")]
 full_phased_snps[, MEAN_AD_Scale := mean(AD_SCALE), by = c("SOURCE", "CHROM", "Haplotype", "SEGMENT")]
 #full_phased_snps[, MEAN_AD := mean(ALTDP), by = c("SOURCE", "CHROM", "Haplotype", "SEGMENT")]
 ```
@@ -104,7 +104,7 @@ full_phased_snps[, MEAN_AD_Scale := mean(AD_SCALE), by = c("SOURCE", "CHROM", "H
 full_phased_snps$SOURCE <- factor(full_phased_snps$SOURCE, levels = c("cr2_16A2", "cr2_16A1","cr2_17A2","cr2_17A1","cr2_18A1",
                                                                       "cr2_16A","cr2_hifi","cr2_15A1","cr2_15A", "cr2_18A",
                                                                       "cr21_2","cr21_1", "cr2_12A","cr2_13A","cr2_11A",
-                                                                      "cr85", "cr10",  "cr13", "cr22", "tree2", "ref_chandler"))
+                                                                      "cr85", "cr10",  "cr13", "cr22", "ref_chandler", "tree2"))
 ```
 
 ## Only select unique rows
@@ -120,7 +120,10 @@ aneu_dp_equal <- small_table %>%
   ggplot(aes(x = SEGMENT, y = SOURCE, fill = MEAN_AD_Scale)) +
   facet_grid(SOURCE~CHROM + Haplotype, space = "free", scales = "free") +
   geom_tile(color = NA) +
-  scale_fill_gradientn(colors = c("royalblue1", "royalblue", "grey95", "grey94", "orangered", "orangered2")) + 
+  scale_fill_gradientn(
+    colors = c("royalblue1", "royalblue", "grey95", "grey94", "orangered", "orangered2"),
+    breaks = c(0,1,2)
+  ) + 
   scale_y_discrete(labels = new_labels) +
   labs(fill = "Scaled\ndepth") +
   theme_classic(base_size = 6) +
@@ -128,7 +131,7 @@ aneu_dp_equal <- small_table %>%
         strip.text.y = element_blank(),
         legend.position = "none",
         legend.key.size = unit(.2, "cm"),
-        strip.text.x = element_text(margin = margin(t = 0, b = 0)),
+        strip.text.x = element_text(margin = ggplot2::margin(t = 0, b = 0)),
         axis.title = element_blank(),
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
@@ -143,13 +146,13 @@ aneu_dp_equal <- small_table %>%
         panel.spacing.x = unit(0.05, "cm"),
         panel.background = element_rect(fill = NA, color = NA),
         plot.background = element_rect(fill = NA, color = NA),
-        plot.margin = margin(t = 0, r = 0.05, b = 0, l = 0, unit = "cm")
+        plot.margin = ggplot2::margin(t = 0, r = 0.05, b = 0, l = 0, unit = "cm")
   )
 
 aneu_dp_equal
 
-ggsave("./Figures/Aneuploidy_Depth/depth_in_5_windows_per_chr.pdf", height = 3, width = 6.18)
-ggsave("./Figures/Aneuploidy_Depth/depth_in_5_windows_per_chr.png", height = 3, width = 6.18)
+ggsave("./Figures/Aneuploidy_Depth/depth_in_7_windows_per_chr.pdf", height = 2.75, width = 5.85)
+ggsave("./Figures/Aneuploidy_Depth/depth_in_7_windows_per_chr.png", height = 2.75, width = 5.85)
 saveRDS(aneu_dp_equal, file = "./Data/Plot_Objects/depth_in_5_windows_per_chr.rds")
 
 aneu_dp_equal +
@@ -158,8 +161,8 @@ aneu_dp_equal +
     legend.title = element_text(hjust = 0.5),
     legend.background = element_rect(fill = "transparent", color = NA)
   )
-ggsave("./Figures/Aneuploidy_Depth/depth_in_5_windows_per_chr_legend.pdf", height = 3, width = 6.24)
-ggsave("./Figures/Aneuploidy_Depth/depth_in_5_windows_per_chr_legend.png", height = 3, width = 6.24)
+ggsave("./Figures/Aneuploidy_Depth/depth_in_7_windows_per_chr_legend.pdf", height = 2.75, width = 5.85)
+ggsave("./Figures/Aneuploidy_Depth/depth_in_7_windows_per_chr_legend.png", height = 2.75, width = 5.85)
 ```
 
 ## AD in CHR 9 sample cr16A1
@@ -177,7 +180,7 @@ full_phased_snps %>%
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
         plot.title = element_text(hjust = 0.5),
-        plot.margin = margin(t = 0.0,r = 0.0,b = 0.0,l = 0.01, unit = "cm"))
+        plot.margin = ggplot2::margin(t = 0.0,r = 0.0,b = 0.0,l = 0.01, unit = "cm"))
 ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr9_depth.pdf", height = 1, width = 2)
 ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr9_depth.png", height = 1, width = 2)
 
@@ -194,7 +197,7 @@ full_phased_snps %>%
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
         plot.title = element_text(hjust = 0.5),
-        plot.margin = margin(t = 0.0,r = 0.0,b = 0.0,l = 0.01, unit = "cm"))
+        plot.margin = ggplot2::margin(t = 0.0,r = 0.0,b = 0.0,l = 0.01, unit = "cm"))
 ggsave("./Figures/Somatic_Recombination/cr2_16a2_chr11_depth.pdf", height = 1, width = 2)
 ggsave("./Figures/Somatic_Recombination/cr2_16a2_chr11_depth.png", height = 1, width = 2)
 
@@ -211,7 +214,7 @@ full_phased_snps %>%
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
         plot.title = element_text(hjust = 0.5),
-        plot.margin = margin(t = 0.0,r = 0.0,b = 0.0,l = 0.01, unit = "cm"))
+        plot.margin = ggplot2::margin(t = 0.0,r = 0.0,b = 0.0,l = 0.01, unit = "cm"))
 ggsave("./Figures/Somatic_Recombination/cr2_18a_chr16_depth.pdf", height = 1, width = 2)
 ggsave("./Figures/Somatic_Recombination/cr2_18a_chr16_depth.png", height = 1, width = 2)
 
@@ -228,7 +231,7 @@ full_phased_snps %>%
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
         plot.title = element_text(hjust = 0.5),
-        plot.margin = margin(t = 0.0,r = 0.0,b = 0.0,l = 0.01, unit = "cm"))
+        plot.margin = ggplot2::margin(t = 0.0,r = 0.0,b = 0.0,l = 0.01, unit = "cm"))
 ggsave("./Figures/Somatic_Recombination/cr2_15a1_chr12_depth.pdf", height = 1, width = 2)
 ggsave("./Figures/Somatic_Recombination/cr2_15a1_chr12_depth.png", height = 1, width = 2)
 
@@ -244,7 +247,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
+        plot.margin = ggplot2::margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
 ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr1_depth.pdf",height = 1, width = 1.87)
 ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr1_depth.png", height = 1, width = 1.87)
 
@@ -260,7 +263,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
+        plot.margin = ggplot2::margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
 ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr4_depth.pdf", height = 1, width = 1.87)
 ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr4_depth.png", height = 1, width = 1.87)
 
@@ -276,7 +279,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
+        plot.margin = ggplot2::margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
 ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr11_depth.pdf", height = 1, width = 1.87)
 ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr11_depth.png", height = 1, width = 1.87)
 
@@ -292,7 +295,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
+        plot.margin = ggplot2::margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
 ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr16_depth.pdf", height = 1, width = 1.87)
 ggsave("./Figures/Somatic_Recombination/cr2_16a1_chr16_depth.png", height = 1, width = 1.87)
 
@@ -308,7 +311,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
+        plot.margin = ggplot2::margin(t = 0.0,r = 0.15,b = 0.0,l = 0.0, unit = "cm"))
 ggsave("./Figures/Somatic_Recombination/cr2_15a_chr12_depth.pdf", height = 1, width = 1.87)
 ggsave("./Figures/Somatic_Recombination/cr2_15a_chr12_depth.png", height = 1, width = 1.87)
 ```
@@ -331,7 +334,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
+        plot.margin = ggplot2::margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
   )
 
 # CHR 9 SR
@@ -348,7 +351,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
+        plot.margin = ggplot2::margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
   )
 
 # CHR 9 all embryos
@@ -367,7 +370,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
+        plot.margin = ggplot2::margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
   )
 
 # CHR 4 duplication
@@ -386,7 +389,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
+        plot.margin = ggplot2::margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
   )
 
 # CHR 4 loss of duplication
@@ -403,7 +406,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
+        plot.margin = ggplot2::margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
   )
 
 # CHR 4 all embryos. 
@@ -422,7 +425,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
+        plot.margin = ggplot2::margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
   )
 
 # CHR 11 SR all
@@ -440,7 +443,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
+        plot.margin = ggplot2::margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
   )
 
 # CHR 12 deletion all
@@ -457,7 +460,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
+        plot.margin = ggplot2::margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
   )
 
 # CHR 12 deletion each individual
@@ -474,7 +477,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
+        plot.margin = ggplot2::margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
   )
 
 full_phased_snps %>%
@@ -490,7 +493,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
+        plot.margin = ggplot2::margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
   )
 
 # CHR 16 all
@@ -508,7 +511,7 @@ full_phased_snps %>%
   theme_classic(base_size = 6) +
   theme(legend.position = c(0.88,0.8),
         legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
+        plot.margin = ggplot2::margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
   )
 ```
 
@@ -528,129 +531,13 @@ for (chrom in unique(full_phased_snps$CHROM)) {
     theme_classic(base_size = 6) +
     theme(legend.position = c(0.88,0.8),
           legend.key.size = unit(0.2, units = "cm"),
-          plot.margin = margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm"),
+          plot.margin = ggplot2::margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm"),
           plot.title = element_text(hjust = 0.5)
     )
   
   print(plot)
   
 }
-```
-
-## Create column of interest for plotting
-```{r}
-full_phased_snps[, INTEREST := fifelse(is.na(INTEREST) & SOURCE %in% c("cr2_16A2", "cr2_16A1","cr2_17A2","cr2_17A1",
-                                                                       "cr2_hifi","cr2_15A1","cr2_15A", "cr2_18A",
-                                                                       "cr21_2","cr21_1", "cr2_12A","cr2_13A","cr2_11A"), 
-                                       "chr4dup", INTEREST)]
-
-full_phased_snps[, INTEREST := fifelse(is.na(INTEREST) & SOURCE %in% c("cr2_16A2","cr2_17A2","cr2_17A1","cr2_18A1",
-                                                                       "cr2_16A","cr2_hifi","cr2_15A1","cr2_15A", "cr2_18A",
-                                                                       "cr21_2","cr21_1", "cr2_12A","cr2_13A","cr2_11A"), 
-                                       "chr9dup", INTEREST)]
-
-full_phased_snps[, INTEREST := fifelse(is.na(INTEREST) & SOURCE %in% c("cr2_16A1"), 
-                                       "chr9sr", INTEREST)]
-
-full_phased_snps[, INTEREST := fifelse(is.na(INTEREST) & SOURCE %in% c("cr2_16A2", "cr2_16A1","cr2_17A2","cr2_17A1","cr2_18A1",
-                                                                       "cr2_16A","cr2_hifi"), 
-                                       "chr11sr", INTEREST)]
-
-full_phased_snps[, INTEREST := fifelse(is.na(INTEREST) & SOURCE %in% c("cr2_15A1", "cr2_15A"), 
-                                       "chr12del", INTEREST)]
-
-full_phased_snps[, INTEREST := fifelse(is.na(INTEREST) & SOURCE %in% c("cr2_16A2", "cr2_16A1","cr2_17A2","cr2_17A1","cr2_18A1",
-                                                                       "cr2_16A","cr2_hifi","cr2_15A1","cr2_15A", "cr2_18A"), 
-                                       "chr16sr", INTEREST)]
-
-```
-
-## Plotting each chromosome of interest, color by interest column
-None of these look great. The best option so far is to pick one chromsome from 1 sample as an example
-```{r}
-full_phased_snps %>%
-  filter(CHROM %in% 4) %>%
-  ggplot(aes(x = POS, y = MEAN_AD_Scale, color = INTEREST)) +
-  geom_point(size = 1) +
-  geom_smooth(alpha = 0.2, linewidth = 0.5) +
-  scale_color_manual(values = c(chr4dup = "orangered2"))+ 
-  labs(x = "Position", y = "Scaled Depth") +
-  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "Mb")) +
-  scale_y_continuous(limits = c(0, 4.5)) +
-  theme_classic(base_size = 6) +
-  theme(legend.position = c(0.88,0.8),
-        legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
-  )
-
-full_phased_snps %>%
-  filter(CHROM %in% 9) %>%
-  ggplot(aes(x = POS, y = MEAN_AD_Scale, color = INTEREST)) +
-  geom_point(size = 1) +
-  geom_smooth(alpha = 0.2, linewidth = 0.5) +
-  scale_color_manual(values = c(chr9dup = "orangered2"))+ 
-  labs(x = "Position", y = "Scaled Depth") +
-  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "Mb")) +
-  scale_y_continuous(limits = c(0, 4.5)) +
-  theme_classic(base_size = 6) +
-  theme(legend.position = c(0.88,0.8),
-        legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
-  )
-
-full_phased_snps %>%
-  filter(CHROM %in% 9) %>%
-  ggplot(aes(x = POS, y = MEAN_AD_Scale, color = INTEREST)) +
-  geom_point(size = 1) +
-  geom_smooth(alpha = 0.2, linewidth = 0.5) +
-  scale_color_manual(values = c(chr9sr = "orangered2"))+ 
-  labs(x = "Position", y = "Scaled Depth") +
-  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "Mb")) +
-  scale_y_continuous(limits = c(0, 4.5)) +
-  theme_classic(base_size = 6) +
-  theme(legend.position = c(0.88,0.8),
-        legend.key.size = unit(0.2, units = "cm"),
-        plot.margin = margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
-  )
-```
-
-
-
-## Look at AD for CHR 9
-```{r, eval=FALSE}
-for (source in unique(full_phased_snps$SOURCE)) {
-  
-  p <- full_phased_snps %>%
-    filter(SOURCE %in% source, CHROM %in% 9) %>%
-    ggplot(aes(x = POS, y = MEAN_AD_Scale, color = Haplotype)) +
-    geom_point() +
-    geom_smooth() +
-    labs(title = paste(source, " SR")) +
-    theme_classic() +
-    theme(legend.position = "bottom")
-  
-  print(p)
-}
-```
-
-## Look at all chromosomes in all samples
-```{r, eval=FALSE}
-pdf(file = "~/Desktop/all_sr_plot.pdf", height = 8, width = 8)
-for (source in unique(full_phased_snps$SOURCE)) {
-  
-  p <- full_phased_snps %>%
-    filter(SOURCE %in% source) %>%
-    ggplot(aes(x = POS, y = MEAN_AD_Scale, color = Haplotype)) +
-    geom_point() +
-    geom_smooth(method = "loess", formula = "y~x") +
-    facet_wrap(~ CHROM, scales = "free") +
-    labs(title = paste(source, " SR")) +
-    theme_classic(base_size = 6) +
-    theme(legend.position = "bottom")
-  
-  print(p)
-}
-dev.off()
 ```
 
 # Archive
@@ -816,7 +703,7 @@ combo_means %>%
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank())
 
-combo_means$SOURCE <- factor(combo_means$SOURCE, levels = c("cr85", "cr10", "cr13", "cr22", "ref_chandler", "tree2", 
+combo_means$SOURCE <- factor(combo_means$SOURCE, levels = c("cr85", "cr10", "cr13", "cr22", "tree2", "ref_chandler",
                                                             "cr2_11A", "cr2_13A", "cr2_12A",  "cr21_1", "cr21_2",
                                                             "cr2_18A", "cr2_15A", "cr2_15A1", "cr2_hifi", "cr2_16A",
                                                             "cr2_18A1", "cr2_17A1", "cr2_17A2", "cr2_16A1", "cr2_16A2"))
@@ -877,7 +764,7 @@ aneu_depth <- mean_AD %>%
         legend.position = "none",
         legend.key.size = unit(.2, "cm"),
         #strip.text.x = element_text(face = "bold"),
-        strip.text.x = element_text(margin = margin(t = 0, b = 0)),
+        strip.text.x = element_text(margin = ggplot2::margin(t = 0, b = 0)),
         #panel.spacing.x = unit(.1, "cm"),
         axis.title = element_blank(),
         axis.text.x = element_blank(),
@@ -889,7 +776,7 @@ aneu_depth <- mean_AD %>%
         panel.border = element_rect(fill = NA),
         panel.spacing.y = unit(0.05, "cm"),
         panel.spacing.x = unit(0.05, "cm"),
-        plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+        plot.margin = ggplot2::margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
   )
 
 aneu_depth
@@ -920,7 +807,7 @@ mean_AD %>%
         strip.text.y = element_blank(),
         legend.position = "none",
         legend.key.size = unit(.2, "cm"),
-        strip.text.x = element_text(margin = margin(t = 0, b = 0)),
+        strip.text.x = element_text(margin = ggplot2::margin(t = 0, b = 0)),
         axis.title = element_blank(),
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
@@ -932,7 +819,7 @@ mean_AD %>%
         panel.border = element_rect(fill = NA),
         panel.spacing.y = unit(0.05, "cm"),
         panel.spacing.x = unit(0.05, "cm"),
-        plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+        plot.margin = ggplot2::margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
   )
 ```
 
@@ -1006,4 +893,118 @@ hom_combo_haps %>%
         axis.line.x = element_blank())
 
 
+```
+
+## Create column of interest for plotting
+```{r, eval=FALSE}
+full_phased_snps[, INTEREST := fifelse(is.na(INTEREST) & SOURCE %in% c("cr2_16A2", "cr2_16A1","cr2_17A2","cr2_17A1",
+                                                                       "cr2_hifi","cr2_15A1","cr2_15A", "cr2_18A",
+                                                                       "cr21_2","cr21_1", "cr2_12A","cr2_13A","cr2_11A"), 
+                                       "chr4dup", INTEREST)]
+
+full_phased_snps[, INTEREST := fifelse(is.na(INTEREST) & SOURCE %in% c("cr2_16A2","cr2_17A2","cr2_17A1","cr2_18A1",
+                                                                       "cr2_16A","cr2_hifi","cr2_15A1","cr2_15A", "cr2_18A",
+                                                                       "cr21_2","cr21_1", "cr2_12A","cr2_13A","cr2_11A"), 
+                                       "chr9dup", INTEREST)]
+
+full_phased_snps[, INTEREST := fifelse(is.na(INTEREST) & SOURCE %in% c("cr2_16A1"), 
+                                       "chr9sr", INTEREST)]
+
+full_phased_snps[, INTEREST := fifelse(is.na(INTEREST) & SOURCE %in% c("cr2_16A2", "cr2_16A1","cr2_17A2","cr2_17A1","cr2_18A1",
+                                                                       "cr2_16A","cr2_hifi"), 
+                                       "chr11sr", INTEREST)]
+
+full_phased_snps[, INTEREST := fifelse(is.na(INTEREST) & SOURCE %in% c("cr2_15A1", "cr2_15A"), 
+                                       "chr12del", INTEREST)]
+
+full_phased_snps[, INTEREST := fifelse(is.na(INTEREST) & SOURCE %in% c("cr2_16A2", "cr2_16A1","cr2_17A2","cr2_17A1","cr2_18A1",
+                                                                       "cr2_16A","cr2_hifi","cr2_15A1","cr2_15A", "cr2_18A"), 
+                                       "chr16sr", INTEREST)]
+
+```
+
+
+## Plotting each chromosome of interest, color by interest column
+```{r, eval=FALSE}
+full_phased_snps %>%
+  filter(CHROM %in% 4) %>%
+  ggplot(aes(x = POS, y = MEAN_AD_Scale, color = INTEREST)) +
+  geom_point(size = 1) +
+  geom_smooth(alpha = 0.2, linewidth = 0.5) +
+  scale_color_manual(values = c(chr4dup = "orangered2"))+ 
+  labs(x = "Position", y = "Scaled Depth") +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "Mb")) +
+  scale_y_continuous(limits = c(0, 4.5)) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = c(0.88,0.8),
+        legend.key.size = unit(0.2, units = "cm"),
+        plot.margin = ggplot2::margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
+  )
+
+full_phased_snps %>%
+  filter(CHROM %in% 9) %>%
+  ggplot(aes(x = POS, y = MEAN_AD_Scale, color = INTEREST)) +
+  geom_point(size = 1) +
+  geom_smooth(alpha = 0.2, linewidth = 0.5) +
+  scale_color_manual(values = c(chr9dup = "orangered2"))+ 
+  labs(x = "Position", y = "Scaled Depth") +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "Mb")) +
+  scale_y_continuous(limits = c(0, 4.5)) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = c(0.88,0.8),
+        legend.key.size = unit(0.2, units = "cm"),
+        plot.margin = ggplot2::margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
+  )
+
+full_phased_snps %>%
+  filter(CHROM %in% 9) %>%
+  ggplot(aes(x = POS, y = MEAN_AD_Scale, color = INTEREST)) +
+  geom_point(size = 1) +
+  geom_smooth(alpha = 0.2, linewidth = 0.5) +
+  scale_color_manual(values = c(chr9sr = "orangered2"))+ 
+  labs(x = "Position", y = "Scaled Depth") +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "Mb")) +
+  scale_y_continuous(limits = c(0, 4.5)) +
+  theme_classic(base_size = 6) +
+  theme(legend.position = c(0.88,0.8),
+        legend.key.size = unit(0.2, units = "cm"),
+        plot.margin = ggplot2::margin(t = 0.0,r = 0,b = 0.0,l = 0.0, unit = "cm")
+  )
+```
+
+## Look at AD for CHR 9
+```{r, eval=FALSE}
+for (source in unique(full_phased_snps$SOURCE)) {
+  
+  p <- full_phased_snps %>%
+    filter(SOURCE %in% source, CHROM %in% 9) %>%
+    ggplot(aes(x = POS, y = MEAN_AD_Scale, color = Haplotype)) +
+    geom_point() +
+    geom_smooth() +
+    labs(title = paste(source, " SR")) +
+    theme_classic() +
+    theme(legend.position = "bottom")
+  
+  print(p)
+}
+```
+
+## Look at all chromosomes in all samples
+```{r, eval=FALSE}
+pdf(file = "~/Desktop/all_sr_plot.pdf", height = 8, width = 8)
+for (source in unique(full_phased_snps$SOURCE)) {
+  
+  p <- full_phased_snps %>%
+    filter(SOURCE %in% source) %>%
+    ggplot(aes(x = POS, y = MEAN_AD_Scale, color = Haplotype)) +
+    geom_point() +
+    geom_smooth(method = "loess", formula = "y~x") +
+    facet_wrap(~ CHROM, scales = "free") +
+    labs(title = paste(source, " SR")) +
+    theme_classic(base_size = 6) +
+    theme(legend.position = "bottom")
+  
+  print(p)
+}
+dev.off()
 ```

@@ -633,68 +633,6 @@ sum(genes_good$LENGTH)/sum(intergenic$LENGTH)
 
 ### Add in genic features and intergenic regions into 1 gff
 ```{r}
-# h1gff_good <- h1gff[h1genes_good, on = .(CHROM, START >= START, START <= STOP)]
-# nrow(unique(h1gff_good, by = c("TYPE", "CHROM", "START")) %>%
-#   filter(TYPE %in% "gene"))
-# nrow(unique(h1genes_good, by = c("TYPE", "CHROM", "START")) %>%
-#   filter(TYPE %in% "gene"))
-# 
-# h2gff_good <- h2gff[h2genes_good, on = .(CHROM, START >= START, START <= STOP)]
-# nrow(unique(h2gff_good, by = c("i.TYPE", "CHROM", "i.START", "i.STOP")) %>%
-#   filter(i.TYPE %in% "gene"))
-# nrow(unique(h2genes_good, by = c("TYPE", "CHROM", "START", "STOP")) %>%
-#   filter(TYPE %in% "gene"))
-# 
-# h1gff_good[, HAP := "A"]
-# h2gff_good[, HAP := "B"]
-# 
-# h1gff_good <- rbind(h1gff_good, h1intergenic)
-# h2gff_good <- rbind(h2gff_good, h2intergenic)
-# 
-# h1gff_good[, gene_priority := (TYPE == "gene")]
-# setorder(h1gff_good, CHROM, START, -gene_priority)
-# h1gff_good[, gene_priority := NULL]
-# 
-# h1gff_good <- unique(h1gff_good)
-# 
-# # Ensure both tables are keyed properly for foverlaps
-# setorder(h2gff, CHROM, START)
-# setorder(h2genes_good, CHROM, START)
-# 
-# setkey(h2gff, CHROM, START, STOP)
-# setkey(h2genes_good, CHROM, START, STOP)
-# 
-# result <- foverlaps(h2gff, h2genes_good, by.x = c("CHROM", "START", "STOP"), by.y = c("CHROM", "START", "STOP"))
-# #h2gff_good <- h2gff_good[, grep("^i\\.", names(h2gff_good)), with = FALSE]
-# 
-# result[, UNIQUE := paste(CHROM, i.TYPE, i.START, i.STOP, sep = "_")]
-# 
-# unique(result, by = "UNIQUE")%>%
-#   filter(i.TYPE == "gene")
-# 
-# 
-# #######################
-# pos <- h1genes_good %>%
-#   select(CHROM, START, STOP)
-# pos[h1gff, on = .(CHROM, START <= START, STOP >= START)]
-# 
-# 
-# h1gff[, .(CHROM = pos$CHROM, START >= pos$START, START <= pos$STOP)]
-# 
-# setkey(h1gff, CHROM, START, STOP)
-# setkey(pos, CHROM, START, STOP)
-# 
-# filtered_h1gff <- foverlaps(h1gff, pos, nomatch = 0)
-# filtered_h1gff[, UNIQUE := paste(CHROM, TYPE, i.START, i.STOP, sep = "_")]
-# 
-# uniq_filt_h1gff <- unique(filtered_h1gff, by = "UNIQUE")
-# 
-# uniq_filt_h1gff %>%
-#   filter(TYPE %in% "gene")
-# h1genes_good %>%
-#   filter(TYPE %in% "gene")
-# 
-# ################### This one seems to work
 h1gff$GENE <- gsub(".+;gene=(LOC[^;]+).*", "\\1", h1gff$INFO)
 h1gff_good <- h1gff[h1gff$GENE %in% h1genes_good$GENE, ]
 
@@ -873,6 +811,12 @@ setorder(h2gff_good_int, CHROM, START)
 ```{r}
 fwrite(h1gff_good_int, "./Data/GFFs/Parsed/hap1_gff_good.tsv", sep = "\t")
 fwrite(h2gff_good_int, "./Data/GFFs/Parsed/hap2_gff_good.tsv", sep = "\t")
+fwrite(cds_good, "./Data/GFFs/Parsed/cds_good.tsv", sep = "\t")
+fwrite(genes_good, "./Data/GFFs/Parsed/genes_good.tsv", sep = "\t")
+fwrite(h1cds_good, "./Data/GFFs/Parsed/hap1_cds_good.tsv", sep = "\t")
+fwrite(h1genes_good, "./Data/GFFs/Parsed/hap1_genes_good.tsv", sep = "\t")
+fwrite(h2cds_good, "./Data/GFFs/Parsed/hap2_cds_good.tsv", sep = "\t")
+fwrite(h2genes_good, "./Data/GFFs/Parsed/hap2_genes_good.tsv", sep = "\t")
 ```
 
 ## Identify Homopolymers
@@ -884,7 +828,7 @@ fwrite(HPs,"./Data/Homopolymers/ref_chandler_primary_omnic.fasta.HPs.tsv", sep =
 ```
 
 ### Read homopolymer data in
-```{r}
+```{r, eval = FALSE}
 HPs <- fread("./Data/Homopolymers/ref_chandler_primary_omnic.fasta.HPs.tsv")
 ```
 
@@ -893,7 +837,8 @@ HPs <- fread("./Data/Homopolymers/ref_chandler_primary_omnic.fasta.HPs.tsv")
 ### Read data
 ```{r}
 mutations <- fread("./Data/VCFs/Filtered/all_dn_snps.vcf")
-# mutations_ns <-fread("./Data/VCFs/Filtered/dn_snps_no_share.vcf")
+cds_good <- fread("./Data/GFFs/Parsed/cds_good.tsv")
+genes_good <- fread("./Data/GFFs/Parsed/genes_good.tsv")
 ```
 
 ### Rename default column
@@ -901,10 +846,6 @@ mutations <- fread("./Data/VCFs/Filtered/all_dn_snps.vcf")
 mutations <- mutations %>%
   rename("SAMPLE"= "default", "SOURCE" = "Source") %>%
   dplyr::select(-c(ID, INFO, Hap, unique))
-
-# mutations_ns <- mutations_ns %>%
-#   rename("SAMPLE" = "default") %>%
-#   select(-c(ID, INFO, Hap, unique))
 ```
 
 ### Adjusting the unique column and identifying SNPs
@@ -914,12 +855,6 @@ mutations$UNIQUE <- paste(mutations$CHROM, mutations$POS, mutations$ALT, sep = "
 mutations[, NUMIND := .N, by = UNIQUE] # NUMIND column is the number of Sources with that mutation
 SNPS <- nchar(mutations$REF) == 1 & nchar(mutations$ALT) == 1
 mutations$SNP <- SNPS
-
-# No share mutations
-# mutations_ns$UNIQUE <- paste(mutations_ns$CHROM, mutations_ns$POS, mutations_ns$ALT, sep = "_")
-# mutations_ns[, N:=.N, by = UNIQUE]
-# SNPS_ns <- nchar(mutations_ns$REF)==1 & nchar(mutations_ns$ALT)==1
-# mutations_ns$SNP <- SNPS_ns
 ```
 
 ## Annotate the mutations with CDS and Genic regions
@@ -931,10 +866,6 @@ mutations_cds <- features_in_sites(cds_good, mutations)
 mutations$CDS <- mutations_cds$overlaps[match(mutations$ID, mutations_cds$ID)]
 
 table(mutations$CDS)
-# No share mutations
-# mutations_ns$ID<-1:nrow(mutations_ns)
-# mutations_ns_cds<-features_in_sites(cds_good, mutations_ns)
-# mutations_ns$CDS<-mutations_ns_cds$overlaps[match(mutations_ns$ID, mutations_ns_cds$ID)]
 ```
 
 ### Annotating with genes
@@ -944,9 +875,6 @@ mutations_gene <- features_in_sites(genes_good, mutations)
 mutations$GENIC <- mutations_gene$overlaps[match(mutations$ID, mutations_gene$ID)]
 
 table(mutations$GENIC)
-# No share mutations
-# mutations_ns_gene<-features_in_sites(genes_good, mutations_ns)
-# mutations_ns$GENIC<-mutations_ns_gene$overlaps[match(mutations_ns$ID, mutations_ns_gene$ID)]
 ```
 
 ## Split AD
@@ -957,7 +885,6 @@ mutations$REFDP <- sapply(mutations$AD, function(x) as.numeric(vstrsplit(x, spli
 
 ## Calculation of deviation from heterozygous expection
 ```{r, warning=FALSE}
-# Does the Chi square test warning matter?
 mutations$CHIPHET <- pbsapply(1:nrow(mutations), function(i) {
   
   ALTDP <- mutations$ALTDP[1]
@@ -1027,7 +954,7 @@ mutations[, medDPREAL:=median(DPREAL), by = UNIQUE]
 mutations[, medQUAL:=median(QUAL), by = UNIQUE]
 ```
 
-## Annotate mappability to means
+## Annotate mappability to sites
 ```{r}
 mutations_MAPP <- features_in_sites(mapp[DEPTH==1], mutations)
 mutations$MAPP <- mutations_MAPP$overlaps[match(mutations$ID, mutations_MAPP$ID)]
@@ -1080,15 +1007,118 @@ mutations_save <- mutations %>%
   select(CHROM, POS, REF, ALT, UNIQUE, QUAL, FILTER, GT, GQ, REFDP, ALTDP, DPREAL, VAFREAL, DPNORM_REAL, medQUAL, medDPREAL, meanVAFREAL, SNP, GENIC, CDS, NUMIND, CULTURETYPE, SEQTYPE, MAPP, MUT, TRICONTEXT, SOURCE)
 ```
 
+## Filtering shared tree mutations
+```{r}
+tree_mut <- mutations_save[CULTURETYPE %in% "tree"]
+
+tree_mut[, NUMIND := .N, by = UNIQUE]
+
+# Plot distributions
+tree_mut %>%
+  filter() %>%
+  group_by(CHROM) %>%
+  mutate(bin = cut(POS, breaks = 50, labels = FALSE)) %>% 
+  group_by(CHROM, bin) %>%
+  summarise(avg_VAF = mean(VAFREAL, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = bin, y = avg_VAF, fill = CHROM)) +
+  geom_col() +
+  facet_wrap(~CHROM, scales = "free_x") +
+  theme_minimal()
+
+tree_mut %>%
+  filter(NUMIND == 1) %>%
+  group_by(CHROM) %>%
+  mutate(bin = cut(POS, breaks = 50, labels = FALSE)) %>% 
+  group_by(CHROM, bin) %>%
+  summarise(avg_VAF = mean(VAFREAL, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = bin, y = avg_VAF, fill = CHROM)) +
+  geom_col() +
+  facet_wrap(~CHROM, scales = "free_x") +
+  theme_minimal()
+
+tree_mut %>%
+  filter(NUMIND == 2) %>%
+  group_by(CHROM) %>%
+  mutate(bin = cut(POS, breaks = 50, labels = FALSE)) %>% 
+  group_by(CHROM, bin) %>%
+  summarise(avg_VAF = mean(VAFREAL, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = bin, y = avg_VAF, fill = CHROM)) +
+  geom_col() +
+  facet_wrap(~CHROM, scales = "free_x") +
+  theme_minimal()
+
+## Summarize average VAFs
+tree_mut %>%
+  group_by(SOURCE, NUMIND) %>%
+  summarise(
+    avg_vaf = mean(VAFREAL),
+    num_var = n()
+  )
+
+share_tree <- tree_mut[NUMIND %in% 2, UNIQUE]
+```
+
+## Filtering shared shoot mutations
+```{r}
+shoot_mut <- mutations_save[CULTURETYPE %in% "shoot"]
+
+shoot_mut[, NUMIND := .N, by = UNIQUE]
+
+# Plot distributions
+shoot_mut %>%
+  filter() %>%
+  group_by(CHROM) %>%
+  mutate(bin = cut(POS, breaks = 50, labels = FALSE)) %>% 
+  group_by(CHROM, bin) %>%
+  summarise(avg_VAF = mean(VAFREAL, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = bin, y = avg_VAF, fill = CHROM)) +
+  geom_col() +
+  facet_wrap(~CHROM, scales = "free_x") +
+  theme_minimal()
+
+shoot_mut %>%
+  filter(NUMIND == 1) %>%
+  group_by(CHROM) %>%
+  mutate(bin = cut(POS, breaks = 50, labels = FALSE)) %>% 
+  group_by(CHROM, bin) %>%
+  summarise(avg_VAF = mean(VAFREAL, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = bin, y = avg_VAF, fill = CHROM)) +
+  geom_col() +
+  facet_wrap(~CHROM, scales = "free_x") +
+  theme_minimal()
+
+shoot_mut %>%
+  filter(NUMIND == 4) %>%
+  group_by(CHROM) %>%
+  mutate(bin = cut(POS, breaks = 50, labels = FALSE)) %>% 
+  group_by(CHROM, bin) %>%
+  summarise(avg_VAF = mean(VAFREAL, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = bin, y = avg_VAF, fill = CHROM)) +
+  geom_col() +
+  facet_wrap(~CHROM, scales = "free_x") +
+  theme_minimal()
+
+## Summarize average VAF
+shoot_mut %>%
+  group_by(SOURCE, NUMIND) %>%
+  summarise(
+    avg_vaf = mean(VAFREAL),
+    num_var = n()
+  )
+
+share_shoot <- shoot_mut[NUMIND %in% c(2,3,4), UNIQUE]
+```
+
+## Filter out shared tree and shoot mutation
+```{r}
+mutations_filt_save <- mutations_save[!(UNIQUE %in% share_tree)]
+mutations_filt_save <- mutations_filt_save[!(UNIQUE %in% share_shoot)]
+```
+
 # Write out new files
 ```{r, eval=T}
 fwrite(mutations_save, "./Data/VCFs/Parsed/mutations.tsv", sep = "\t")
-fwrite(cds_good, "./Data/GFFs/Parsed/cds_good.tsv", sep = "\t")
-fwrite(genes_good, "./Data/GFFs/Parsed/genes_good.tsv", sep = "\t")
-fwrite(h1cds_good, "./Data/GFFs/Parsed/hap1_cds_good.tsv", sep = "\t")
-fwrite(h1genes_good, "./Data/GFFs/Parsed/hap1_genes_good.tsv", sep = "\t")
-fwrite(h2cds_good, "./Data/GFFs/Parsed/hap2_cds_good.tsv", sep = "\t")
-fwrite(h2genes_good, "./Data/GFFs/Parsed/hap2_genes_good.tsv", sep = "\t")
+fwrite(mutations_filt_save, "./Data/VCFs/Parsed/mutations_strict.tsv", sep = "\t")
 ```
 
 # Try to implement HPs
@@ -1375,7 +1405,7 @@ fwrite(dn_sv, "./Data/VCFs/SV_VCF/Parsed/parsed_ins_dels_pbsv.vcf", sep = "\t")
 ## Functions
 ```{r}
 rename_chr_pri <- function(pbsv){
-
+  
   pbsv$CHROM <- gsub("NC_0499(..).1_RagTag", "\\1", pbsv$CHROM)
   
   pbsv$CHROM <- as.numeric(pbsv$CHROM)

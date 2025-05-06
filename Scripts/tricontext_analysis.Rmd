@@ -63,7 +63,7 @@ fwrite(freq_trimer, "./Data/Trimer_Frequency/ref_chandler_primary_chr_only_trime
 
 ## Read in data
 ```{r}
-mutations <- fread("./Data/VCFs/Parsed/mutations.tsv")
+mutations <- fread("./Data/VCFs/Parsed/mutations_strict.tsv")
 freq_trimer <- fread("./Data/Trimer_Frequency/ref_chandler_primary_chr_only_trimer_freq.csv")
 ```
 
@@ -127,7 +127,7 @@ mut_fills_list <- as.list(mut_colors2)
 mut_colors_list <- list(element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"),
                          element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"), element_rect(color = "white"))
 
-plot_levels <- c("ref_chandler", "tree2", "cr22", "cr13", "cr10", "cr85",
+plot_levels <- c("tree2", "ref_chandler", "cr22", "cr13", "cr10", "cr85",
                  "cr2_11A", "cr2_13A", "cr2_12A", "cr21_1", "cr21_2",
                  "cr2_18A", "cr2_15A", "cr2_15A1", "cr2_hifi", "cr2_16A",
                  "cr2_18A1", "cr2_17A1", "cr2_17A2", "cr2_16A1", "cr2_16A2")
@@ -232,7 +232,7 @@ ggplot(embryo_trimers, aes(x = TRI_COLOR, y = SOURCE, fill = MUT, size = genomep
     plot.background = element_rect(fill = NA, color = NA),
     plot.margin = ggplot2::margin(t = 0, r = 0.05, b = 0, l = 0, unit = "cm")
   ) 
-ggsave("./Figures/Tricontext/sample_individual_tricontext.pdf", height = 3.3, width = 6.9)
+ggsave("./Figures/Tricontext/sample_individual_tricontext.pdf", height = 2.66, width = 6.525)
 
 # Simple no context
 ggplot(embryo_monomers, aes(x = MUT, y = SOURCE, fill = MUT, size = N)) +

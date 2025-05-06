@@ -1,0 +1,120 @@
+---
+title: "genome_assessment"
+author: "Matthew Davis"
+date: "2025-04-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggenomics)
+```
+
+## Functions
+```{r}
+
+```
+
+## Read data, generate table and plot
+```{r}
+ref_chandler.plot <- ggideo_diploid(
+  "./Data/Fastas/ref_chandler_hap1_default_scaffold.fasta",
+  "./Data/Fastas/ref_chandler_hap2_default_scaffold.fasta", 
+  chr_names = "NC_0499",
+  string_remove = "_RagTag",
+  color_hap1 = "#009e73",
+  color_hap2 = "#C29A6A",
+  name_hap1 = "Haplotype A",
+  name_hap2 = "Haplotype B",
+  size_chr = 2,
+  chr_size_legend = 1,
+)
+```
+
+# Correcting the table
+## Primary reference chandler
+
+
+## Diploid reference chandler
+```{r}
+ref.table <- ref_chandler.plot$genomic.table
+
+ref.table$Chromosome <- gsub("NC_0499(..).1", "\\1", ref.table$Chromosome)
+ref.table$Chromosome <- as.numeric(ref.table$Chromosome)
+
+ref.table[, Hap := fifelse(Hap == "hap1", "A", "B")]
+```
+
+# Plotting
+## Custom diploid reference chandler plot
+```{r}
+ref.table %>%
+  ggplot(aes(x = as.factor(Chromosome), y = Length)) +
+    geom_segment(aes(y = begin_telo_start, yend = Length, color = Hap),
+                 position = position_dodge(width = 0.85),  # Use calculated dodge width
+                 linewidth = 1.5, 
+                 lineend = "round") +
+    geom_point(aes(x = Chromosome, y = begin_telo_end,
+                   size = ifelse(begin_telo_bp == 0, NA, begin_telo_bp),
+                   fill = Hap),
+               shape = 16, color = "black", position = position_dodge(width = 0.85),
+               na.rm = TRUE) +
+    geom_point(aes(x = Chromosome, y = end_telo_end,
+                   size = ifelse(end_telo_bp == 0, NA, end_telo_bp),
+                   fill = Hap),
+               shape = 16, color = "black", position = position_dodge(width = 0.85),
+               na.rm = TRUE) +
+  scale_size_continuous(range = c(0.05, 1)) +
+    scale_color_manual(name = "Haplotype",
+                       values = c(A = "#009e73", B = "#C29A6A"),
+                       labels = c(A = "Haplotype A", B = "Haplotype B")) +
+    scale_y_continuous(
+      labels = label_number(scale = 1e-6, suffix = "Mb")) +
+    labs(y = "Chromosome Length (Mb)", x = NULL, size = "Telomere\nPresence") +
+    guides(color = guide_legend(title = NULL, override.aes = list(linewidth = 1)),
+           size = guide_legend(title = "Telomere\nPresence"),
+           fill = "none") +
+    theme_classic(base_size = 6) +
+    theme(legend.position = "right",
+          legend.title.align = 0.5,
+          legend.key.size = unit(0.2, "cm"),
+          plot.title = element_text(hjust = 0.5, face = "bold"))
+ggsave("./Figures/Genome_Composition/ref_chandler_telplot.png", height = 2, width = 2.25)
+
+ref.table %>%
+  ggplot(aes(x = as.factor(Chromosome), y = Length)) +
+    geom_segment(aes(y = begin_telo_start, yend = Length, color = Hap),
+                 position = position_dodge(width = 0.85),  # Use calculated dodge width
+                 linewidth = 1.5, 
+                 lineend = "round") +
+    geom_point(aes(x = Chromosome, y = begin_telo_end,
+                   size = ifelse(begin_telo_bp == 0, NA, begin_telo_bp),
+                   fill = Hap),
+               shape = 16, color = "black", position = position_dodge(width = 0.85),
+               na.rm = TRUE) +
+    geom_point(aes(x = Chromosome, y = end_telo_end,
+                   size = ifelse(end_telo_bp == 0, NA, end_telo_bp),
+                   fill = Hap),
+               shape = 16, color = "black", position = position_dodge(width = 0.85),
+               na.rm = TRUE) +
+  scale_size_continuous(range = c(0.05, 1)) +
+    scale_color_manual(name = "Haplotype",
+                       values = c(A = "#009e73", B = "#C29A6A"),
+                       labels = c(A = "Haplotype A", B = "Haplotype B")) +
+    scale_y_continuous(
+      labels = label_number(scale = 1e-6, suffix = "Mb")) +
+    labs(y = "Chromosome Length (Mb)", x = NULL, size = "Telomere\nPresence") +
+    guides(color = guide_legend(title = NULL, override.aes = list(linewidth = 0.25)),
+           size = guide_legend(title = "Telomere Presence"),
+           fill = "none") +
+    theme_classic(base_size = 6) +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, face = "bold"))
+ggsave("./Figures/Genome_Composition/ref_chandler_telplot_no_legend.png", height = 2, width = 2.25)
+```
+

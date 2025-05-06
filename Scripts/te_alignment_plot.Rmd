@@ -149,14 +149,14 @@ ggplot(ex_te, aes(x = POSITION, y = 1, fill = COLOR)) +
     axis.title.y = element_blank(),
     axis.ticks.y = element_blank(),
     axis.text.y = element_blank(),
-    panel.spacing.y = unit(0.1, "cm"),
+    panel.spacing.y = unit(0.05, "cm"),
     panel.background = element_rect(fill = NA, color = NA),
     plot.background = element_rect(fill = NA, color = NA),
     panel.border = element_rect(fill = NA),
     plot.margin = margin(t = 0, r = 0.0, b = 0, l = 0, unit = "cm")
   )
-ggsave("./Figures/Transposable_Elements/track_transposon_5500_msa.pdf", height = 1.75, width = 2.25)
-ggsave("./Figures/Transposable_Elements/track_transposon_5500_msa.png", height = 1.75, width = 2.25)
+ggsave("./Figures/Transposable_Elements/track_transposon_5500_msa.pdf", height = 1.25, width = 2)
+ggsave("./Figures/Transposable_Elements/track_transposon_5500_msa.png", height = 1.25, width = 2)
 
 ggplot(ex_te, aes(x = POSITION, y = 1, fill = COLOR)) +
   geom_tile(aes(width = ifelse(COLOR == "grey90", 1, 50))) +
@@ -198,8 +198,8 @@ ggplot(ex_te, aes(x = POSITION, y = 1, fill = COLOR)) +
     plot.background = element_rect(fill = NA, color = NA),
     panel.border = element_rect(fill = NA)
   )
-ggsave("./Figures/Transposable_Elements/track_transposon_5500_msa_legend.pdf", height = 1.75, width = 2.25)
-ggsave("./Figures/Transposable_Elements/track_transposon_5500_msa_legend.png", height = 1.75, width = 2.25)
+ggsave("./Figures/Transposable_Elements/track_transposon_5500_msa_legend.pdf", height = 1.25, width = 2)
+ggsave("./Figures/Transposable_Elements/track_transposon_5500_msa_legend.png", height = 1.25, width = 2)
 ```
 
 

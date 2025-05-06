@@ -23,8 +23,8 @@ library(tidyverse)
 ```{r}
 make_tree_table <-function(mutations){
   
-  mutations_matrix<-data.table(table(UNIQUE=mutations$UNIQUE, Source=mutations$SOURCE))
-  mutations_matrix<-dcast(mutations_matrix, Source~UNIQUE)
+  mutations_matrix<-data.table(table(UNIQUE=mutations$UNIQUE, SOURCE=mutations$SOURCE))
+  mutations_matrix<-dcast(mutations_matrix, SOURCE~UNIQUE)
   mutations_matrix<-as.matrix(mutations_matrix)
   row.names(mutations_matrix)<-mutations_matrix[,1]
   mutations_matrix<-mutations_matrix[,-1]
@@ -128,6 +128,7 @@ make_tree_table <-function(mutations){
 ## Read in data
 ```{r}
 mutations <- fread("./Data/VCFs/Parsed/mutations.tsv")
+mutations_strict <- fread("./Data/VCFs/Parsed/mutations_strict.tsv")
 ```
 
 # Prep for plotting
@@ -180,7 +181,7 @@ indel_node_data <- indel_tree.table$node_data
 ## Make snp+indel tree table
 ```{r}
 set.seed(25)
-both_filt <- mutations[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T]
+both_filt <- mutations_strict[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T]
 
 both_tree.table <- make_tree_table(both_filt)
 
@@ -248,7 +249,7 @@ node_data_rna <- tree.table_rna$node_data
 
 ## Only embryos
 ```{r}
-embryo_only <- mutations[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T & CULTURETYPE == "embryo"]
+embryo_only <- mutations_strict[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T & CULTURETYPE == "embryo"]
 
 embryo_only_tree.table <- make_tree_table(embryo_only)
 
@@ -412,36 +413,45 @@ both_plot +
 
 both_plot <- rotate(both_plot, 23)
 
-both_plot <- rotate(both_plot, 31)
+both_plot <- rotate(both_plot, 41)
 
 both_plot <- rotate(both_plot, 40)
+
+rotate(both_plot, 40)
+
 
 both_max_x <- max(both_plot$data$x)
 
 both_plot <- both_plot + expand_limits(x = both_max_x * 1.2)
 
 both_plot_obj <- both_plot +
-  scale_x_continuous(expand = c(0.1,1)) + # This line is adjusted for different labeling needs
+  scale_x_continuous(expand = c(0.1,2000)) + # This line is adjusted for different labeling needs
   theme(legend.position = "none",
-        plot.margin = margin(t = 0, r = 0, b = -.1, l = -.5, unit = "cm"),
+        plot.margin = margin(t = 0, r = -0.5, b = 0, l = -0.25, unit = "cm"),
         axis.line.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.text.x = element_blank(),
         panel.background = element_rect(fill = NA, color = NA),
         plot.background = element_rect(fill = NA, color = NA))
 both_plot_obj
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_both.pdf", height = 3.78, width = 2.2)
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_presentation_lables_both.pdf", height = 4.97, width = 2)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_both.pdf", height = 3.19, width = 1.79)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_presentation_lables_both.pdf", height = 2.59, width = 3)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_presentation_lables_both.png", height = 2.59, width = 3)
 
 saveRDS(both_plot_obj, file = "./Data/Plot_Objects/all_sample_branch_is_mut_for_lables_both.rds")
 
-
 both_plot <- both_plot %<+% both_node_data
-both_plot <- both_plot + geom_text(
+# both_plot <- both_plot + geom_text(
+#   aes(label = ifelse(bootstrap < 1, round(bootstrap, 3), "")),
+#   hjust = 1,
+#   vjust = -0.4,
+#   size = 2
+# )
+both_plot <- both_plot + ggrepel::geom_text_repel(
   aes(label = ifelse(bootstrap < 1, round(bootstrap, 3), "")),
-  hjust = 1,
-  vjust = -0.4,
-  size = 2
+  size = 2, 
+  force = 0.001,
+  nudge_x = -150
 )
 both_plot +
   scale_x_continuous(expand = c(.2, 0)) +
@@ -453,10 +463,18 @@ both_plot +
     panel.background = element_rect(fill = NA, color = NA),
     plot.background = element_rect(fill = NA, color = NA),
     plot.margin = margin(t = 0, r = -1.9, b = 0, l = -0.85, unit = "cm"))
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both.pdf", height = 2.8, width = 3.06)
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both.png", height = 2.8, width = 3.06)
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both_presentation.pdf", height = 3.33, width = 6.6)
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both_presentation.png", height = 3.33, width = 6.6)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both.pdf", height = 2.55, width = 3.15)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both.png", height = 2.55, width = 3.15)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both_presentation.pdf", height = 2.5, width = 3)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_both_presentation.png", height = 2.5, width = 3)
+
+print(n = 42, as.tibble(both_tree_with_bs)) # View branch lengths
+both_filt %>%
+  filter(NUMIND == 1) %>%
+  group_by(SOURCE) %>%
+  summarise(
+    number_muts = n()
+  )
 ```
 
 ## Tree removing duplicated chromosomes with branch lengths
@@ -673,16 +691,21 @@ max_x <- max(plot_rna$data$x)
 #plot_rna <- plot_rna + expand_limits(x = max_x * 1.2)
 
 plot_rna <- plot_rna +
-  scale_x_continuous(expand = c(0.1,3000)) +
+  scale_x_continuous(expand = c(0.1,1000)) +
   theme(legend.position = "none",
         legend.key.size = unit(.2, units = "cm"),
-        plot.margin = margin(t = 0.01, r = -0.2, b = -0.01, l = -0.5, unit = "cm"),
+        #plot.margin = margin(t = 0.01, r = -0.2, b = -0.01, l = -0.5, unit = "cm"),
         axis.line.x = element_blank(),
         axis.ticks.x = element_blank(),
-        axis.text.x = element_blank())
+        axis.text.x = element_blank(),
+        panel.background = element_rect(fill = NA, color = NA),
+        plot.background = element_rect(fill = NA, color = NA),
+        plot.margin = margin(t = 0.05, r = -0.2, b = -0.05, l = -0.75, unit = "cm")
+  )
 plot_rna
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_rna.pdf", height = 1.4, width = 0.5)
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_rna.png", height = 1.4, width = 0.5)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_rna.pdf", height = 1.21, width = 0.7)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_rna.png", height = 1.21, width = 0.7)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_rna_presentation.png", height = 2.3, width = 0.5)
 saveRDS(plot_rna, file = "./Data/Plot_Objects/snp_tree_rna_samples_plot.rds")
 
 # Extract chr12 deletion node
@@ -849,8 +872,8 @@ fasta_trimer_freq<-function(fasta, stop = NULL){
 
 make_tree<-function(mutations){
   mutations_matrix<-mutations
-  mutations_matrix<-data.table(table(UNIQUE=mutations_matrix$UNIQUE, Source=mutations_matrix$SOURCE))
-  mutations_matrix<-dcast(mutations_matrix, Source~UNIQUE)
+  mutations_matrix<-data.table(table(UNIQUE=mutations_matrix$UNIQUE, SOURCE=mutations_matrix$SOURCE))
+  mutations_matrix<-dcast(mutations_matrix, SOURCE~UNIQUE)
   mutations_matrix<-as.matrix(mutations_matrix)
   row.names(mutations_matrix)<-mutations_matrix[,1]
   mutations_matrix<-mutations_matrix[,-1]

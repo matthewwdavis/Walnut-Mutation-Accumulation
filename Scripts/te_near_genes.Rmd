@@ -519,7 +519,7 @@ sim_feat_means %>%
     plot.background = element_rect(fill = NA, color = NA),
     plot.margin = margin(t = 0.1, r = 0.2, b = 0.1, l = 0.01, unit = "cm")
   )
-ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_genes_900.pdf", height = 0.81,  width = 0.93)
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_genes_900.pdf", height = 0.78,  width = 0.935)
 #ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_genes_900_label.pdf", height = 0.75, width = 1.3)
 
 sim_feat_means %>%
@@ -577,7 +577,7 @@ sim_feat_means %>%
     axis.title.x = element_blank(),
     plot.title = element_text(hjust = 0.5)
   )
-ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_intergenic_900.pdf", height = 0.81,  width = 0.93)
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_intergenic_900.pdf", height = 0.78,  width = 0.935)
 
 sim_feat_means %>%
   filter(TE %in% "te_899") %>%
@@ -634,7 +634,7 @@ sim_feat_means %>%
     axis.title.x = element_blank(),
     plot.title = element_text(hjust = 0.5)
   )
-ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_exon_900.pdf", height = 0.81,  width = 0.93)
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_exon_900.pdf", height = 0.78,  width = 0.935)
 
 sim_feat_means %>%
   filter(TE %in% "te_899") %>%
@@ -691,7 +691,7 @@ sim_feat_means %>%
     axis.title.x = element_blank(),
     plot.title = element_text(hjust = 0.5)
   )
-ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_intron_900.pdf", height = 0.81,  width = 0.93)
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_intron_900.pdf", height = 0.78,  width = 0.935)
 
 sim_feat_means %>%
   filter(TE %in% "te_899") %>%
@@ -748,7 +748,7 @@ sim_feat_means %>%
     axis.title.x = element_blank(),
     plot.title = element_text(hjust = 0.5)
   )
-ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_5utr_900.pdf", height = 0.81,  width = 0.93)
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_5utr_900.pdf", height = 0.78,  width = 0.935)
 
 sim_feat_means %>%
   filter(TE %in% "te_899") %>%
@@ -805,7 +805,7 @@ sim_feat_means %>%
     axis.title.x = element_blank(),
     plot.title = element_text(hjust = 0.5)
   )
-ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_3utr_900.pdf", height = 0.81,  width = 0.93)
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_3utr_900.pdf", height = 0.78,  width = 0.935)
 
 sim_feat_means %>%
   filter(TE %in% "te_899") %>%
@@ -861,7 +861,7 @@ sim_feat_means %>%
     axis.title.x = element_blank(),
     plot.title = element_text(hjust = 0.5)
   )
-ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_upstream_900.pdf", height = 0.81,  width = 0.93)
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_upstream_900.pdf", height = 0.78,  width = 0.935)
 
 sim_feat_means %>%
   filter(TE %in% "te_899") %>%
@@ -918,7 +918,7 @@ sim_feat_means %>%
     axis.title.x = element_blank(),
     plot.title = element_text(hjust = 0.5)
   )
-ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_downstream_900.pdf", height = 0.81,  width = 0.93)
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_downstream_900.pdf", height = 0.78,  width = 0.935)
 
 ```
 
@@ -980,7 +980,7 @@ sim_feat_means %>%
     axis.title.x = element_blank(),
     plot.title = element_text(hjust = 0.5)
   )
-ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_genes_5500.pdf", height = 0.81,  width = 0.93)
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_genes_5500.pdf", height = 0.78,  width = 0.935)
 #ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_genes_5500_label.pdf", height = 0.75, width = 1.3)
 
 sim_feat_means %>%
@@ -1038,7 +1038,7 @@ sim_feat_means %>%
     axis.title.x = element_blank(),
     plot.title = element_text(hjust = 0.5)
   )
-ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_intergenic_5500.pdf", height = 0.81,  width = 0.93)
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_intergenic_5500.pdf", height = 0.78,  width = 0.935)
 
 sim_feat_means %>%
   filter(TE %in% "te_5453") %>%
@@ -1095,7 +1095,7 @@ sim_feat_means %>%
     axis.title.x = element_blank(),
     plot.title = element_text(hjust = 0.5)
   )
-ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_exon_5500.pdf", height = 0.81,  width = 0.93)
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_exon_5500.pdf", height = 0.78,  width = 0.935)
 
 sim_feat_means %>%
   filter(TE %in% "te_5453") %>%
@@ -1152,7 +1152,7 @@ sim_feat_means %>%
     axis.title.x = element_blank(),
     plot.title = element_text(hjust = 0.5)
   )
-ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_intron_5500.pdf", height = 0.81,  width = 0.93)
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_intron_5500.pdf", height = 0.78,  width = 0.935)
 
 sim_feat_means %>%
   filter(TE %in% "te_5453") %>%
@@ -1212,7 +1212,7 @@ sim_feat_means %>%
     axis.title.x = element_blank(),
     plot.title = element_text(hjust = 0.5)
   )
-ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_5utr_5500.pdf", height = 0.81,  width = 0.93)
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_5utr_5500.pdf", height = 0.78,  width = 0.935)
 
 sim_feat_means %>%
   filter(TE %in% "te_5453") %>%
@@ -1269,7 +1269,7 @@ sim_feat_means %>%
     axis.title.x = element_blank(),
     plot.title = element_text(hjust = 0.5)
   )
-ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_3utr_5500.pdf", height = 0.81,  width = 0.93)
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_3utr_5500.pdf", height = 0.78,  width = 0.935)
 
 sim_feat_means %>%
   filter(TE %in% "te_5453") %>%
@@ -1329,7 +1329,7 @@ sim_feat_means %>%
     axis.title.x = element_blank(),
     plot.title = element_text(hjust = 0.5)
   )
-ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_upstream_5500.pdf", height = 0.81,  width = 0.93)
+ggsave("./Figures/Transposable_Elements/ins_simulation_v_real_upstream_5500.pdf", height = 0.78,  width = 0.935)
 
 sim_feat_means %>%
   filter(TE %in% "te_5453") %>%

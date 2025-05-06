@@ -28,7 +28,7 @@ an_snps$SOURCE <- factor(an_snps$SOURCE, levels = c("cr2_16A2","cr2_16A1","cr2_1
                                                     "cr2_18A1","cr2_16A","cr2_hifi","cr2_15A1",
                                                     "cr2_15A","cr2_18A", "cr21_2","cr21_1",
                                                     "cr2_12A","cr2_13A","cr2_11A", "cr85", "cr10",
-                                                    "cr13", "cr22", "tree2", "ref_chandler"))
+                                                    "cr13", "cr22", "ref_chandler", "tree2"))
 
 new_labels = c("ref_chandler" = "Reference", "tree2" = "Tree",
                "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
@@ -174,7 +174,7 @@ sum_table %>%
         strip.text.y = element_blank(),
         legend.position = "none",
         legend.key.size = unit(.2, "cm"),
-        strip.text.x = element_text(margin = margin(t = 0, b = 0)),
+        strip.text.x = element_text(margin = ggplot2::margin(t = 0, b = 0)),
         axis.title = element_blank(),
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
@@ -186,7 +186,7 @@ sum_table %>%
         panel.border = element_rect(fill = NA),
         panel.spacing.y = unit(0.05, "cm"),
         panel.spacing.x = unit(0.05, "cm"),
-        plot.margin = margin(t = 0, r = 0.05, b = 0, l = 0, unit = "cm")
+        plot.margin = ggplot2::margin(t = 0, r = 0.05, b = 0, l = 0, unit = "cm")
   )
 ggsave("./Figures/Aneuploidy_VAF/all_samples_an_snps_vaf_tilefacet_5_windows_per_chr.pdf", height = 1.85, width = 2.8)
 ggsave("./Figures/Aneuploidy_VAF/all_samples_an_snps_vaf_tilefacet_5_windows_per_chr.png", height = 1.85, width = 2.8)
@@ -283,7 +283,7 @@ sum_vaf %>%
   theme_linedraw(base_size = 6) +
   theme(
     strip.background = element_blank(),
-    strip.text.x = element_text(color = "black", margin = margin(t = 0, b = 0)),
+    strip.text.x = element_text(color = "black", margin = ggplot2::margin(t = 0, b = 0)),
     strip.text.y = element_blank(),
     panel.border = element_rect(fill = NA),
     panel.spacing.y = unit(0.05, "cm"),
@@ -293,7 +293,7 @@ sum_vaf %>%
     axis.line.x = element_blank(),
     axis.ticks.x = element_blank(),
     axis.line.y = element_blank(),
-    plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+    plot.margin = ggplot2::margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
   )
 ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_per_chr.pdf", height = 3.2, width = 6)
 ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_per_chr.png", height = 3.2, width = 6)
@@ -313,7 +313,7 @@ sum_vaf %>%
   theme_linedraw(base_size = 6) +
   theme(
     strip.background = element_blank(),
-    strip.text.x = element_text(color = "black", margin = margin(t = 0, b = 0)),
+    strip.text.x = element_text(color = "black", margin = ggplot2::margin(t = 0, b = 0)),
     strip.text.y = element_blank(),
     panel.border = element_rect(fill = NA),
     panel.spacing.y = unit(0.05, "cm"),
@@ -324,7 +324,7 @@ sum_vaf %>%
     axis.ticks.x = element_blank(),
     axis.line.y = element_blank(),
     axis.text.y = element_text(size = 2),
-    plot.margin = margin(t = 0, r = 0.01, b = 0, l = 0.05, unit = "cm")
+    plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.05, unit = "cm")
   )
 ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_chr_49.pdf", height = 3.1, width = 2.5)
 ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_chr_49.png", height = 3.1, width = 2.5)
@@ -344,7 +344,7 @@ sum_vaf %>%
   theme_linedraw(base_size = 6) +
   theme(
     strip.background = element_blank(),
-    strip.text.x = element_text(color = "black", margin = margin(t = 0, b = 0)),
+    strip.text.x = element_text(color = "black", margin = ggplot2::margin(t = 0, b = 0)),
     strip.text.y = element_blank(),
     panel.border = element_rect(fill = NA),
     panel.spacing.y = unit(0.05, "cm"),
@@ -355,7 +355,7 @@ sum_vaf %>%
     axis.ticks.x = element_blank(),
     axis.line.y = element_blank(),
     axis.text.y = element_text(size = 2),
-    plot.margin = margin(t = 0, r = 0.01, b = 0, l = 0.05, unit = "cm")
+    plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.05, unit = "cm")
   )
 ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_chr_12.pdf", height = 3.1, width = 2)
 ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_chr_12.png", height = 3.1, width = 2)
@@ -375,7 +375,7 @@ sum_vaf %>%
   theme_linedraw(base_size = 6) +
   theme(
     strip.background = element_blank(),
-    strip.text.x = element_text(color = "black", margin = margin(t = 0, b = 0)),
+    strip.text.x = element_text(color = "black", margin = ggplot2::margin(t = 0, b = 0)),
     strip.text.y = element_blank(),
     panel.border = element_rect(fill = NA),
     panel.spacing.y = unit(0.05, "cm"),
@@ -386,7 +386,7 @@ sum_vaf %>%
     axis.ticks.x = element_blank(),
     axis.line.y = element_blank(),
     axis.text.y = element_text(size = 2),
-    plot.margin = margin(t = 0, r = 0.01, b = 0, l = 0.05, unit = "cm")
+    plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.05, unit = "cm")
   )
 ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_chr_1116.pdf", height = 3.1, width = 2.5)
 ggsave("./Figures/Aneuploidy_VAF/VAF_in_50_windows_chr_1116.png", height = 3.1, width = 2.5)
@@ -434,7 +434,7 @@ sum_vaf %>%
     axis.text.y = element_blank(),
     axis.ticks.y = element_blank(),
     axis.title = element_blank(),
-    plot.margin = margin(t = 0, r = 0.01, b = 0, l = 0.05, unit = "cm")
+    plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.05, unit = "cm")
   )
 ggsave("./Figures/Aneuploidy_VAF/VAF_in_100_windows_chr_9.pdf", height = .25, width = .71)
 ggsave("./Figures/Aneuploidy_VAF/VAF_in_100_windows_chr_9.png", height = .25, width = .71)
@@ -478,7 +478,7 @@ test$CLASSIFY <- factor(test$CLASSIFY, levels = c("dup", "none", "del"))
 vaf_plot <- test %>%
   filter(CHROM %in% c(4,9,11,12,16)) %>%
   ggplot(aes(x = SEGMENT, y = MEANVAFSEG, color = CLASSIFY)) +
-  geom_point(size = 0.001) +
+  geom_point(size = 0.1) +
   #geom_hline(yintercept = 0.5, linetype = 3) +
   facet_grid(SOURCE~CHROM + Haplotype, space = "free", switch = "y") +
   scale_color_manual(
@@ -490,7 +490,7 @@ vaf_plot <- test %>%
   theme_classic(base_size = 6) +
   theme(
     strip.background = element_blank(),
-    strip.text.x = element_text(color = "black", margin = margin(t = 0, b = 0)),
+    strip.text.x = element_text(color = "black", margin = ggplot2::margin(t = 0, b = 0)),
     strip.text.y = element_blank(),
     panel.border = element_rect(fill = NA),
     panel.spacing.y = unit(0.05, "cm"),
@@ -508,13 +508,13 @@ vaf_plot <- test %>%
     axis.title.y = element_blank(),
     panel.background = element_rect(fill = NA, color = NA),
     plot.background = element_rect(fill = NA, color = NA),
-    plot.margin = margin(t = 0, r = 0.01, b = 0, l = 0, unit = "cm")
+    plot.margin = ggplot2::margin(t = 0, r = 0.05, b = 0, l = 0, unit = "cm")
   )
 
 vaf_plot
 
-ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216.pdf", height = 2.6, width = 3.45)
-ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216.png", height = 2.6, width = 3.45)
+ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216.pdf", height = 2.312, width = 3.05)
+ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216.png", height = 2.312, width = 3.05)
 
 vaf_plot +
   guides(
@@ -524,11 +524,11 @@ vaf_plot +
     legend.position = "left",
     legend.key.size = unit(0.2, "cm"),
     legend.title = element_text(hjust = 0.5),
-    legend.text = element_text(margin = margin(t = 0, r = 0, b = 0, l = -0.01, unit = "cm")),
+    legend.text = element_text(margin = ggplot2::margin(t = 0, r = 0, b = 0, l = -0.01, unit = "cm")),
     legend.background = element_rect(fill = "transparent", color = NA)
   )
-ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216_legend.pdf", height = 2.6, width = 3.45)
-ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216_legend.png", height = 2.6, width = 3.45)
+ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216_legend.pdf", height = 2.3, width = 3.25)
+ggsave("./Figures/Aneuploidy_VAF/all_samples_phased_250_windows_chr_49111216_legend.png", height = 2.3, width = 3.25)
 ```
 
 ## Try chi-sq with each SNP
@@ -553,7 +553,7 @@ full_phased_snps %>%
   theme_linedraw(base_size = 6) +
   theme(
     strip.background = element_blank(),
-    strip.text.x = element_text(color = "black", margin = margin(t = 0, b = 0)),
+    strip.text.x = element_text(color = "black", margin = ggplot2::margin(t = 0, b = 0)),
     strip.text.y = element_blank(),
     panel.border = element_rect(fill = NA),
     panel.spacing.y = unit(0.05, "cm"),
@@ -563,7 +563,7 @@ full_phased_snps %>%
     axis.line.x = element_blank(),
     axis.ticks.x = element_blank(),
     axis.line.y = element_blank(),
-    plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+    plot.margin = ggplot2::margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
   )
 
 ## Correct for multiple testing.
@@ -594,7 +594,7 @@ sum_test %>%
   theme_linedraw(base_size = 6) +
   theme(
     strip.background = element_blank(),
-    strip.text.x = element_text(color = "black", margin = margin(t = 0, b = 0)),
+    strip.text.x = element_text(color = "black", margin = ggplot2::margin(t = 0, b = 0)),
     strip.text.y = element_blank(),
     panel.border = element_rect(fill = NA),
     panel.spacing.y = unit(0.05, "cm"),
@@ -604,7 +604,8 @@ sum_test %>%
     axis.line.x = element_blank(),
     axis.ticks.x = element_blank(),
     axis.line.y = element_blank(),
-    plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+    plot.margin = ggplot2::margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
   )
 ```
 
+# Archive

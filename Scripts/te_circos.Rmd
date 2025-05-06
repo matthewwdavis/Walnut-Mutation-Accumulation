@@ -192,7 +192,7 @@ ref_chr.table$Chr <- factor(ref_chr.table$Chr, levels = ordered_levels)
 ## 899 TE circos
 ```{r}
 par(mar = c(0, 0, 0, 0))
-pdf("./Figures/Transposable_Elements/circos_899.pdf", height = 2.49, width = 2.49)
+pdf("./Figures/Transposable_Elements/circos_899.pdf", height = 2.38, width = 2.38)
 # Set smaller padding
 circos.par(track.margin = c(0.005, 0.005), start.degree = 90, circle.margin = .01)
 
@@ -246,7 +246,7 @@ circos.clear()
 ## 5453 TE circos
 ```{r}
 par(mar = c(0, 0, 0, 0))
-pdf("./Figures/Transposable_Elements/circos_5453.pdf", height = 2.49, width = 2.49)
+pdf("./Figures/Transposable_Elements/circos_5453.pdf", height = 2.38, width = 2.38)
 # Set smaller padding
 circos.par(track.margin = c(0.005, 0.005), start.degree = 90, circle.margin = .01)
 

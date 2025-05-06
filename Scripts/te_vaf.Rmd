@@ -239,7 +239,7 @@ te_vaf %>%
   theme(
     legend.background = element_rect(fill = "transparent", color = NA),
     legend.key.size = unit(.2, "cm"),
-    legend.position = c(.13, .9),
+    legend.position = c(.15, .9),
     legend.title = element_blank(),
     axis.ticks.x = element_line(), 
     axis.ticks.length = unit(c(rep(0.8, 5), 0), "mm"),
@@ -249,8 +249,8 @@ te_vaf %>%
     plot.background = element_rect(fill = "transparent", color = NA),
     plot.margin = ggplot2::margin(t = 0.01, r = 0.05, b = 0.1, l = 0.01, unit = "cm")
   )
-ggsave("./Figures/Transposable_Elements/vaf_prop_both_class.pdf", height = 1.81, width = 2.75)
-ggsave("./Figures/Transposable_Elements/vaf_prop_both_class.png", height = 1.81, width = 2.75)
+ggsave("./Figures/Transposable_Elements/vaf_prop_both_class.pdf", height = 1.25, width = 2)
+ggsave("./Figures/Transposable_Elements/vaf_prop_both_class.png", height = 1.25, width = 2)
 
 # Removing chromosomes 4 and 9
 te_vaf %>%

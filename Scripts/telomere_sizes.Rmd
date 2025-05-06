@@ -129,7 +129,7 @@ new_labels = c("reference" = "Reference", "term" = "Tree",
 ```{r}
 tel.data %>%
   ggplot(aes(x = NORM_TEL_SEQ, y = SOURCE, fill = TYPE)) +
-  geom_bar(stat = "identity", width = 0.75, color = "black", linewidth = 0.2) +
+  geom_bar(stat = "identity", width = 0.8, color = "black", linewidth = 0.2) +
   scale_y_discrete(
     labels = new_labels
   ) +
@@ -158,6 +158,6 @@ tel.data %>%
     plot.background = element_rect(fill = NA, color = NA),
     plot.margin = margin(t = 0.02, r = 0, b = 0, l = 0.075, unit = "cm")
   )
-ggsave("./Figures/Telomeres/telomere_repeats_from_reads.pdf", height = 3.185, width = 0.725)
+ggsave("./Figures/Telomeres/telomere_repeats_from_reads.pdf", height = 2.931, width = 0.725)
 ```
 

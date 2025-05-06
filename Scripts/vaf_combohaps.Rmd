@@ -32,7 +32,7 @@ muts <- fread("./Data/VCFs/Filtered/dn_snps_combohaps.vcf")
 muts[, UNIQUEN := .N, by = UNIQUE]
 ```
 
-## Create a list of tables with quality scores increasing by 5
+## Create a list of tables with quality scores increasing by 1
 ```{r}
 thresholds <- seq(5, 40, by = 1)
 
@@ -55,7 +55,7 @@ filtmut <- muts[SNP == TRUE & UNIQUEN == 1 & QUAL >= 5 & DP >= 10]
 ```{r}
 plot_levels <- c("cr16a2", "cr16a1", "cr17a2", "cr17a1", "cr18a1","cr16a", "cr2_hifi",
                  "cr15a1", "cr15a", "cr18a", "cr21_2", "cr21_1", "cr12a", "cr13a",
-                 "cr11a", "cr85", "cr10", "cr13", "cr22", "tree2", "ref_chandler")
+                 "cr11a", "cr85", "cr10", "cr13", "cr22", "ref_chandler", "tree2")
 
 threshold_levels <- c(rev(unique(mut_qual$threshold)))
 
@@ -136,9 +136,94 @@ mut_qual %>%
     panel.spacing.y = unit(0.15, "cm"),
     panel.background = element_rect(fill = NA, color = NA),
     plot.background = element_rect(fill = NA, color = NA),
-    plot.margin = margin(t = 0.1, r = 0.05, b = 0, l = 0, unit = "cm")
+    plot.margin = ggplot2::margin(t = 0.1, r = 0.05, b = 0, l = 0, unit = "cm")
   )
-ggsave("./Figures/VAF_Analysis/all_samples_vaf_combohap.pdf", height = 3.925, width = 1.65)
-ggsave("./Figures/VAF_Analysis/all_samples_vaf_combohap.png", height = 3.925, width = 1.65)
+ggsave("./Figures/VAF_Analysis/all_samples_vaf_combohap.pdf", height = 3.526, width = 1.75)
+ggsave("./Figures/VAF_Analysis/all_samples_vaf_combohap.png", height = 3.526, width = 1.75)
+ggsave("./Figures/VAF_Analysis/all_samples_vaf_combohap_presentation.pdf", height = 2.75, width = 2.5)
+ggsave("./Figures/VAF_Analysis/all_samples_vaf_combohap_presentation.png", height = 2.75, width = 2.5)
+```
+
+## Plotting specific groups
+```{r}
+# Embryos
+mut_qual %>%
+  filter(CULTURETYPE %in% "embryo") %>%
+  ggplot(aes(x = VAFREAL, fill = CULTURETYPE)) + 
+  geom_histogram(
+    binwidth = 0.025,
+    alpha = 0.1,
+    position = "identity",
+    aes(
+      group = threshold,
+      color = ifelse(threshold == "QUAL>=5", "trace", NA)),
+    linewidth = 0.1
+    ) +
+  facet_grid(SOURCE~., scale="free_y") +
+  scale_fill_manual(
+    values = c("embryo" = "goldenrod1",
+               "shoot" = "darkseagreen2",
+               "tree" = "darkseagreen4")
+  ) +
+  scale_color_manual(
+    values = c("trace" = "black"),
+    na.value = NA) +
+  scale_y_continuous(
+    breaks = function(limits) c(0, floor(limits[2] / 5) * 5),
+    position = "right"
+  ) +
+  labs(x = "Proportion of cells", y = "Number of unique mutations") +
+  theme_classic(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_blank(),
+    legend.position = "none",
+    panel.spacing.y = unit(0.15, "cm"),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = ggplot2::margin(t = 0.1, r = 0.05, b = 0, l = 0, unit = "cm")
+  )
+ggsave("./Figures/VAF_Analysis/all_samples_vaf_combohap_embryo_presentation.pdf", height = 2.5, width = 2.5)
+ggsave("./Figures/VAF_Analysis/all_samples_vaf_combohap_embryo_presentation.png", height = 2.5, width = 2.5)
+
+# Shoots and trees
+mut_qual %>%
+  filter(!CULTURETYPE %in% "embryo") %>%
+  ggplot(aes(x = VAFREAL, fill = CULTURETYPE)) + 
+  geom_histogram(
+    binwidth = 0.025,
+    alpha = 0.1,
+    position = "identity",
+    aes(
+      group = threshold,
+      color = ifelse(threshold == "QUAL>=5", "trace", NA)),
+    linewidth = 0.1
+    ) +
+  facet_grid(SOURCE~., scale="free_y") +
+  scale_fill_manual(
+    values = c("embryo" = "goldenrod1",
+               "shoot" = "darkseagreen2",
+               "tree" = "darkseagreen4")
+  ) +
+  scale_color_manual(
+    values = c("trace" = "black"),
+    na.value = NA) +
+  scale_y_continuous(
+    breaks = function(limits) c(0, floor(limits[2] / 5) * 5),
+    position = "right"
+  ) +
+  labs(x = "Proportion of cells", y = "Number of unique mutations") +
+  theme_classic(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_blank(),
+    legend.position = "none",
+    panel.spacing.y = unit(0.15, "cm"),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = ggplot2::margin(t = 0.1, r = 0.05, b = 0, l = 0, unit = "cm")
+  )
+ggsave("./Figures/VAF_Analysis/all_samples_vaf_combohap_shoot_tree_presentation.pdf", height = 2.5, width = 2.5)
+ggsave("./Figures/VAF_Analysis/all_samples_vaf_combohap_shoot_tree_presentation.png", height = 2.5, width = 2.5)
 ```
 

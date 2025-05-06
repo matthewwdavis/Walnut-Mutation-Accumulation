@@ -230,7 +230,7 @@ mean_tel %>%
         strip.background = element_blank(),
         strip.text = element_text(face = "bold"),
         legend.key.size = unit(0.2, "cm"))
-ggsave("./Figures/Telomeres_Reads/means_telomere_from_read_point.pdf", height = 3, width = 2.5)
-ggsave("./Figures/Telomeres_Reads/means_telomere_from_read_point.png", height = 3, width = 2.5)
+ggsave("./Figures/Telomeres_Reads/means_telomere_from_read_point.pdf", height = 2.75, width = 2)
+ggsave("./Figures/Telomeres_Reads/means_telomere_from_read_point.png", height = 3, width = 2)
 ```
 

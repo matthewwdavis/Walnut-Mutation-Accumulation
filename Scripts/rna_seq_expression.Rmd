@@ -757,8 +757,8 @@ rna_heat <- counts.genes %>%
 
 rna_heat
 
-ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups.pdf", height = 1.44, width = 2.7)
-ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups.png", height = 1.44, width = 2.7)
+ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups.pdf", height = 1.25, width = 2.7)
+ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups.png", height = 1.25, width = 2.7)
 
 rna_heat +
   theme(
@@ -768,8 +768,8 @@ rna_heat +
     legend.key.size = unit(0.2, "cm"),
     legend.background = element_rect(fill = "transparent", color = NA)
   ) 
-ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups_legend.pdf", height = 1.44, width = 2.7)
-ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups_legend.png", height = 1.44, width = 2.7)
+ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups_legend.pdf", height = 1.25, width = 2.7)
+ggsave("./Figures/RNA_Sequencing/expression_heatmap_all_dups_legend.png", height = 1.25, width = 2.7)
 ```
 
 ## Try windows of gene numbers

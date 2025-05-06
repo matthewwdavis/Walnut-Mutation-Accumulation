@@ -48,7 +48,7 @@ mut_per_qual <- function(mut_table, qual_range = 20:40){
 
 ## Read in mutation data
 ```{r}
-mutations <- fread("./Data/VCFs/Parsed/mutations.tsv")
+mutations <- fread("./Data/VCFs/Parsed/mutations_strict.tsv")
 ```
 
 # Prep data 
@@ -69,7 +69,7 @@ qual_table_indels <- mut_per_qual(indels)
 ## Prep table for plotting
 ### Organize levels and add defining columns
 ```{r}
-levels <- c("ref_chandler", "tree2", "cr2_hifi",
+levels <- c( "tree2", "ref_chandler", "cr2_hifi",
             "cr2_16A2", "cr2_16A1", "cr2_17A2",
             "cr2_17A1", "cr2_18A1", "cr2_16A",
             "cr2_15A1", "cr2_15A", "cr2_18A",
@@ -207,7 +207,7 @@ ggsave("./Figures/Quality_Analysis/medquality_comparison_snps.png", height = 1.5
 ### Create new levels and geom_text labels
 ```{r}
 # Levels
-levels <- c("ref_chandler", "tree2", "cr22", "cr13", "cr10", "cr85",
+levels <- c( "tree2", "ref_chandler", "cr22", "cr13", "cr10", "cr85",
             "cr2_11A", "cr2_13A", "cr2_12A",  "cr21_1", "cr21_2",
             "cr2_18A", "cr2_15A", "cr2_15A1", "cr2_hifi", "cr2_16A",
             "cr2_18A1", "cr2_17A1", "cr2_17A2", "cr2_16A1", "cr2_16A2")
@@ -237,7 +237,7 @@ qual_table <- qual_table %>%
 ```{r}
 qual_table %>%
   ggplot(aes(x = medqual_muts, y = SOURCE)) +
-  geom_point(aes(color = color_gradient), size = 0.5) +
+  geom_point(aes(color = color_gradient), size = 0.8) +
   scale_color_identity(guide = "legend") +
   labs(x = "Number of SBS", color = "q-value") +
   #facet_grid(~TYPE, scales = "free", space = "free") +
@@ -261,7 +261,7 @@ qual_table %>%
     size = 1,
     segment.color = NA,
     y = 22,
-    x = 2850
+    x = 3200
   ) +
   geom_text_repel(
     data = filter(qual_table, label == "Quality\n 40"),  # Replace with the condition for the second label
@@ -285,15 +285,15 @@ qual_table %>%
     plot.background = element_rect(fill = NA, color = NA),
     plot.margin = unit(c(0, 0.1, 0, 0), "cm")
   )
-ggsave("./Figures/Quality_Analysis/medquality_comparison_snps_long.pdf", height = 2.81, width = .95)
-ggsave("./Figures/Quality_Analysis/medquality_comparison_snps_long.png", height = 2.81, width = .95)
+ggsave("./Figures/Quality_Analysis/medquality_comparison_snps_long.pdf", height = 2.55, width = .9)
+ggsave("./Figures/Quality_Analysis/medquality_comparison_snps_long.png", height = 2.55, width = .9)
 ```
 
 # Plotting INDELS 
 ## Organize levels and add defining columns
 ```{r}
 # Levels
-levels <- c("ref_chandler", "tree2", "cr22", "cr13", "cr10", "cr85",
+levels <- c( "tree2", "ref_chandler", "cr22", "cr13", "cr10", "cr85",
             "cr2_11A", "cr2_13A", "cr2_12A",  "cr21_1", "cr21_2",
             "cr2_18A", "cr2_15A", "cr2_15A1", "cr2_hifi", "cr2_16A",
             "cr2_18A1", "cr2_17A1", "cr2_17A2", "cr2_16A1", "cr2_16A2")
@@ -347,7 +347,7 @@ qual_table_indels <- qual_table_indels %>%
 ```{r}
 qual_table_indels %>%
   ggplot(aes(x = medqual_muts, y = SOURCE)) +
-  geom_point(aes(color = color_gradient), size = 0.5) +
+  geom_point(aes(color = color_gradient), size = 0.8) +
   scale_color_identity(guide = "legend") +
   labs(x = "Number of INDELs", color = "q-value") +
   #facet_grid(~TYPE, scales = "free", space = "free") +
@@ -371,7 +371,7 @@ qual_table_indels %>%
     size = 1,
     segment.color = NA,
     y = 22,
-    x = 2750
+    x = 2800
   ) +
   geom_text_repel(
     data = filter(qual_table_indels, label == "Quality\n 40"),  # Replace with the condition for the second label
@@ -380,11 +380,11 @@ qual_table_indels %>%
     size = 1,
     segment.color = NA,
     y = 22,
-    x = 550
+    x = 500
   ) +
   theme_classic(base_size = 6) +
   theme(
-    legend.title = element_text(hjust = 0.5),
+    legend.title = element_text(hjust = 1),
     axis.text.y = element_blank(),
     axis.title.y = element_blank(),
     axis.line.y = element_blank(),
@@ -395,7 +395,7 @@ qual_table_indels %>%
     plot.background = element_rect(fill = NA, color = NA),
     plot.margin = unit(c(0, 0.1, 0, 0), "cm")
   )
-ggsave("./Figures/Quality_Analysis/medquality_comparison_indels_long.pdf", height = 2.81, width = .95)
-ggsave("./Figures/Quality_Analysis/medquality_comparison_indels_long.png", height = 2.81, width = .95)
+ggsave("./Figures/Quality_Analysis/medquality_comparison_indels_long.pdf", height = 2.55, width = .9)
+ggsave("./Figures/Quality_Analysis/medquality_comparison_indels_long.png", height = 2.55, width = .9)
 ```
 
