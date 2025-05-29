@@ -1,0 +1,263 @@
+---
+title: "pca_all_walnut"
+author: "Matthew Davis"
+date: "2025-05-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggenomics)
+library(vcfR)
+```
+
+## Functions
+```{r}
+read.vcf <- function(file, chrom_label = "NC_0499", genotype = c("0/0","0/1","1/1"), col_to_separate = "default", source){
+  
+  # Read the VCF file using vcfR
+  vcf <- read.vcfR(file, verbose = FALSE)
+  
+  # Convert @fix and @gt slots to data.tables
+  fix <- as.data.table(vcf@fix)
+  gt <- as.data.table(vcf@gt)
+  all <- cbind(fix, gt)
+  
+  # Select chromosomes
+  vcf.table <- all[grepl(chrom_label, CHROM)]
+  
+  # Separate genotype information into distinct columns
+  vcf.table <- vcf.table[, c("GT", "GQ", "DP", "AD", "VAF", "PL") := tstrsplit(get(col_to_separate), ":", type.convert=TRUE)]
+  
+  # Select necessary columns
+  vcf.table <- vcf.table[, .(CHROM, POS, GT, QUAL)]
+  
+  # Create unique identifier
+  vcf.table[, UNIQUE :=  paste(CHROM, POS, sep = "_")]
+  
+  # Convert to numeric
+  vcf.table[, QUAL := as.numeric(QUAL)]
+  
+  # Add source column
+  vcf.table[, SOURCE := source]
+  
+  # Filter SNPs with heterozygous genotype
+  vcf.table <- vcf.table[GT %in% genotype]
+  
+  return(vcf.table)
+}
+
+create_snp_matrix <- function(combo_vcf){
+  
+  # Extract initial matrix data
+  matrix.table <- data.table(table(UNIQUE = combo_vcf$UNIQUE, SOURCE = combo_vcf$SOURCE))
+  
+  # Cast matrix wide
+  matrix.df <- dcast(matrix.table, SOURCE ~ UNIQUE, value.var = "N")
+  
+  # Make column 1 rownames 
+  row.names(matrix.df) <- matrix.df$SOURCE
+  
+  # Remove column 1
+  matrix <- as.matrix(matrix.df[,-1])
+  
+  # Convert to numeric and add rownames
+  matrix <- apply(matrix, 2, as.numeric)
+  rownames(matrix) <- rownames(matrix.df)
+  
+  return(matrix)
+}
+
+add_info <- function(pca_df) {
+  
+  df_cols <- pca_df %>%
+    mutate(CULTIVAR = case_when(
+      SOURCE %in% c("ref_chandler", "tree", "cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A",
+                    "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", 
+                    "cr2_18A1", "cr85", "cr10", "cr13", "cr22") ~ "Chandler",
+      SOURCE %in% "franquette" ~ "Franquette",
+      SOURCE %in% "hartley" ~ "Hartley",
+      SOURCE %in% "payne" ~ "Payne",
+      SOURCE %in% "pi159568" ~ "PI159568",
+      SOURCE %in% "waterloo" ~ "Waterloo"
+    )
+    ) %>%
+    mutate(CULTURETYPE = case_when(
+      SOURCE %in% c( "cr2_hifi", "cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A",
+                     "cr2_15A", "cr2_15A1", "cr2_16A", "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A", 
+                     "cr2_18A1") ~ "Somatic Embryo",
+      SOURCE %in% c("ref_chandler", "tree", "franquette", "hartley", "payne", "pi159568", "waterloo") ~ "Tree",
+      SOURCE %in% c("cr85", "cr10", "cr13", "cr22") ~ "Shoot"
+    )
+    ) %>%
+    mutate(SEQTYPE = case_when(
+      SOURCE %in% c("cr21_1", "cr21_2", "cr2_11A", "cr2_12A", "cr2_13A", "cr2_15A", "cr2_15A1", "cr2_16A",
+                    "cr2_16A1", "cr2_16A2", "cr2_17A1", "cr2_17A2", "cr2_18A","cr2_18A1", "cr85", "cr10",
+                    "cr13", "cr22", "franquette", "hartley", "payne", "pi159568", "waterloo") ~ "Short Read",
+      SOURCE %in% c("ref_chandler", "tree", "cr2_hifi")  ~ "HiFi",
+    )
+    )
+  
+  return(df_cols)
+}
+```
+
+## Read in data
+```{r}
+# Chandler HiFi
+reference <- read.vcf("./Data/VCFs/Longread_VCF/Ref_Primary_Aligned/ref_chandler_primary_deepvariant.vcf.gz",
+                      col_to_separate = "UnnamedSample", source = "ref_chandler")
+tree <- read.vcf("./Data/VCFs/Longread_VCF/Ref_Primary_Aligned/term_chandler_primary_deepvariant.vcf.gz", 
+                 col_to_separate = "UnnamedSample", source = "tree")
+cr2_hifi <- read.vcf("./Data/VCFs/Longread_VCF/Ref_Primary_Aligned/cr2_primary_deepvariant.vcf.gz",
+                     col_to_separate = "UnnamedSample", source = "cr2_hifi")
+
+# Chandler shoots short reads
+cr85 <- read.vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR85_S28_deepvariant.vcf.gz",
+                 source = "cr85")
+cr10 <- read.vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR10_S29_deepvariant.vcf.gz",
+                 source = "cr10")
+cr13 <- read.vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR13_S30_deepvariant.vcf.gz",
+                 source = "cr13")
+cr22 <- read.vcf("./Data/VCFs/Shoot_Shortread_VCF/Ref_Primary_Aligned/CR22_S31_deepvariant.vcf.gz",
+                 source = "cr22")
+
+# CR2 original short reads
+cr21_1 <- read.vcf("./Data/VCFs/Original_CR2/Ref_Primary_Aligned/CR21-1_S7_deepvariant.vcf.gz",
+                   source = "cr21_1")
+cr21_2 <- read.vcf("./Data/VCFs/Original_CR2/Ref_Primary_Aligned/CR21-2_S8_deepvariant.vcf.gz",
+                   source = "cr21_2")
+
+# CR2 stacks short reads
+cr2_11A <- read.vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/11A_deepvariant.vcf.gz",
+                    source = "cr2_11A")
+cr2_12A <- read.vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/12A_deepvariant.vcf.gz",
+                    source = "cr2_12A")
+cr2_13A <- read.vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/13A_deepvariant.vcf.gz",
+                    source = "cr2_13A")
+cr2_15A <- read.vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/15A_deepvariant.vcf.gz",
+                    source = "cr2_15A")
+cr2_15A1 <- read.vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/15A1_deepvariant.vcf.gz",
+                     source = "cr2_15A1")
+cr2_16A <- read.vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/16A_deepvariant.vcf.gz",
+                    source = "cr2_16A")
+cr2_16A1 <- read.vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/16A1_deepvariant.vcf.gz",
+                     source = "cr2_16A1")
+cr2_16A2 <- read.vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/16A2_deepvariant.vcf.gz",
+                     source = "cr2_16A2")
+cr2_17A1 <- read.vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/17A1_deepvariant.vcf.gz",
+                     source = "cr2_17A1")
+cr2_17A2 <- read.vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/17A2_deepvariant.vcf.gz",
+                     source = "cr2_17A2")
+cr2_18A <- read.vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/18A_deepvariant.vcf.gz",
+                    source = "cr2_18A")
+cr2_18A1 <- read.vcf("./Data/VCFs/CR2_Stacks_VCF/Ref_Primary_Aligned/18A1_deepvariant.vcf.gz",
+                     source = "cr2_18A1")
+
+# Other cultivars
+franq <- read.vcf("./Data/VCFs/Other_Cultivars/franquette_deepvariant.vcf.gz",
+                  source = "franquette")
+hart <- read.vcf("./Data/VCFs/Other_Cultivars/hartley_deepvariant.vcf.gz",
+                 source = "hartley")
+payne <- read.vcf("./Data/VCFs/Other_Cultivars/payne_deepvariant.vcf.gz",
+                  source = "payne")
+pi <- read.vcf("./Data/VCFs/Other_Cultivars/pi159568_deepvariant.vcf.gz",
+               source = "pi159568")
+water <- read.vcf("./Data/VCFs/Other_Cultivars/waterloo_deepvariant.vcf.gz",
+                  source = "waterloo")
+```
+
+## Comine all data
+```{r}
+walnut.vcf <- rbind(reference, tree, cr2_hifi, cr85, cr10, cr13, cr22, cr21_1, cr21_2, cr2_11A, cr2_12A, cr2_13A,
+                    cr2_15A, cr2_15A1, cr2_16A, cr2_16A1, cr2_16A2, cr2_17A1, cr2_17A2, cr2_18A, cr2_18A1, franq,
+                    hart, payne, pi, water)
+rm(reference, tree, cr2_hifi, cr85, cr10, cr13, cr22, cr21_1, cr21_2, cr2_11A, cr2_12A, cr2_13A,
+   cr2_15A, cr2_15A1, cr2_16A, cr2_16A1, cr2_16A2, cr2_17A1, cr2_17A2, cr2_18A, cr2_18A1, franq,
+   hart, payne, pi, water)
+```
+
+# Prepare data and calculate PCs
+## Filter quality
+```{r}
+walnut.vcf <- walnut.vcf[QUAL >= 20]
+```
+
+## Different sources combinations
+```{r}
+chandler.vcf <- walnut.vcf[!SOURCE %in% c("franquette", "hartley", "payne", "pi159568", "waterloo")]
+```
+
+## Create a SNP matrix
+```{r}
+all_matrix <- create_snp_matrix(walnut.vcf)
+chandler_matrix <- create_snp_matrix(chandler.vcf)
+```
+
+## Calculate PCs
+```{r}
+all_pc <- prcomp(all_matrix, rank. = 10)
+all_pca.df <- as.data.table(all_pc$x, keep.rownames = "SOURCE")
+
+chandler_pc <- prcomp(chandler_matrix, rank. = 10)
+chandler_pca.df <- as.data.table(chandler_pc$x, keep.rownames = "SOURCE")
+```
+
+## Adding additional columns of information
+```{r}
+all_pca.df <- add_info(all_pca.df)
+
+chandler_pca.df <- add_info(chandler_pca.df)
+```
+
+## Calculate the percent variation each PC explains
+```{r}
+all_var <- (all_pc$sdev)^2 / sum(all_pc$sdev^2) * 100
+
+# Percent variance explained for chandler_matrix
+chandler_var_ <- (chandler_pc$sdev)^2 / sum(chandler_pc$sdev^2) * 100
+```
+
+# Plot
+## New source labels
+```{r}
+source_labels = c(
+  "ref_chandler" = "Reference", "tree" = "Tree", "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+  "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13", "cr2_15A" = "E 8", "cr2_15A1" = "E 7",
+  "cr2_16A" = "E 6", "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4", "cr2_17A2" = "E 3",
+  "cr2_18A" = "E 9", "cr2_18A1" = "E 5", "cr85" = "S 1985", "cr10" = "S 2010", "cr13" = "S 2013",
+  "cr22" = "S 2022", "franquette" = "Franquette", "hartley" = "Hartley", "payne" = "Payne",
+  "pi159568" = "PI159568", "waterloo" = "Waterloo"
+)
+```
+
+## PCA of all individuals
+```{r}
+# Sequencing and cultivar
+all_pca.df %>%
+  ggplot(aes(x = PC1, y = PC2, color = CULTIVAR, shape = SEQTYPE)) +
+  geom_point() +
+  labs(title = "All walnut samples", x = "PC1 (%)", y = "PC2 (%)", color = "Cultivar", shape = "Sequencing type") +
+  theme_classic(base_size = 6) +
+  theme(
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+## PCA of Chandler
+```{r}
+chandler_pca.df %>%
+  ggplot(aes(x = PC1, y = PC2, color = CULTURETYPE, shape = SEQTYPE)) +
+  geom_point() +
+  labs(title = "All walnut samples", x = "PC1 (%)", y = "PC2 (%)", color = "Culture type", shape = "Sequencing type") +
+  theme_classic(base_size = 6) +
+  theme(
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+

@@ -190,6 +190,13 @@ both_tree_with_bs <- both_tree.table$tree_with_bs
 both_tip_data <- both_tree.table$tip_data
 
 both_node_data <- both_tree.table$node_data
+
+## Summarize SBS and INDELs of de novo
+both_filt %>%
+  group_by(SOURCE, SNP) %>%
+  summarise(
+    count = n()
+  )
 ```
 
 ## No aneuploid

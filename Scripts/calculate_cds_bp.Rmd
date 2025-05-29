@@ -1,0 +1,29 @@
+---
+title: "calculate_cds_bp"
+author: "Matthew Davis"
+date: "2025-05-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Library
+```{r}
+library(ggenomics)
+```
+
+## Read in data
+```{r}
+cds <- fread("./Data/GFFs/Parsed/cds_good.tsv")
+```
+
+# Calculate gene basepairs
+## Calculate gene length
+```{r}
+cds[, LENGTH := STOP - START]
+sum(cds$LENGTH)
+```
+

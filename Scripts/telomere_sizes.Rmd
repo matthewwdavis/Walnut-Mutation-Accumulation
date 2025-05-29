@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Libraries
 ```{r}
 library(ggenomics)
+library(ggpubr)
 ```
 
 ## Functions
@@ -76,14 +77,12 @@ hifi.stats <- fread("./Data/Telomeres/Jellyfish_Count/hifi_fastq_chr_only.stats"
 short.stats <- fread("./Data/Telomeres/Jellyfish_Count/short_read_fastq_chr_only.stats")
 ```
 
-
 # Prepare data
 ## Parse stats
 ```{r}
 hifi_small <- parse_stats(hifi.stats, c("cr2_hifi", "reference", "term"))
 short_small <- parse_stats(short.stats, c("11A", "12A", "13A", "15A1", "15A", "16A1", "16A2", "16A", "17A1", "17A2", "18A1", "18A", "10", "cr11-1", "cr11-2", "13", "cr21_1", "cr21_2", "22", "85"))
 ```
-
 
 ## Combine data 
 ```{r}
@@ -99,9 +98,6 @@ tel.data <- merge(tel_counts, stats, by = "SOURCE", all.x = TRUE)
 
 # Normalize by number of basepairs
 tel.data[, NORM_TEL_SEQ := COUNT / as.numeric(sum_len)]
-
-# Normalize by number of basepairs and repeat_length. I don't think this is needed.
-#tel.data[, REP_LEN := nchar(REPEAT)]
 ```
 
 
@@ -124,8 +120,27 @@ new_labels = c("reference" = "Reference", "term" = "Tree",
                "cr13" = "S 2013", "cr22" = "S 2022")
 ```
 
+## Give identifier to cr2 large clades, clade labels
+```{r}
+embryo.tel <- tel.data[TYPE == "embryo"]
+
+embryo.tel[, CLADE := fifelse(SOURCE %in% c("cr21_2", "cr21_1", "12A", "13A", "11A"), "clade2", "clade1")]
+
+clade_labels = c("clade1" = "E 1, E 2, E 3, E 4, E 5,\n E 6, E HiFi, E 7, E 8, E 9", "clade2" = "E 10 , E 11, E 12, E 13, E 14")
+```
+
+## Adding years in culture before sequencing to the shoot cultures
+```{r}
+shoot.tel <- tel.data[TYPE == "shoot"]
+
+shoot.tel[, TIME := fifelse(SOURCE %in% c("22"), 1,
+                            fifelse(SOURCE %in% c("13"), 10,
+                                    fifelse(SOURCE %in% c("10"), 13,
+                                            fifelse(SOURCE %in% c("85"), 38, NA))))]
+```
+
 # Plot
-## Quick barplot, no corrections
+## Barplot
 ```{r}
 tel.data %>%
   ggplot(aes(x = NORM_TEL_SEQ, y = SOURCE, fill = TYPE)) +
@@ -159,5 +174,86 @@ tel.data %>%
     plot.margin = margin(t = 0.02, r = 0, b = 0, l = 0.075, unit = "cm")
   )
 ggsave("./Figures/Telomeres/telomere_repeats_from_reads.pdf", height = 2.931, width = 0.725)
+ggsave("./Figures/Telomeres/telomere_repeats_from_reads.png", height = 2.931, width = 0.725)
+```
+
+## Boxplot comparing trees, shoots, embryos
+```{r}
+tel.data %>%
+  ggplot(aes(x = TYPE, y = NORM_TEL_SEQ, fill = TYPE)) +
+  geom_boxplot() +
+  stat_compare_means(
+    method = "t.test", 
+    comparisons = list(  c("tree", "shoot"),c("embryo", "shoot"),  c("embryo", "tree")),
+    label = "p.signif",
+    size = 2
+  ) +
+  labs(title = "Telomere repeats in all clones", y = "Normalized telomere count") +
+  scale_fill_manual(
+    values = c(embryo = "goldenrod1",
+               shoot="darkseagreen2",
+               tree="darkseagreen4")
+  ) +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.position = "none",
+    axis.title.x = element_blank(),
+    plot.title = element_text(hjust = 0.5)
+  )
+ggsave("./Figures/Telomeres/telomere_repeats_compare.pdf", height = 2, width = 3)
+ggsave("./Figures/Telomeres/telomere_repeats_compare.png", height = 2, width = 3)
+```
+
+
+## Boxplot comparing two major embryo clades
+```{r}
+embryo.tel %>%
+  ggplot(aes(x = CLADE, y = NORM_TEL_SEQ, fill = TYPE)) +
+  geom_boxplot() +
+  scale_x_discrete(
+    labels = clade_labels
+  ) +
+  stat_compare_means(
+    method = "t.test", 
+    comparisons = list(c("clade1", "clade2")),
+    label = "p.signif",
+    size = 2
+  ) +
+  labs(title = "Comparing telomere repeats in embryo clades", y = "Normalized telomere count") +
+  scale_fill_manual(
+    values = c(embryo = "goldenrod1")
+  ) +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.position = "none",
+    axis.title.x = element_blank(),
+    plot.title = element_text(hjust = 0.5)
+  )
+ggsave("./Figures/Telomeres/embryo_clade_telomere_repeats_compare.pdf", height = 2, width = 3)
+ggsave("./Figures/Telomeres/embryo_clade_telomere_repeats_compare.png", height = 2, width = 3)
+```
+
+## Scatterplot of shoot telomeres with time
+```{r}
+summary(lm(NORM_TEL_SEQ ~ TIME, data = shoot.tel))
+
+shoot.tel %>%
+  ggplot(aes(x = TIME, y = NORM_TEL_SEQ, color = TYPE)) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", se = FALSE, color = "grey75", linetype = 2) +
+  scale_color_manual(
+    values = c(shoot = "darkseagreen2")
+  ) +
+  annotate("text", x = 35, y = Inf, 
+           label = "R² =  0.9528",
+           hjust = 1.1, vjust = 1.5, size = 2) +
+  labs(title = "Telomere length vs time in shoots",x = "Years in culture", y = "Normalized telomere count") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+ggsave("./Figures/Telomeres/shoot_telomeres_over_time.pdf", height = 2, width = 3)
+ggsave("./Figures/Telomeres/shoot_telomeres_over_time.png", height = 2, width = 3)
 ```
 

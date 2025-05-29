@@ -22,6 +22,15 @@ sv <- fread("./Data/VCFs/SV_VCF/Parsed/parsed_ins_dels_pbsv.vcf")
 ```
 
 # Look at distributions
+## Quick summary
+```{r}
+sv %>%
+  group_by(SOURCE) %>%
+  summarise(
+    count = n()
+  )
+```
+
 ## VAF density
 ```{r}
 # All VAF

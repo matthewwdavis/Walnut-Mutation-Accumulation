@@ -33,6 +33,15 @@ setnames(gen_map, old = c("chr", "bp", "hap1", "hap2"), new = c("CHROM", "POS", 
 ```
 
 # Prepare data
+## Look at quick summaries
+```{r}
+an_snps %>%
+  group_by(SOURCE) %>%
+  summarise(
+    count = n()
+  )
+```
+
 ## Making new labels
 ```{r}
 new_labels = c(
