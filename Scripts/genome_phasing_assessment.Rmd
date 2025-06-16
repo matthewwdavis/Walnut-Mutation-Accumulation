@@ -164,11 +164,11 @@ long_combo[, Hap := fifelse(Hap == "1", "A", "B")]
 # Plot
 ## Omni-C genome phasing assessment
 ```{r}
-long_combo %>%
+phase_plot <- long_combo %>%
   ggplot(aes(x = Hap, y = Pos, color = Hap_LM)) +
-  geom_point(size = 0.75, alpha = 0.25) +
+  geom_point(size = 1.25, alpha = 0.25) +
   facet_grid(~Chr) +
- scale_color_manual(values = c("Hap1_LM" = "#009e73", "Hap2_LM" = "#C29A6A"),
+  scale_color_manual(values = c("Hap1_LM" = "#009e73", "Hap2_LM" = "#C29A6A"),
                      labels = c("Haplotype A", "Haplotype B")) + 
   scale_y_continuous(labels = function(x) sprintf("%.1f", x / 1e6)) + 
   labs(color = "Genetic Map\nHaplotype", x = "Assembly Haplotype", y = " Position (Mb)") +
@@ -177,30 +177,26 @@ long_combo %>%
     legend.position = "none",
     strip.background = element_blank(),
     #strip.text = element_text(face = "bold"),
-    #axis.title = element_text(face = "bold")
-    )
-ggsave("./Figures/Phasing/side_by_side_phasing_full_chr_no_legend.pdf", height = 2, width = 2.75)
-ggsave("./Figures/Phasing/side_by_side_phasing_full_chr_no_legend.png", height = 2, width = 2.75)
+    #axis.title = element_text(face = "bold"),
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = ggplot2::margin(t = 0, r = 0, b = 0, l = 0.1, unit = "cm")
+  )
+phase_plot
+ggsave("./Figures/Phasing/side_by_side_phasing_full_chr_no_legend.pdf", height = 2.43, width = 3.55)
+ggsave("./Figures/Phasing/side_by_side_phasing_full_chr_no_legend.png", height = 2.43, width = 3.55)
 
-long_combo %>%
-  ggplot(aes(x = Hap, y = Pos, color = Hap_LM)) +
-  geom_point(size = 0.75, alpha = 0.25) +
-  facet_grid(~Chr) +
- scale_color_manual(values = c("Hap1_LM" = "#009e73", "Hap2_LM" = "#C29A6A"),
-                     labels = c("Haplotype A", "Haplotype B")) + 
-  scale_y_continuous(labels = function(x) sprintf("%.1f", x / 1e6)) + 
-  labs(color = "Genetic Map\nHaplotype", x = "Assembly Haplotype", y = " Position (Mb)") +
-  theme_classic(base_size = 6) +
-  theme(
-    legend.position = "right",
-    legend.title.align = 0.5,
-    legend.key.size = unit(0.2, "cm"),
-    strip.background = element_blank(),
-    #strip.text = element_text(face = "bold"),
-    #axis.title = element_text(face = "bold")
-    )
-ggsave("./Figures/Phasing/side_by_side_phasing_full_chr.pdf", height = 2, width = 2.75)
-ggsave("./Figures/Phasing/side_by_side_phasing_full_chr.png", height = 2, width = 2.75)
+
+phase_plot +
+  theme(legend.position = "right",
+        legend.key.size = unit(0.2, "cm"))
+
+ggsave("./Figures/Phasing/side_by_side_phasing_full_chr.pdf", height = 2.43, width = 3.55)
+ggsave("./Figures/Phasing/side_by_side_phasing_full_chr.png", height = 2.43, width = 3.55)
 ```
 
 # Assessing proper phasing
@@ -220,7 +216,7 @@ pct_phase <- long_combo %>%
 pct_phase <- pct_phase %>%
   group_by(Chr) %>%
   mutate(Max_Percentage = max(Hap1_LM_percentage, Hap2_LM_percentage, na.rm = TRUE)) %>%
-   mutate(Max_Count = max(Hap1_LM_count, Hap2_LM_count, na.rm = TRUE)) %>%
+  mutate(Max_Count = max(Hap1_LM_count, Hap2_LM_count, na.rm = TRUE)) %>%
   filter(Hap == "A") %>%
   ungroup()
 

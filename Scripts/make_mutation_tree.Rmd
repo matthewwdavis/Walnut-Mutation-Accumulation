@@ -441,7 +441,7 @@ both_plot_obj <- both_plot +
         panel.background = element_rect(fill = NA, color = NA),
         plot.background = element_rect(fill = NA, color = NA))
 both_plot_obj
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_both.pdf", height = 3.19, width = 1.79)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_both.pdf", height = 4.145, width = 3.65)
 ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_presentation_lables_both.pdf", height = 2.59, width = 3)
 ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_presentation_lables_both.png", height = 2.59, width = 3)
 
@@ -822,11 +822,16 @@ ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_embryos.pdf", height = 1.8,
 ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_embryos.png", height = 1.8, width = 5)
 
 plot_embryo <- plot_embryo +
-  scale_x_continuous(expand = c(0,500))
+  scale_x_continuous(expand = c(0,3000)) +
+  theme(
+    plot.margin = margin(t = 0, r = .5, b = 0, l = 0, unit = "cm"),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA)
+  )
 plot_embryo
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_embryos.pdf", height = 1.8, width = 0.75)
-ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_embryos.png", height = 1.8, width = 0.75)
-saveRDS(plot_rna, file = "./Data/Plot_Objects/snp_tree_embryo_samples_plot.rds")
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_embryos.pdf", height = 1.78, width = 0.9)
+ggsave("./Figures/Phylogeny/all_sample_branch_is_mut_for_lables_embryos.png", height = 1.78, width = 0.9)
+#saveRDS(plot_rna, file = "./Data/Plot_Objects/snp_tree_embryo_samples_plot.rds")
 ```
 
 # Legacy, no longer used

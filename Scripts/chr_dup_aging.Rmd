@@ -1,0 +1,151 @@
+---
+title: "chr_dup_aging"
+author: "Matthew Davis"
+date: "2025-06-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggenomics)
+```
+
+## Read data
+```{r}
+dn_muts <- fread("./Data/VCFs/Parsed/mutations_strict.tsv")
+```
+
+# Determine mutations shared by all embryos
+## Select embryos and count SBS occurance
+```{r}
+# Select embryos
+dn_embryo <- dn_muts[CULTURETYPE %in% "embryo"]
+
+# Count how many embryos each SBS exists in
+dn_embryo[, UNIQUEN := .N, by = UNIQUE]
+
+range(dn_embryo$UNIQUEN)
+```
+
+## Plot histogram of shared SBS
+```{r}
+dn_embryo %>%
+  ggplot(aes(x = UNIQUEN)) +
+  geom_histogram() + 
+  theme_classic()
+```
+
+## Filter embryos for shared SBS
+```{r}
+share_dn <- dn_embryo[UNIQUEN %in% 15]
+```
+
+## Filter shared SBS
+```{r}
+share_dn <- share_dn[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T]
+```
+
+# Identify if SBS deviate from diploid expectation
+## Chi square and multiple testing correction
+```{r, warning=FALSE}
+share_dn[, CHIPVALUE := chisq.test(c(REFDP, ALTDP), p = c(0.5, 0.5))$p.value , by = 1:nrow(share_dn)]
+
+share_dn[, CHIBON_PVALUE := p.adjust(CHIPVALUE, method = "bonferroni")]
+share_dn[, CHIFDR_PVALUE := p.adjust(CHIPVALUE, method = "BH")]
+```
+
+## Classify SBS as dup, nondup, none
+```{r}
+share_dn[, CLASSIFY :=  fifelse(VAFREAL > 0.5 & CHIPVALUE < 0.01, "dup", "none") ]
+share_dn[, CLASSIFY :=  fifelse(VAFREAL< 0.5 & CHIPVALUE < 0.01, "nondup", CLASSIFY) ]
+share_dn[, CLASSIFY := fifelse(!CHROM %in% c(4,9), "none", CLASSIFY)]
+```
+
+## Calculate how many shared SBS exist on dup 9 and dup 4
+```{r}
+share_dn %>%
+  group_by(CLASSIFY, CHROM, SOURCE) %>%
+  summarise(
+    count = n()
+  )
+```
+
+
+# Plot
+## Additional plotting info
+```{r}
+share_dn$SOURCE <- factor(share_dn$SOURCE, levels = c("cr2_16A2","cr2_16A1","cr2_17A2","cr2_17A1",
+                                                      "cr2_18A1","cr2_16A","cr2_hifi","cr2_15A1",
+                                                      "cr2_15A","cr2_18A", "cr21_2","cr21_1",
+                                                      "cr2_12A","cr2_13A","cr2_11A"))
+```
+
+## Create dummy haplotype variable for plot alignment with combohaps
+```{r}
+share_dn[, HAP := "Primary"]
+```
+
+
+## Shared de nove SBS
+```{r}
+plot <- share_dn %>%
+  filter(!GT %in% c("0/0", "1/1")) %>%
+  filter(CHROM %in% c(4,9)) %>%
+  ggplot(aes(x = POS, y = VAFREAL, color = CLASSIFY)) +
+  geom_point(size = 0.5) +
+  facet_grid(SOURCE~CHROM+HAP, space = "free", scales = "free_x") +
+  scale_color_manual(
+    values = c(dup = "orangered3", nondup = "royalblue1", none  = "grey90"),
+    labels = c(dup = "Duplicated", nondup = "Non-duplicated", none  = "Diploid")
+  ) +
+  scale_y_continuous( breaks = (c(0, 0.5, 1)), position = "right") +
+  labs(title = "Primary assembly", x = "Position", y = "Allele frequency", color = "Mutation status") +
+  theme_classic(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text.x = element_text(color = "black", margin = ggplot2::margin(t = 0, b = 0)),
+    strip.text.y = element_blank(),
+    panel.border = element_rect(fill = NA),
+    panel.spacing.y = unit(0.05, "cm"),
+    panel.spacing.x = unit(0.05, "cm"),
+    legend.position = "none",
+    legend.key.size = unit(0.2, "cm"),
+    legend.title = element_text(hjust = 0),
+    legend.text = element_text(margin = ggplot2::margin(t = 0, r = 0, b = 0, l = -0.01, unit = "cm")),
+    legend.background = element_rect(fill = "transparent", color = NA),
+    plot.title = element_blank(),
+    axis.text.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.y = element_text(color = "white"),
+    axis.text.y = element_text(color = "white"),
+    axis.ticks.y = element_line(color = "white"),
+    axis.line.y = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = ggplot2::margin(t = 0.05, r = 0.05, b = 0, l = 0, unit = "cm")
+  )
+
+plot
+
+ggsave("./Figures/Duplication_Dating/embryo_shared_dn_sbs_no_legend.pdf", height = 2.5, width = 3.33)
+ggsave("./Figures/Duplication_Dating/embryo_shared_dn_sbs_no_legend.png", height = 2.5, width = 3.33)
+
+plot +
+  guides(
+    color = guide_legend(override.aes = list(size = 1), ncol = 3),
+    fill = guide_legend(byrow = TRUE)
+  ) +
+  theme(
+    legend.position = "top",
+    legend.key.height = unit(.2, "cm"),
+    legend.key.width = unit(.25, "cm")
+  )
+ggsave("./Figures/Duplication_Dating/embryo_shared_dn_sbs.pdf", height = 2.5, width = 3.33)
+ggsave("./Figures/Duplication_Dating/embryo_shared_dn_sbs.png", height = 2.5, width = 3.33)
+```

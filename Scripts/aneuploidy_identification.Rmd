@@ -398,29 +398,29 @@ test_combined <- combine_data(real_data = longread_het_data,
                                tetraploid_sim_data = test_tetra)
 
 real_v_sim_plot(test_combined, difference_type = "Depth_Difference_Ref")
-#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/ref_chandler_depth_diff_per_chr.pdf", height = 4, width = 8)
-#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/ref_chandler_depth_diff_per_chr.png", height = 4, width = 8)
+# ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/ref_chandler_depth_diff_per_chr.pdf", height = 2.1, width = 6.5)
+# ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/ref_chandler_depth_diff_per_chr.png", height = 2.1, width = 6.5)
 
 real_v_sim_plot(test_combined, difference_type = "Depth_Difference_Term")
-#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/term_chandler_depth_diff_per_chr.pdf", height = 4, width = 8)
-#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/term_chandler_depth_diff_per_chr.png", height = 4, width = 8)
+# ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/term_chandler_depth_diff_per_chr.pdf", height = 2.1, width = 6.5)
+# ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/term_chandler_depth_diff_per_chr.png", height = 2.1, width = 6.5)
 
 real_v_sim_plot(test_combined, difference_type = "Depth_Difference_Cr2")
-#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/cr2_depth_diff_per_chr.pdf", height = 4, width = 8)
-#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/cr2_depth_diff_per_chr.png", height = 4, width = 8)
+# ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/cr2_depth_diff_per_chr.pdf", height = 2.1, width = 6.5)
+# ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/cr2_depth_diff_per_chr.png", height = 2.1, width = 6.5)
 
 real_v_sim_plot(test_combined, difference_type = "Depth_Difference_Cr2", specified_chromosomes = c(1,4,9))
-#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/cr2_depth_diff_chr149.pdf", height = 3, width = 7)
-#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/cr2_depth_diff_chr149.png", height = 3, width = 7)
+# ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/cr2_depth_diff_chr149.pdf", height = 2.1, width = 6.5)
+# ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/cr2_depth_diff_chr149.png", height = 2.1, width = 6.5)
 
 real_v_sim_plot(test_combined, difference_type = "Depth_Difference_Ref", specified_chromosomes = c(1,4,9))
-#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/ref_depth_diff_chr149.pdf", height = 3, width = 7)
-#ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/ref_depth_diff_chr149.png", height = 3, width = 7)
+# ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/ref_depth_diff_chr149.pdf", height = 2.1, width = 6.5)
+# ggsave("~/Projects/Walnut/Mutation_Accumulation/Figures/Aneuploidy_Identification/ref_depth_diff_chr149.png", height = 2.1, width = 6.5)
 
 real_v_sim_plot(test_combined, difference_type = "Depth_Difference_Term", specified_chromosomes = c(1,4,9))
-#ggsave("./Figures/Aneuploidy_Identification/term_depth_diff_chr149.pdf", height = 3, width = 7)
-#ggsave("./Figures/Aneuploidy_Identification/term_depth_diff_chr149.png", height = 3, width = 7)
-  
+# ggsave("./Figures/Aneuploidy_Identification/term_depth_diff_chr149.pdf", height = 2.1, width = 6.5)
+# ggsave("./Figures/Aneuploidy_Identification/term_depth_diff_chr149.png", height = 2.1, width = 6.5)
+
 test_combined$P_Value_Ref <- mapply(chi_sq_sites, test_combined$REF_Depth_Ref, test_combined$ALT_Depth_Ref)
 test_combined$P_Value_Term <- mapply(chi_sq_sites, test_combined$REF_Depth_Term, test_combined$ALT_Depth_Term)
 test_combined$P_Value_Cr2 <- mapply(chi_sq_sites, test_combined$REF_Depth_Cr2, test_combined$ALT_Depth_Cr2)
@@ -613,7 +613,7 @@ ggsave("./Figures/Aneuploidy_Identification/depth_boxplots_by_haplotype.png", he
 
 
 
-## TRying new plot function for simulation only plotting
+## Trying new plot function for simulation only plotting
 ```{r}
 real_v_sim_plot <- function(combined_df, difference_type = NULL, title = NULL,
                             x_axis = "Difference in depth", y_axis = "Density",
@@ -656,9 +656,13 @@ real_v_sim_plot <- function(combined_df, difference_type = NULL, title = NULL,
     labs(title = title, x = x_axis, y = y_axis) +
     guides(fill = guide_legend(reverse = TRUE)) +
     theme_classic() +
-    theme(plot.title = element_text(hjust = 0.5, face = "bold"), legend.position = "bottom",
-          legend.title = element_blank(), strip.text = element_blank(), 
-          strip.text.x = element_text(size = 8, face = "bold"), strip.background = element_blank())
+    theme(plot.title = element_text(hjust = 0.5),
+          legend.position = "bottom",
+          legend.title = element_blank(),
+          legend.key.size = unit(0.2, "cm"),
+          strip.text = element_blank(), 
+          strip.text.x = element_text(size = 8, face = "bold"),
+          strip.background = element_blank())
   
   return(plot)
 }
@@ -666,18 +670,37 @@ real_v_sim_plot <- function(combined_df, difference_type = NULL, title = NULL,
 
 real_v_sim_plot(combined_df = test_combined, difference_type = "Depth_Difference_Cr2",
                 specified_chromosomes = c(1, 4, 9), exclude_source = "Observed")
-ggsave("./Figures/Aneuploidy_Identification/cr2_depth_diff_chr149_sim_only.pdf", height = 3, width = 7)
-ggsave("./Figures/Aneuploidy_Identification/cr2_depth_diff_chr149_sim_only.png", height = 3, width = 7)
+ggsave("./Figures/Aneuploidy_Identification/cr2_depth_diff_chr149_sim_only.pdf", height = 2.1, width = 6.5)
+ggsave("./Figures/Aneuploidy_Identification/cr2_depth_diff_chr149_sim_only.png", height = 2.1, width = 6.5)
 
 real_v_sim_plot(combined_df = test_combined, difference_type = "Depth_Difference_Ref",
                 specified_chromosomes = c(1, 4, 9), exclude_source = "Observed")
-ggsave("./Figures/Aneuploidy_Identification/ref_depth_diff_chr149_sim_only.pdf", height = 3, width = 7)
-ggsave("./Figures/Aneuploidy_Identification/ref_depth_diff_chr149_sim_only.png", height = 3, width = 7)
+ggsave("./Figures/Aneuploidy_Identification/ref_depth_diff_chr149_sim_only.pdf", height = 2.1, width = 6.5)
+ggsave("./Figures/Aneuploidy_Identification/ref_depth_diff_chr149_sim_only.png", height = 2.1, width = 6.5)
 
 real_v_sim_plot(combined_df = test_combined, difference_type = "Depth_Difference_Term",
                 specified_chromosomes = c(1, 4, 9), exclude_source = "Observed")
-ggsave("./Figures/Aneuploidy_Identification/term_depth_diff_chr149_sim_only.pdf", height = 3, width = 7)
-ggsave("./Figures/Aneuploidy_Identification/term_depth_diff_chr149_sim_only.png", height = 3, width = 7)
+ggsave("./Figures/Aneuploidy_Identification/term_depth_diff_chr149_sim_only.pdf", height = 2.1, width = 6.5)
+ggsave("./Figures/Aneuploidy_Identification/term_depth_diff_chr149_sim_only.png", height = 2.1, width = 6.5)
+
+# Using new function to plot with observed data
+
+real_v_sim_plot(combined_df = test_combined, difference_type = "Depth_Difference_Cr2",
+                specified_chromosomes = c(1, 4, 9), title = "Somatic embryo")
+ggsave("./Figures/Aneuploidy_Identification/cr2_depth_diff_chr149.pdf", height = 2.1, width = 6.5)
+ggsave("./Figures/Aneuploidy_Identification/cr2_depth_diff_chr149.png", height = 2.1, width = 6.5)
+
+real_v_sim_plot(combined_df = test_combined, difference_type = "Depth_Difference_Ref",
+                specified_chromosomes = c(1, 4, 9), title = "Reference")
+ggsave("./Figures/Aneuploidy_Identification/ref_depth_diff_chr149.pdf", height = 2.1, width = 6.5)
+ggsave("./Figures/Aneuploidy_Identification/ref_depth_diff_chr149.png", height = 2.1, width = 6.5)
+
+real_v_sim_plot(combined_df = test_combined, difference_type = "Depth_Difference_Term",
+                specified_chromosomes = c(1, 4, 9), title = "Tree")
+ggsave("./Figures/Aneuploidy_Identification/term_depth_diff_chr149.pdf", height = 2.1, width = 6.5)
+ggsave("./Figures/Aneuploidy_Identification/term_depth_diff_chr149.png", height = 2.1, width = 6.5)
+
+
 ```
 
 ## Checking with phased haplotypes and denovo snps

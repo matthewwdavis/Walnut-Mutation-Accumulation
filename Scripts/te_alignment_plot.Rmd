@@ -25,6 +25,11 @@ names(class900)
 ```
 
 # Align data
+## Remove the ~300 sequences
+```{r}
+class900 <- class900[!names(class900) %in% c("316_7_18350780_B_1", "317_13_36845921_B_1", "1792_3_382285_A_1")]
+```
+
 ## Muscle
 ```{r}
 align900 <- msa(class900, method = "Muscle")
@@ -36,7 +41,6 @@ align5500 <- msa(class5500, method = "Muscle")
 ssalign900 <- DNAStringSet(align900)
 ssalign5500 <- DNAStringSet(align5500)
 ```
-
 
 # Prepare data
 ## Create data table
@@ -52,6 +56,24 @@ consensus <- long5500[, .(CON_NUCLEOTIDE = names(which.max(table(NUCLEOTIDE)))),
 con5500 <- merge(long5500, consensus, by = "POSITION", all.x = TRUE)
 
 con5500[, COLOR := fifelse(
+  NUCLEOTIDE == CON_NUCLEOTIDE, "grey90",  # Match with consensus
+  fifelse(NUCLEOTIDE == "A", "red",
+          fifelse(NUCLEOTIDE == "C", "green",
+                  fifelse(NUCLEOTIDE == "G", "yellow",
+                          fifelse(NUCLEOTIDE == "T", "blue",
+                                  fifelse(NUCLEOTIDE == "-", "black", NA_character_))))))]
+
+table900 <- data.table(NAME = names(ssalign900), SEQUENCE = as.character(ssalign900))
+
+long900 <- table900[, .(NUCLEOTIDE = unlist(strsplit(SEQUENCE, "")),
+                          POSITION = rep(1:nchar(SEQUENCE), .N)),
+                      by = NAME]
+
+consensus <- long900[, .(CON_NUCLEOTIDE = names(which.max(table(NUCLEOTIDE)))), by = POSITION]
+
+con900 <- merge(long900, consensus, by = "POSITION", all.x = TRUE)
+
+con900[, COLOR := fifelse(
   NUCLEOTIDE == CON_NUCLEOTIDE, "grey90",  # Match with consensus
   fifelse(NUCLEOTIDE == "A", "red",
           fifelse(NUCLEOTIDE == "C", "green",
@@ -79,22 +101,39 @@ other_names <- setdiff(unique(con5500$NAME), priority_names)
 
 # Set levels so that priority names appear first
 con5500[, NAME := factor(NAME, levels = rev(c(priority_names, other_names)))]
-
-# Check the levels
-#levels(con5500$NAME)
-
 ```
 
 
 ## Plot 5500 class MSA
 ```{r}
 ggplot(con5500, aes(x = POSITION, y = NAME, fill = COLOR)) +
-  geom_tile(aes(width = 1, height = 1), show.legend = FALSE) +
+  geom_tile(aes(width = ifelse(COLOR == "grey90", 1, 50))) +
   scale_fill_identity() +
+  labs(x = "Position in Sequence", y = "Insertion name") +
   theme_classic() +
-  theme(axis.text.y = element_text(size = 5)) +  # Adjust size of y-axis text if needed
-  labs(x = "Position in Sequence", y = "NAME")
+  theme(
+    axis.text.y = element_text(size = 6),
+    plot.margin = margin(t = -0.1, r = -5, b = 0, l = -0.1),
+  )
+ggsave("./Figures/Transposable_Elements/track_transposon_all_5500_msa.pdf", height = 6.5, width = 7)
+ggsave("./Figures/Transposable_Elements/track_transposon_all_5500_msa.png", height = 6.5, width = 7)
 ```
+
+## Plot 900 class MSA
+```{r}
+ggplot(con900, aes(x = POSITION, y = NAME, fill = COLOR)) +
+  geom_tile(aes(width = ifelse(COLOR == "grey90", 1, 50))) +
+  scale_fill_identity() +
+  labs(x = "Position in Sequence", y = "Insertion name") +
+  theme_classic() +
+  theme(
+    axis.text.y = element_text(size = 6),
+    plot.margin = margin(t = -0.1, r = -5, b = 0, l = -0.1),
+  )
+ggsave("./Figures/Transposable_Elements/track_transposon_all_900_msa.pdf", height = 6.5, width = 7)
+ggsave("./Figures/Transposable_Elements/track_transposon_all_900_msa.png", height = 6.5, width = 7)
+```
+
 
 # Plot a specific example of tracking snps
 ## Filter data for example

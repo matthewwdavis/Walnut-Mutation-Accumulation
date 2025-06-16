@@ -1,0 +1,72 @@
+---
+title: "shoot_muts_over_time"
+author: "Matthew Davis"
+date: "2025-05-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Library
+```{r}
+library(ggenomics)
+```
+
+## Read in data
+```{r}
+mutations <- fread("./Data/VCFs/Parsed/mutations_strict.tsv")
+```
+
+# Prepare data
+## Filtering for shoots and adding time
+```{r}
+shoot_mut <- mutations[CULTURETYPE %in% "shoot"]
+
+shoot_mut[, TIME := fifelse(SOURCE %in% c("cr22"), 1,
+                            fifelse(SOURCE %in% c("cr13"), 10,
+                                    fifelse(SOURCE %in% c("cr10"), 13,
+                                            fifelse(SOURCE %in% c("cr85"), 38, NA))))]
+```
+
+## Filter to phylogeny parameters, create summary table
+```{r}
+filt_shoot <- shoot_mut[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T]
+
+shoot_summ <- filt_shoot %>%
+  group_by(SOURCE, TIME, CULTURETYPE) %>%
+  summarise(
+    MUTS = n()
+  )
+```
+
+
+# Plotting
+## Number of mutations over time
+```{r}
+summary(lm(MUTS ~ TIME, data = shoot_summ))
+
+shoot_summ %>%
+  ggplot(aes(x = TIME, y = MUTS, color = CULTURETYPE)) +
+  geom_smooth(method = "lm", se = FALSE, color = "grey75", linetype = 2) +
+  geom_point(size = 2) +
+  scale_color_manual(
+    values = c(shoot = "darkseagreen2")
+  ) +
+  annotate("text", x = 35, y = Inf, 
+           label = "R² =  0.9577",
+           hjust = 1.1, vjust = 1.5, size = 2) +
+  labs(title = "SBS and INDELs vs time in shoots", x = "Years in culture", y = "SBS and INDEL count") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+  )
+ggsave("./Figures/SNP_Calling/shoot_muts_over_time.pdf", height = 1.5, width = 2.6)
+ggsave("./Figures/SNP_Calling/shoot_muts_over_time.png", height = 1.5, width = 2.6)
+```
+

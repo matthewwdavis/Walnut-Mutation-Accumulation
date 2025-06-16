@@ -1,0 +1,156 @@
+---
+title: "chr_dup_timing_combohap"
+author: "Matthew Davis"
+date: "2025-06-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggenomics)
+```
+
+## Read data
+```{r}
+combo_muts <- fread("./Data/VCFs/Filtered/dn_snps_combohaps.vcf")
+```
+
+## Basic data filtering
+```{r}
+filt_muts <- combo_muts[medQUAL >= 30 & CULTURETYPE %in% "embryo"]
+```
+
+# Identify duplicated haplotype defined in the fasta
+## Boxplot to figure out duplicated haplotypes
+```{r}
+filt_muts %>%
+  ggplot(aes(x = HAP, y = DP)) +
+  facet_grid(SOURCE~CHROM, scales = "free") +
+  geom_boxplot() +
+  theme_classic(base_size = 6)
+#ggsave("~/Desktop/test.pdf", height = 8, width = 4)
+
+filt_muts %>%
+  ggplot(aes(x = HAP, y = VAF)) +
+  facet_grid(SOURCE~CHROM, scales = "free") +
+  geom_boxplot() +
+  theme_classic(base_size = 6)
+#ggsave("~/Desktop/test2.pdf", height = 8, width = 4)
+
+# 4B is duplicate in fasta. Opposite of genetic map. 9B is duplicate in fasta. Same as genetic map.
+```
+
+# Determine mutations shared by all embryos
+## Count SBS occurance
+```{r}
+# Count how many embryos each SBS exists in
+filt_muts[, UNIQUEN := .N, by = UNIQUE]
+
+range(filt_muts$UNIQUEN)
+```
+
+## Plot histogram of shared SBS
+```{r}
+filt_muts %>%
+  ggplot(aes(x = UNIQUEN)) +
+  geom_histogram() +
+  theme_classic()
+```
+
+## Filter embryos for shared SBS
+```{r}
+shared_muts <- filt_muts[UNIQUEN %in% 15]
+```
+
+# Identify if SBS timing
+## Chi square and multiple testing correction
+```{r, warning=FALSE}
+shared_muts[, CHIPVALUE := chisq.test(c(REFDP, ALTDP), p = c(0.5, 0.5))$p.value , by = 1:nrow(shared_muts)]
+
+shared_muts[, CHIBON_PVALUE := p.adjust(CHIPVALUE, method = "bonferroni")]
+shared_muts[, CHIFDR_PVALUE := p.adjust(CHIPVALUE, method = "BH")]
+
+shared_muts[, CLASSIFY :=  fifelse(CHROM %in% c(4,9) & VAFREAL > 0.5 & CHIPVALUE < 0.01, "dup", "nondup") ]
+shared_muts[, CLASSIFY := fifelse(!CHROM %in% c(4,9), "none", CLASSIFY)]
+```
+
+## Calculate how many pre duplication mutations
+```{r}
+shared_muts %>%
+  filter(CHROM %in% c(4, 9)) %>%
+  group_by(CLASSIFY, CHROM, HAP, SOURCE) %>%
+  summarise(
+    count = n()
+  )
+```
+
+# Plot
+## Set levels and fix haplotype chromosome 4
+```{r}
+shared_muts$SOURCE <- factor(shared_muts$SOURCE, levels = c("cr16a2","cr16a1","cr17a2","cr17a1",
+                                                            "cr18a1","cr16a","cr2_hifi","cr15a1",
+                                                            "cr15a","cr18a", "cr21_2","cr21_1",
+                                                            "cr12a","cr13a","cr11a"))
+
+shared_muts[, HAPREAL := fifelse(
+  CHROM %in% 4 & HAP %in% "A", "B",
+  fifelse(CHROM %in% 4 & HAP %in% "B", "A",
+  fifelse(CHROM %in% 9, HAP, NA)))
+]
+```
+
+## Plot SBS by chrom
+```{r}
+plot_combo <- shared_muts %>%
+  filter(CHROM %in% c(4,9)) %>%
+  ggplot(aes(x = POS, y = VAFREAL, color = CLASSIFY)) +
+  geom_point(size = 0.5) +
+  facet_grid(SOURCE~CHROM + HAPREAL, space = "free", scales = "free_x") +
+  scale_color_manual(
+    values = c(dup = "orangered3", nondup = "royalblue1", none = "grey90"),
+    labels = c(dup = " Duplicated mutation", nondup = "Non-duplicated mutation", none  = "Diploid")
+  ) +
+  scale_y_continuous( breaks = (c(0, 0.5, 1)), position = "right") +
+  labs(title = "Haplotype resolved", x = "Position", y = "Allele frequency", color = "Duplication status") +
+  theme_classic(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text.x = element_text(color = "black", margin = ggplot2::margin(t = 0, b = 0)),
+    strip.text.y = element_blank(),
+    panel.border = element_rect(fill = NA),
+    panel.spacing.y = unit(0.05, "cm"),
+    panel.spacing.x = unit(0.05, "cm"),
+    legend.position = "none",
+    legend.key.size = unit(0.2, "cm"),
+    legend.title = element_text(hjust = 0.5),
+    legend.text = element_text(margin = ggplot2::margin(t = 0, r = 0, b = 0, l = -0.01, unit = "cm")),
+    legend.background = element_rect(fill = "transparent", color = NA),
+    axis.text.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.y = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.title = element_blank(),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = ggplot2::margin(t = 0.05, r = 0.05, b = 0, l = 0, unit = "cm")
+  )
+plot_combo
+ggsave("./Figures/Duplication_Dating/embryo_shared_dn_sbs_combohap_no_legend.pdf", height = 2.5, width = 3.33)
+ggsave("./Figures/Duplication_Dating/embryo_shared_dn_sbs_combohap_no_legend.png", height = 2.5, width = 3.33)
+
+plot_combo +
+  guides(
+    color = guide_legend(override.aes = list(size = 1))
+  ) +
+  theme(
+    legend.position = "left"
+  )
+ggsave("./Figures/Duplication_Dating/embryo_shared_dn_sbs_combohap.pdf", height = 2.5, width = 3.33)
+ggsave("./Figures/Duplication_Dating/embryo_shared_dn_sbs_combohap.png", height = 2.5, width = 3.33)
+```
+

@@ -53,68 +53,51 @@ ref.table[, Hap := fifelse(Hap == "hap1", "A", "B")]
 # Plotting
 ## Custom diploid reference chandler plot
 ```{r}
-ref.table %>%
+ref_plot <- ref.table %>%
   ggplot(aes(x = as.factor(Chromosome), y = Length)) +
-    geom_segment(aes(y = begin_telo_start, yend = Length, color = Hap),
-                 position = position_dodge(width = 0.85),  # Use calculated dodge width
-                 linewidth = 1.5, 
-                 lineend = "round") +
-    geom_point(aes(x = Chromosome, y = begin_telo_end,
-                   size = ifelse(begin_telo_bp == 0, NA, begin_telo_bp),
-                   fill = Hap),
-               shape = 16, color = "black", position = position_dodge(width = 0.85),
-               na.rm = TRUE) +
-    geom_point(aes(x = Chromosome, y = end_telo_end,
-                   size = ifelse(end_telo_bp == 0, NA, end_telo_bp),
-                   fill = Hap),
-               shape = 16, color = "black", position = position_dodge(width = 0.85),
-               na.rm = TRUE) +
-  scale_size_continuous(range = c(0.05, 1)) +
-    scale_color_manual(name = "Haplotype",
-                       values = c(A = "#009e73", B = "#C29A6A"),
-                       labels = c(A = "Haplotype A", B = "Haplotype B")) +
-    scale_y_continuous(
-      labels = label_number(scale = 1e-6, suffix = "Mb")) +
-    labs(y = "Chromosome Length (Mb)", x = NULL, size = "Telomere\nPresence") +
-    guides(color = guide_legend(title = NULL, override.aes = list(linewidth = 1)),
-           size = guide_legend(title = "Telomere\nPresence"),
-           fill = "none") +
-    theme_classic(base_size = 6) +
-    theme(legend.position = "right",
-          legend.title.align = 0.5,
-          legend.key.size = unit(0.2, "cm"),
-          plot.title = element_text(hjust = 0.5, face = "bold"))
-ggsave("./Figures/Genome_Composition/ref_chandler_telplot.png", height = 2, width = 2.25)
+  geom_segment(aes(y = begin_telo_start, yend = Length, color = Hap),
+               position = position_dodge(width = 0.85),  # Use calculated dodge width
+               linewidth = 2.2, 
+               lineend = "round") +
+  geom_point(aes(x = Chromosome, y = begin_telo_end,
+                 size = ifelse(begin_telo_bp == 0, NA, begin_telo_bp),
+                 fill = Hap),
+             shape = 16, color = "black", position = position_dodge(width = 0.85),
+             na.rm = TRUE) +
+  geom_point(aes(x = Chromosome, y = end_telo_end,
+                 size = ifelse(end_telo_bp == 0, NA, end_telo_bp),
+                 fill = Hap),
+             shape = 16, color = "black", position = position_dodge(width = 0.85),
+             na.rm = TRUE) +
+  scale_size_continuous(range = c(0.1, 2)) +
+  scale_color_manual(name = "Haplotype",
+                     values = c(A = "#009e73", B = "#C29A6A"),
+                     labels = c(A = "Haplotype A", B = "Haplotype B")) +
+  scale_y_continuous(
+    breaks = scales::breaks_width(10e6),
+    labels = scales::label_number(scale = 1e-6),
+  ) +
+  labs(y = "Position (Mb)", x = "Chromosome", size = "Telomere\nPresence") +
+  guides(color = guide_legend(title = NULL, override.aes = list(linewidth = 1)),
+         size = guide_legend(title = "Telomere\nPresence"),
+         fill = "none") +
+  theme_classic(base_size = 6) +
+  theme(legend.position = "right",
+        legend.title.align = 0.5,
+        legend.key.size = unit(0.2, "cm"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        panel.background = element_rect(fill = NA, color = NA),
+        plot.background = element_rect(fill = NA, color = NA),
+        plot.margin = ggplot2::margin(t = 0, r = 0, b = 0, l = 0.1, unit = "cm")
+  )
+ref_plot
+ggsave("./Figures/Genome_Composition/ref_chandler_telplot.png", height = 2.43, width = 3.55)
+ggsave("./Figures/Genome_Composition/ref_chandler_telplot.pdf", height = 2.43, width = 3.55)
 
-ref.table %>%
-  ggplot(aes(x = as.factor(Chromosome), y = Length)) +
-    geom_segment(aes(y = begin_telo_start, yend = Length, color = Hap),
-                 position = position_dodge(width = 0.85),  # Use calculated dodge width
-                 linewidth = 1.5, 
-                 lineend = "round") +
-    geom_point(aes(x = Chromosome, y = begin_telo_end,
-                   size = ifelse(begin_telo_bp == 0, NA, begin_telo_bp),
-                   fill = Hap),
-               shape = 16, color = "black", position = position_dodge(width = 0.85),
-               na.rm = TRUE) +
-    geom_point(aes(x = Chromosome, y = end_telo_end,
-                   size = ifelse(end_telo_bp == 0, NA, end_telo_bp),
-                   fill = Hap),
-               shape = 16, color = "black", position = position_dodge(width = 0.85),
-               na.rm = TRUE) +
-  scale_size_continuous(range = c(0.05, 1)) +
-    scale_color_manual(name = "Haplotype",
-                       values = c(A = "#009e73", B = "#C29A6A"),
-                       labels = c(A = "Haplotype A", B = "Haplotype B")) +
-    scale_y_continuous(
-      labels = label_number(scale = 1e-6, suffix = "Mb")) +
-    labs(y = "Chromosome Length (Mb)", x = NULL, size = "Telomere\nPresence") +
-    guides(color = guide_legend(title = NULL, override.aes = list(linewidth = 0.25)),
-           size = guide_legend(title = "Telomere Presence"),
-           fill = "none") +
-    theme_classic(base_size = 6) +
-    theme(legend.position = "none",
-          plot.title = element_text(hjust = 0.5, face = "bold"))
-ggsave("./Figures/Genome_Composition/ref_chandler_telplot_no_legend.png", height = 2, width = 2.25)
+ref_plot +
+  theme(legend.position = "none")
+ggsave("./Figures/Genome_Composition/ref_chandler_telplot_no_legend.png", height = 2.43, width = 3.55)
+ggsave("./Figures/Genome_Composition/ref_chandler_telplot_no_legend.pdf", height = 2.43, width = 3.55)
+
 ```
 

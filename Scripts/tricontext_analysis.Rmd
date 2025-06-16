@@ -79,26 +79,42 @@ indels <- mutations[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T & SNP == F]
 ```{r}
 tree_plot <- plot_tricontexts(snps[CULTURETYPE=="tree",.(UNIQUE, TRICONTEXT)]$TRICONTEXT, full=T, trimer_freq = freq_trimer, x_text = F)
 tree_plot$plot +
+  labs(title = "Trees (n = 130)") +
   theme(
     strip.text = element_text(face = "plain"),
+    plot.title = element_text(hjust = 0.5),
     plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.01, unit = "cm")
   )
-ggsave("./Figures/Tricontext/tree_tricontext.pdf", height = 1, width = 3.75)
+ggsave("./Figures/Tricontext/tree_tricontext.pdf", height = 1.25, width = 3.5)
+
 shoot_plot <- plot_tricontexts(snps[CULTURETYPE=="shoot",.(UNIQUE, TRICONTEXT)]$TRICONTEXT, full=T, trimer_freq = freq_trimer, x_text = F)
 shoot_plot$plot +
+  labs(title = "Shoots (n = 1038)") +
   theme(
     strip.text = element_text(face = "plain"),
+    plot.title = element_text(hjust = 0.5),
     plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.01, unit = "cm")
   )
-ggsave("./Figures/Tricontext/shoot_tricontext.pdf", height =1, width = 3.75)
+ggsave("./Figures/Tricontext/shoot_tricontext.pdf", height = 1.25, width = 3.5)
+
 embryo_plot <- plot_tricontexts(snps[CULTURETYPE=="embryo",.(UNIQUE, TRICONTEXT)]$TRICONTEXT, full=T, trimer_freq = freq_trimer,  x_text = T)
 embryo_plot$plot +
+  labs(title = "Somatic embryos (n = 30760)") +
   theme(
     strip.text = element_text(face = "plain"),
+    plot.title = element_text(hjust = 0.5),
     plot.margin = ggplot2::margin(t = 0, r = 0.01, b = 0, l = 0.01, unit = "cm")
   )
-ggsave("./Figures/Tricontext/embryo_tricontext.pdf", height = 1.5, width = 7.5)
+ggsave("./Figures/Tricontext/embryo_tricontext.pdf", height = 1.75, width = 7)
 ```
+
+## Look at stats
+```{r}
+nrow(snps[CULTURETYPE == "tree"])
+nrow(snps[CULTURETYPE == "shoot"])
+nrow(snps[CULTURETYPE == "embryo"])
+```
+
 
 ## Polymorphlolgy plotting function simple data
 ```{r}

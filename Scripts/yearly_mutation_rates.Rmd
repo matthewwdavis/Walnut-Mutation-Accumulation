@@ -1,0 +1,159 @@
+---
+title: "yearly_mutation_rates"
+author: "Matthew Davis"
+date: "2025-06-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggenomics)
+```
+
+## Read in data
+```{r}
+walnut_fa <- ggread_fasta("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+walnut_muts <- fread("./Data/VCFs/Parsed/mutations_strict.tsv")
+```
+
+# Prepare data
+## Calculate genome size
+```{r}
+fa_table <- data.table(
+  Chromosome = names(walnut_fa),
+  Length = width(walnut_fa)
+)
+
+fa_table <- select_chr(fa_table, chr_string = "NC_0499")
+
+walnut_size <- sum(fa_table$Length)
+```
+
+## Filter mutations
+```{r}
+filt_muts <- walnut_muts[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T]
+```
+
+## Add years to sources
+```{r}
+filt_muts[, YEARS := fifelse(CULTURETYPE %in% "embryo", 28,
+                             fifelse(SOURCE %in% "cr2_hifi", 27,
+                                     fifelse(SOURCE %in% "cr85", 38,
+                                             fifelse(SOURCE %in% "cr10", 13,
+                                                     fifelse(SOURCE %in% "cr13", 10,
+                                                             fifelse(SOURCE %in% "cr22", 1,
+                                                                     fifelse(CULTURETYPE %in% "tree", 59, NA)))))))]
+```
+
+
+## Calculate yearly mutation rate by culture type
+```{r}
+mut_summ <- filt_muts %>%
+  group_by(SOURCE, CULTURETYPE, YEARS) %>%
+  summarise(
+    MUT_COUNT = n(),
+    GENOME_SIZE = walnut_size
+  )
+
+setDT(mut_summ)
+
+mut_summ[, MUT_BP_YEAR := MUT_COUNT/YEARS/GENOME_SIZE]
+```
+
+## Take average by culture type
+```{r}
+mut_summ %>%
+  group_by(CULTURETYPE) %>%
+  summarise(
+    mean_by_type = mean(MUT_BP_YEAR)
+  )
+```
+
+
+## Create data table
+```{r}
+plant_mut.table <- tribble(
+  ~"Source", ~"mut_per_bp_per_year", ~"type",
+  "Oryza sativa\n(callus)", 2.87e-07, "callus",
+  "Oryza sativa\n(tiller)", 9.01e-09, "annual",
+  "Arabidopsis\nthaliana", 4.35e-09, "annual",
+  "Prunus\nmira", 8.00e-11, "perennial",
+  "Eucalyptus\nmelliodora", 1.16e-10, "perennial",
+  "Populus\ntrichocarpa", 1.33e-10, "perennial",
+  "Walnut\n(somatic embryo)", 2.362345e-07, "embryo",
+  "Walnut\n(shoot)", 2.888712e-08, "shoot",
+  "Walnut\n(tree)", 2.523381e-09, "tree"
+)
+
+plant_mut.table
+
+plot_plantmut <- plant_mut.table %>%
+  ggplot(aes(x = reorder(Source, log10(mut_per_bp_per_year)), y = log10(mut_per_bp_per_year), fill = type)) +
+  geom_bar(stat = "identity") +
+  scale_y_continuous(
+    name = "Mutation Rate (log10)",
+    expand = c(0, .075),
+    labels = scales::label_number(drop0trailing = TRUE)
+  ) +
+  scale_x_discrete(
+    position = "top",
+    labels = c(
+      "Oryza sativa\n(callus)" = "Oryza sativa",
+      "Oryza sativa\n(tiller)" = "Oryza sativa",
+      "Arabidopsis\nthaliana" = "Arabidopsis\nthaliana",
+      "Prunus\nmira" = "Prunus\nmira",
+      "Eucalyptus\nmelliodora" = "Eucalyptus\nmelliodora",
+      "Populus\ntrichocarpa" = "Populus\ntrichocarpa",
+      "Walnut\n(somatic embryo)" = "Walnut",
+      "Walnut\n(shoot)" = "Walnut",
+      "Walnut\n(tree)" = "Walnut"
+    ) 
+  ) +
+  scale_fill_manual(
+    values = c(
+      annual = "cadetblue3",
+      perennial = "lightsalmon2",
+      callus = "burlywood",
+      embryo = "goldenrod1",
+      shoot = "darkseagreen2",
+      tree = "darkseagreen4"),
+    breaks = c(
+      "annual", "perennial", "callus", "tree", "shoot", "embryo"
+    ),
+    labels = c(
+      annual = "Annual",
+      perennial = "Perennial",
+      callus = "Callus",
+      embryo = "Embryo",
+      shoot = "Shoot",
+      tree = "Tree")
+  ) + 
+  theme_classic(base_size = 6) +
+  theme(
+    legend.position = "none",
+    legend.title = element_blank(),
+    legend.key.size = unit(0.2, "cm"),
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(angle = 0, hjust = 0.5),
+    legend.background = element_rect(fill = "transparent", color = NA),
+    legend.box.background = element_rect(fill = "transparent", color = NA),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = ggplot2::margin(t = 0, r = 0, b = 0.1, l = 0.1, unit = "cm")
+  )
+plot_plantmut
+ggsave("./Figures/Mutation_Rates/plant_annual_mut_rates_nolegend.pdf", height = 1.4, width = 4.4)
+ggsave("./Figures/Mutation_Rates/plant_annual_mut_rates_nolegend.png", height = 1.4, width = 4.4)
+
+plot_plantmut +
+  guides(fill = guide_legend(ncol = 2)) +
+  theme(legend.position = "right")
+ggsave("./Figures/Mutation_Rates/plant_annual_mut_rates.pdf", height = 1.4, width = 4.4)
+ggsave("./Figures/Mutation_Rates/plant_annual_mut_rates.png", height = 1.4, width = 4.4)
+```
+

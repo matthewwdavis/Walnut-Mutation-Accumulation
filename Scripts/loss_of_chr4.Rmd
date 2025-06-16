@@ -1,0 +1,170 @@
+---
+title: "loss_of_chr4"
+author: "Matthew Davis"
+date: "2025-06-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+## Libraries
+```{r}
+library(ggenomics)
+```
+
+## Read data
+```{r}
+combo_muts <- fread("./Data/VCFs/Filtered/dn_snps_combohaps.vcf")
+```
+
+## Basic data filtering
+```{r}
+filt_muts <- combo_muts[CHROM %in% 4 & QUAL >= 30 & CULTURETYPE %in% "embryo"]
+```
+
+## Boxplot to figure out duplicate haplotype
+```{r}
+filt_muts %>%
+  ggplot(aes(x = HAP, y = DP)) +
+  facet_grid(SOURCE~CHROM, scales = "free") +
+  geom_boxplot() +
+  theme_classic(base_size = 6)
+#ggsave("~/Desktop/test.pdf", height = 8, width = 4)
+
+filt_muts %>%
+  ggplot(aes(x = HAP, y = VAF)) +
+  facet_grid(SOURCE~CHROM, scales = "free") +
+  geom_boxplot() +
+  theme_classic(base_size = 6)
+#ggsave("~/Desktop/test2.pdf", height = 8, width = 4)
+
+# 4B is duplicate in fasta. Opposite of genetic map.
+```
+
+## Need to find SBS in the duplicated haplotype that exist at 50% but E5+6, where they would be at 100%
+
+
+```{r, warning=FALSE}
+filt_muts[, CHIPVALUE := chisq.test(c(REFDP, ALTDP), p = c(0.5, 0.5))$p.value , by = 1:nrow(filt_muts)]
+
+filt_muts[, CHIBON_PVALUE := p.adjust(CHIPVALUE, method = "bonferroni")]
+filt_muts[, CHIFDR_PVALUE := p.adjust(CHIPVALUE, method = "BH")]
+
+filt_muts[, CLASSIFY :=  fifelse(VAFREAL > 0.5 & CHIFDR_PVALUE < 0.05, "oldmut", "newmut") ]
+filt_muts[, CLASSIFY := fifelse(!HAP %in% "B", "none", CLASSIFY)]
+```
+
+# Plot
+## Adding plot levels and fixing haplotype
+```{r}
+filt_muts$SOURCE <- factor(filt_muts$SOURCE, levels = c("cr16a2","cr16a1","cr17a2","cr17a1",
+                                                        "cr18a1","cr16a","cr2_hifi","cr15a1",
+                                                        "cr15a","cr18a", "cr21_2","cr21_1",
+                                                        "cr12a","cr13a","cr11a"))
+
+filt_muts$CLASSIFY <- factor(filt_muts$CLASSIFY, levels = c("oldmut", "newmut", "sharedmut", "none"))
+
+
+filt_muts[, HAPREAL := fifelse(
+  CHROM %in% 4 & HAP %in% "A", "B",
+  fifelse(CHROM %in% 4 & HAP %in% "B", "A",
+          fifelse(CHROM %in% 9, HAP, NA)))
+]
+```
+
+
+# Plotting new and old mutation frequencies
+```{r}
+filt_muts %>%
+  ggplot(aes(x = POS, y = VAFREAL, color = CLASSIFY)) +
+  geom_point(size = 1) +
+  facet_grid(SOURCE~CHROM + HAPREAL, space = "free", scales = "free_x") +
+  # scale_color_manual(
+  #   values = c(newmut = "orangered3", oldmut = "royalblue1"),
+  # ) +
+  scale_y_continuous( breaks = (c(0, 0.5, 1)), position = "right") +
+  labs(x = "Position", y = "Allele frequency", color = "Allele\nfrequency") +
+  theme_classic(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text.x = element_text(color = "black", margin = ggplot2::margin(t = 0, b = 0)),
+    #strip.text.y = element_blank(),
+    panel.border = element_rect(fill = NA),
+    panel.spacing.y = unit(0.05, "cm"),
+    panel.spacing.x = unit(0.05, "cm"),
+    #legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.y = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = ggplot2::margin(t = 0, r = 0.05, b = 0, l = 0, unit = "cm")
+  )
+```
+
+# Figure out shared new muts on non-duplicated 4B
+```{r}
+new_muts.table <- filt_muts[HAP %in% "B" & !SOURCE %in% c("cr18a1", "cr16a") & CLASSIFY %in% "newmut"]
+
+new_muts.vector <- unique(new_muts.table$UNIQUE)
+
+filt_muts[SOURCE %in% c("cr18a1", "cr16a") & UNIQUE %in% new_muts.vector, CLASSIFY := "sharedmut"]
+```
+
+# Plot again
+```{r}
+plot_chrloss <- filt_muts %>%
+  ggplot(aes(x = POS, y = VAFREAL, color = CLASSIFY, size = CLASSIFY)) +
+  geom_point() +
+  facet_grid(SOURCE~CHROM + HAPREAL, space = "free", scales = "free_x") +
+  scale_size_manual(
+    values = c(oldmut = 0.5, newmut = 0.5, sharedmut = 1, none = 0.5), guide = "none"
+  ) +
+  scale_color_manual(
+    values = c(oldmut = "grey", newmut = "royalblue1", sharedmut = "orangered3", none = "grey90"),
+    labels = c(oldmut = "Pre-duplication", newmut = "Post-duplication", sharedmut = "Preserved post-duplication", none = "Not included")
+  ) +
+  scale_y_continuous( breaks = (c(0, 0.5, 1.5)), position = "right") +
+  labs(x = "Position", y = "Allele frequency", color = "Mutation status") +
+  theme_classic(base_size = 6) +
+  theme(
+    strip.background = element_blank(),
+    strip.text.x = element_text(color = "black", margin = ggplot2::margin(t = 0, b = 0)),
+    strip.text.y = element_blank(),
+    panel.border = element_rect(fill = NA),
+    panel.spacing.y = unit(0.05, "cm"),
+    panel.spacing.x = unit(0.05, "cm"),
+    legend.position = "none",
+    legend.key.size = unit(0.2, "cm"),
+    legend.title = element_text(hjust = 0.5),
+    legend.text = element_text(margin = ggplot2::margin(t = 0, r = 0, b = 0, l = -0.01, unit = "cm")),
+    legend.background = element_rect(fill = "transparent", color = NA),
+    axis.text.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.y = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = ggplot2::margin(t = 0, r = 0.05, b = 0, l = 0, unit = "cm")
+  )
+plot_chrloss
+
+ggsave("./Figures/Chromosome_Loss/retained_post_duplication_mutation_no_legend.pdf", height = 1.95, width = 3.2)
+ggsave("./Figures/Chromosome_Loss/retained_post_duplication_mutation_no_legend.png", height = 1.95, width = 3.2)
+
+plot_chrloss +
+  guides(
+    color = guide_legend(override.aes = list(size = 1), ncol = 2)
+  ) +
+  theme(
+    legend.position = "right"
+  )
+
+ggsave("./Figures/Chromosome_Loss/retained_post_duplication_mutation.pdf", height = 1.95, width = 3.2)
+ggsave("./Figures/Chromosome_Loss/retained_post_duplication_mutation.png", height = 1.95, width = 3.2)
+```
+

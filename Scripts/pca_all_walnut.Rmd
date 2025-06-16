@@ -52,23 +52,22 @@ read.vcf <- function(file, chrom_label = "NC_0499", genotype = c("0/0","0/1","1/
   return(vcf.table)
 }
 
-create_snp_matrix <- function(combo_vcf){
+create_snp_matrix <- function(combo_vcf) {
   
-  # Extract initial matrix data
-  matrix.table <- data.table(table(UNIQUE = combo_vcf$UNIQUE, SOURCE = combo_vcf$SOURCE))
+  # Convert to numeric genotypes
+  gt_map <- c("0/0" = 0, "0/1" = 1, "1/0" = 1, "1/1" = 2)
   
-  # Cast matrix wide
-  matrix.df <- dcast(matrix.table, SOURCE ~ UNIQUE, value.var = "N")
+  # Filter only for rows with GT values and add column
+  combo_vcf$GT_NUM <- gt_map[combo_vcf$GT]
   
-  # Make column 1 rownames 
+  # Create a data frame matrix. Necessary to retain rownames
+  matrix.df <- as.data.frame(dcast(combo_vcf, SOURCE ~ UNIQUE, value.var = "GT_NUM"))
+  
+  # Set rownames
   row.names(matrix.df) <- matrix.df$SOURCE
   
-  # Remove column 1
-  matrix <- as.matrix(matrix.df[,-1])
-  
-  # Convert to numeric and add rownames
-  matrix <- apply(matrix, 2, as.numeric)
-  rownames(matrix) <- rownames(matrix.df)
+  # Remove SOURCE column and convert to matrix
+  matrix <- as.matrix(matrix.df[, -1])
   
   return(matrix)
 }
@@ -199,13 +198,42 @@ all_matrix <- create_snp_matrix(walnut.vcf)
 chandler_matrix <- create_snp_matrix(chandler.vcf)
 ```
 
+## Replace missing data with 0
+```{r}
+all_matrix_imp <- all_matrix
+all_matrix_imp[is.na(all_matrix_imp)] <- 0
+
+chandler_matrix_imp <- chandler_matrix
+chandler_matrix_imp[is.na(chandler_matrix_imp)] <- 0
+```
+
+## Remove missing sites in the Chandler short read samples 
+```{r}
+# Define your key 
+hifi_samples <- c("cr2_hifi", "tree", "ref_chandler")
+
+# Get all others
+short_samples <- setdiff(rownames(chandler_matrix_imp), hifi_samples)
+
+# Identify columns to remove
+cols_remove <- apply(chandler_matrix_imp, 2, function(col) {
+  all(col[hifi_samples] %in% c(1, 2)) && all(col[short_samples] == 0)
+})
+
+# Remove those columns
+chandler_matrix_clean <- chandler_matrix_imp[, !cols_remove]
+```
+
 ## Calculate PCs
 ```{r}
-all_pc <- prcomp(all_matrix, rank. = 10)
+all_pc <- prcomp(all_matrix_imp, rank. = 10)
 all_pca.df <- as.data.table(all_pc$x, keep.rownames = "SOURCE")
 
-chandler_pc <- prcomp(chandler_matrix, rank. = 10)
+chandler_pc <- prcomp(chandler_matrix_imp, rank. = 10)
 chandler_pca.df <- as.data.table(chandler_pc$x, keep.rownames = "SOURCE")
+
+chandler_pc_clean <-  prcomp(chandler_matrix_clean, rank. = 10)
+chandler_pca_clean.df <- as.data.table(chandler_pc_clean$x, keep.rownames = "SOURCE")
 ```
 
 ## Adding additional columns of information
@@ -213,40 +241,49 @@ chandler_pca.df <- as.data.table(chandler_pc$x, keep.rownames = "SOURCE")
 all_pca.df <- add_info(all_pca.df)
 
 chandler_pca.df <- add_info(chandler_pca.df)
+
+chandler_pca_clean.df <- add_info(chandler_pca_clean.df)
 ```
 
 ## Calculate the percent variation each PC explains
 ```{r}
 all_var <- (all_pc$sdev)^2 / sum(all_pc$sdev^2) * 100
-
-# Percent variance explained for chandler_matrix
-chandler_var_ <- (chandler_pc$sdev)^2 / sum(chandler_pc$sdev^2) * 100
-```
-
-# Plot
-## New source labels
-```{r}
-source_labels = c(
-  "ref_chandler" = "Reference", "tree" = "Tree", "cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
-  "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13", "cr2_15A" = "E 8", "cr2_15A1" = "E 7",
-  "cr2_16A" = "E 6", "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4", "cr2_17A2" = "E 3",
-  "cr2_18A" = "E 9", "cr2_18A1" = "E 5", "cr85" = "S 1985", "cr10" = "S 2010", "cr13" = "S 2013",
-  "cr22" = "S 2022", "franquette" = "Franquette", "hartley" = "Hartley", "payne" = "Payne",
-  "pi159568" = "PI159568", "waterloo" = "Waterloo"
+all_var.df <- data.table(
+  PC = paste0("PC", seq_along(all_var)),
+  PERCENT_VAR = round(all_var, 2)
 )
+all_var.df
+
+chandler_var <- (chandler_pc$sdev)^2 / sum(chandler_pc$sdev^2) * 100
+chandler_var.df <- data.table(
+  PC = paste0("PC", seq_along(chandler_var)),
+  PERCENT_VAR = round(chandler_var, 2)
+)
+chandler_var.df
+
+chandler_clean_var  <- (chandler_pc_clean$sdev)^2 / sum(chandler_pc_clean$sdev^2) * 100
+chandler_clean_var.df <- data.table(
+  PC = paste0("PC", seq_along(chandler_clean_var)),
+  PERCENT_VAR = round(chandler_clean_var, 2)
+)
+chandler_clean_var.df 
 ```
 
+# Plotting
 ## PCA of all individuals
 ```{r}
 # Sequencing and cultivar
 all_pca.df %>%
   ggplot(aes(x = PC1, y = PC2, color = CULTIVAR, shape = SEQTYPE)) +
   geom_point() +
-  labs(title = "All walnut samples", x = "PC1 (%)", y = "PC2 (%)", color = "Cultivar", shape = "Sequencing type") +
+  labs(title = "Multi-cultivar PCA", x = "PC1 (34.96%)", y = "PC2 (20.28%)", color = "Cultivar", shape = "Sequencing type") +
   theme_classic(base_size = 6) +
   theme(
-    plot.title = element_text(hjust = 0.5)
+    plot.title = element_text(hjust = 0.5),
+    legend.key.size = unit(0.2, "cm")
   )
+ggsave("./Figures/SNP_PCA/all_walnuts_q20_pca.pdf", height = 2.5, width = 7)
+ggsave("./Figures/SNP_PCA/all_walnuts_q20_pca.png", height = 2.5, width = 7)
 ```
 
 ## PCA of Chandler
@@ -254,10 +291,38 @@ all_pca.df %>%
 chandler_pca.df %>%
   ggplot(aes(x = PC1, y = PC2, color = CULTURETYPE, shape = SEQTYPE)) +
   geom_point() +
-  labs(title = "All walnut samples", x = "PC1 (%)", y = "PC2 (%)", color = "Culture type", shape = "Sequencing type") +
+  scale_color_manual(
+    values = c("Tree" = "darkseagreen4",
+               "Shoot" = "darkseagreen2",
+               "Somatic Embryo" = "goldenrod1")
+  ) +
+  labs(title = "Chandler clones", x = "PC1 (28.78%)", y = "PC2 (13.74%)", color = "Culture type", shape = "Sequencing type") +
   theme_classic(base_size = 6) +
   theme(
-    plot.title = element_text(hjust = 0.5)
+    plot.title = element_text(hjust = 0.5),
+    legend.key.size = unit(0.2, "cm")
   )
+ggsave("./Figures/SNP_PCA/clones_q20_pca.pdf", height = 2.5, width = 3.5)
+ggsave("./Figures/SNP_PCA/clones_q20_pca.png", height = 2.5, width = 3.5)
+```
+
+## PCA of chandler, removing missing sites
+```{r}
+ chandler_pca_clean.df%>%
+  ggplot(aes(x = PC1, y = PC2, color = CULTURETYPE, shape = SEQTYPE)) +
+  geom_point() +
+  scale_color_manual(
+    values = c("Tree" = "darkseagreen4",
+               "Shoot" = "darkseagreen2",
+               "Somatic Embryo" = "goldenrod1")
+  ) +
+  labs(title = "Chandler clones removing HiFi specific sites ", x = "PC1 (20.38%)", y = "PC2 (15.12%)", color = "Culture type", shape = "Sequencing type") +
+  theme_classic(base_size = 6) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.key.size = unit(0.2, "cm")
+  )
+ggsave("./Figures/SNP_PCA/clones_clean_q20_pca.pdf", height = 2.5, width = 3.5)
+ggsave("./Figures/SNP_PCA/clones_clean_q20_pca.png", height = 2.5, width = 3.5)
 ```
 

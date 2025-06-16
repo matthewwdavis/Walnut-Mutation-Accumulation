@@ -1,0 +1,264 @@
+---
+title: "date_chr_duplications"
+author: "Matthew Davis"
+date: "2025-06-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+
+## Libraries
+
+```{r}
+library(ggenomics)
+```
+
+## Functions
+
+```{r}
+select_dups <- function(mut_table, chr4 = FALSE, chr9 = FALSE) {
+  
+  dn_embryo <- mut_table[CULTURETYPE %in% "embryo"]
+  
+  if (chr4) {
+    dn_embryo <- dn_embryo[!SOURCE %in% c("cr2_16A", "cr2_18A1")]
+    
+    dn_embryo <- dn_embryo[CHROM %in% 4]
+  }
+  
+  if (chr9) {
+    dn_embryo <- dn_embryo[CHROM %in% 9]
+  }
+  
+  dn_embryo[, UNIQUEN := .N, by = UNIQUE]
+  
+  return(dn_embryo)
+}
+
+chi_test <- function(mut_table){
+  
+  mut_table[, CHIPVALUE := chisq.test(c(REFDP, ALTDP), p = c(0.5, 0.5))$p.value , by = 1:nrow(mut_table)]
+  
+  mut_table[, CHIBON_PVALUE := p.adjust(CHIPVALUE, method = "bonferroni")]
+  mut_table[, CHIFDR_PVALUE := p.adjust(CHIPVALUE, method = "BH")]
+  
+  return(mut_table)
+}
+
+classify_sbs <- function(chi_muts, correction_column = 'CHIFDR_PVALUE', pval = 0.05){
+  chi_muts[, CLASSIFY :=  fifelse(VAFREAL > 0.5 & get(correction_column) < pval, "dup", "none") ]
+  chi_muts[, CLASSIFY :=  fifelse(VAFREAL< 0.5 & get(correction_column) < pval, "nondup", CLASSIFY) ]
+  
+  return(chi_muts)
+}
+```
+
+## Read data
+
+```{r}
+dn_muts <- fread("./Data/VCFs/Parsed/mutations_strict.tsv")
+```
+
+# Determine mutations shared by embryos with chr4 and chr9 dups
+
+## Select dup embryos and count SBS occurance
+
+```{r}
+share_chr4 <- select_dups(dn_muts, chr4 = TRUE)
+share_chr9 <- select_dups(dn_muts, chr9 = TRUE)
+```
+
+## Plot histogram of shared SBS
+
+```{r}
+share_chr4 %>%
+  ggplot(aes(x = UNIQUEN)) +
+  geom_histogram() + 
+  theme_classic()
+
+share_chr9 %>%
+  ggplot(aes(x = UNIQUEN)) +
+  geom_histogram() + 
+  theme_classic()
+```
+
+## Keep only all shared SBS
+
+```{r}
+all_share_chr4 <- share_chr4[UNIQUEN %in% max(UNIQUEN)]
+all_share_chr9 <- share_chr9[UNIQUEN %in% max(UNIQUEN)]
+```
+
+## Filter sites
+
+```{r}
+all_share_chr4 <- all_share_chr4[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T]
+all_share_chr9 <- all_share_chr9[medQUAL >= 30 & medDPREAL >= 15 & MAPP == T]
+```
+
+# Determine which SBS are duplicated
+
+## Chi square and multiple testing correction
+
+```{r, warning=FALSE}
+all_share_chr4 <- chi_test(all_share_chr4)
+all_share_chr9 <- chi_test(all_share_chr9)
+```
+
+## Classify dups, nondups
+
+```{r}
+chr4_chi_class <- classify_sbs(all_share_chr4, correction_column = "CHIFDR_PVALUE")
+chr9_chi_class <- classify_sbs(all_share_chr9, correction_column = "CHIFDR_PVALUE")
+```
+
+## Pivot wider
+
+```{r, warning=FALSE}
+chr4_summ <- dcast(chr4_chi_class, SOURCE ~ CLASSIFY)
+chr9_summ <- dcast(chr9_chi_class, SOURCE ~ CLASSIFY)
+```
+
+## Create chr length table
+
+```{r}
+pri.fasta <- ggread_fasta("./Data/Fastas/ref_chandler_primary_default_scaffold.fasta")
+pri.table <- telomere_plotting_table(pri.fasta, chr_names = "NC_0499")
+```
+
+## Correct for length of chromosome
+
+```{r}
+chr4_summ[, CHR_LENGTH := 34118699]
+chr4_summ[, CORRECTED_SHARED := dup/CHR_LENGTH]
+
+chr9_summ[, CHR_LENGTH := 25082395]
+chr9_summ[, CORRECTED_SHARED := dup/CHR_LENGTH]
+```
+
+## Correct by ratio of dup to nondup
+
+```{r}
+chr4_summ[, RATIO := dup/nondup]
+
+chr9_summ[, RATIO := dup/nondup]
+```
+
+## Combine into one table
+
+```{r}
+chr4_summ[, CHR := "4"]
+chr9_summ[, CHR := "9"]
+
+dup.table <- full_join(chr4_summ, chr9_summ)
+dup.table %>% arrange(SOURCE)
+```
+
+# Plot
+
+## new labels and set order
+
+```{r}
+dup.table$SOURCE <- factor(dup.table$SOURCE, levels = c("cr2_16A2","cr2_16A1","cr2_17A2","cr2_17A1",
+                                                            "cr2_18A1","cr2_16A","cr2_hifi","cr2_15A1",
+                                                            "cr2_15A","cr2_18A", "cr21_2","cr21_1",
+                                                            "cr2_12A","cr2_13A","cr2_11A"))
+
+new_labels = c("cr2_hifi" = "E HiFi", "cr21_1" = "E 11", "cr21_2" = "E 10",
+               "cr2_11A" = "E 14", "cr2_12A" = "E 12", "cr2_13A" = "E 13",
+               "cr2_15A" = "E 8", "cr2_15A1" = "E 7", "cr2_16A" = "E 6",
+               "cr2_16A1" = "E 2", "cr2_16A2" = "E 1", "cr2_17A1" = "E 4",
+               "cr2_17A2" = "E 3", "cr2_18A" = "E 9", "cr2_18A1" = "E 5")
+```
+
+## Plot corrected by length
+
+```{r}
+dup.table %>%
+  ggplot(aes(x = CHR, y = CORRECTED_SHARED, fill = CHR)) +
+  geom_boxplot(linewidth = 0.4) +
+  scale_fill_manual(
+    values = c(
+      "4" = "#efbd71",
+      "9" = "#639ccb"
+    )
+  ) +
+  stat_compare_means(
+    method = "t.test", 
+    comparisons = list(c("4", "9")),
+    label = "p.signif",
+    size = 2,
+    vjust = 0.2
+  ) +
+  labs(y = "Shared duplicated mutations\nby length", x = "Chromosome") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.position = "none",
+    legend.background = element_rect(fill = "transparent", color = NA),
+    legend.box.background = element_rect(fill = "transparent", color = NA),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = ggplot2::margin(t = 0.05, r = 0, b = 0, l = 0.05, unit = "cm")
+  )
+ggsave("./Figures/Duplication_Dating/shared_muts_across_dups_length_correct_boxplot.pdf", height = 1.7, width = 1.7)
+ggsave("./Figures/Duplication_Dating/shared_muts_across_dups_length_correct_boxplot.png", height = 1.7, width = 1.7)
+```
+
+## Plot ratio of dup to nondup
+
+```{r}
+dup.table %>%
+  ggplot(aes(x = CHR, y = RATIO, fill = CHR)) +
+  geom_boxplot(linewidth = 0.4) +
+  scale_fill_manual(
+    values = c(
+      "4" = "#efbd71",
+      "9" = "#639ccb"
+    )
+  ) +
+  stat_compare_means(
+    method = "t.test", 
+    comparisons = list(c("4", "9")),
+    label = "p.signif",
+    size = 2,
+    vjust = 0.2
+  ) +
+  labs(y = "Ratio of shared dupplicated to\nnon-duplicated mutations", x = "Chromosome") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.position = "none",
+    legend.background = element_rect(fill = "transparent", color = NA),
+    legend.box.background = element_rect(fill = "transparent", color = NA),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = ggplot2::margin(t = 0.05, r = 0, b = 0, l = 0.05, unit = "cm")
+  )
+ggsave("./Figures/Duplication_Dating/shared_muts_across_dups_ratio_boxplot.pdf", height = 1.7, width = 1.7)
+ggsave("./Figures/Duplication_Dating/shared_muts_across_dups_ratio_boxplot.png", height = 1.7, width = 1.7)
+```
+
+## Does ratio follow clades?
+
+```{r}
+dup.table %>%
+  filter(CHR %in% "4") %>%
+  ggplot(aes(x = SOURCE, y = RATIO)) +
+  geom_point() +
+  scale_x_discrete(
+    labels = new_labels
+  ) +
+  labs(y = "Ratio of shared dupplicated to non-duplicated mutations", x = "Chromosome") +
+  theme_classic(base_size = 6) +
+  theme(
+    legend.position = "none",
+    legend.background = element_rect(fill = "transparent", color = NA),
+    legend.box.background = element_rect(fill = "transparent", color = NA),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    plot.margin = ggplot2::margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")
+  )
+```
